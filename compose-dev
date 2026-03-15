@@ -442,7 +442,12 @@ eskew() {
 }
 
 egskew() {
-    docker exec -it --detach-keys "ctrl-^" skewed-emacs emacsclient -c "$@" &
+    if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
+        docker exec -i -e DISPLAY="$DISPLAY" -e WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+            --detach-keys "ctrl-^" skewed-emacs emacsclient -c "$@" &
+    else
+        docker exec -it --detach-keys "ctrl-^" skewed-emacs emacsclient -t "$@"
+    fi
 }
 SNIPPET
 

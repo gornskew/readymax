@@ -6,21 +6,26 @@ Requires=docker.service
 Wants=network-online.target
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
+Type=simple
+RemainAfterExit=no
 User=%%USER%%
 Group=docker
 WorkingDirectory=/home/%%USER%%/projects/skewed-emacs
 Environment=HOME=/home/%%USER%%
 
 ExecStartPre=/home/%%USER%%/projects/skewed-emacs/compose-dev init
-ExecStart=/home/%%USER%%/projects/skewed-emacs/compose-dev up
+ExecStart=/home/%%USER%%/projects/skewed-emacs/compose-dev up -d
 ExecStop=/home/%%USER%%/projects/skewed-emacs/compose-dev down
 ExecReload=/home/%%USER%%/projects/skewed-emacs/compose-dev restart
-TimeoutStartSec=300
-TimeoutStopSec=60
-StandardOutput=journal+console
-StandardError=journal+console
+
+TimeoutStartSec=420
+TimeoutStopSec=120
+
+Restart=on-failure
+RestartSec=10s
+
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
