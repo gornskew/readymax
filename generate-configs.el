@@ -44,6 +44,11 @@
       (read (current-buffer)))))
 
 (defun skewed--get-prop (plist key)
+
+(defun skewed--has-mcp-services-p (config)
+  "Return non-nil if CONFIG has at least one service with :mcp t."
+  (cl-some (lambda (svc) (skewed--get-prop svc :mcp))
+           (skewed--get-prop config :services)))
   "Get property KEY from PLIST."
   (plist-get plist key))
 
@@ -331,8 +336,9 @@ Uses placeholder ${SKEWED_CLONE_PATH} which gets substituted at merge time."
 ;;; Install Script Generation (for overlays only)
 ;;; ============================================================================
 
-(defun skewed--generate-install-script (prefix)
+(defun skewed--generate-install-script (prefix &optional has-mcp)
   "Generate install script for overlay repository with PREFIX.
+When HAS-MCP is non-nil, include MCP config copy commands.
 Returns the install script content as a string."
   (let ((lines '()))
     (push "#!/bin/bash" lines)
@@ -365,13 +371,14 @@ Returns the install script content as a string."
     (push (format "echo \"Installing %scompose.yml...\"" prefix) lines)
     (push (format "cp \"$SCRIPT_DIR/%scompose.yml\" \"$TARGET_DIR/\"" prefix) lines)
     (push "" lines)
-    (push "# Copy MCP overlay configs" lines)
-    (push "echo \"Installing MCP overlay configs...\"" lines)
-    (push "mkdir -p \"$TARGET_DIR/mcp\"" lines)
-    (push (format "cp \"$SCRIPT_DIR/mcp/%smcp-container.json\" \"$TARGET_DIR/mcp/\"" prefix) lines)
-    (push (format "cp \"$SCRIPT_DIR/mcp/%smcp-windows.json\" \"$TARGET_DIR/mcp/\"" prefix) lines)
-    (push (format "cp \"$SCRIPT_DIR/mcp/%smcp.toml\" \"$TARGET_DIR/mcp/\"" prefix) lines)
-    (push "" lines)
+    (when has-mcp
+      (push "# Copy MCP overlay configs" lines)
+      (push "echo \"Installing MCP overlay configs...\"" lines)
+      (push "mkdir -p \"$TARGET_DIR/mcp\"" lines)
+      (push (format "cp \"$SCRIPT_DIR/mcp/%smcp-container.json\" \"$TARGET_DIR/mcp/\"" prefix) lines)
+      (push (format "cp \"$SCRIPT_DIR/mcp/%smcp-windows.json\" \"$TARGET_DIR/mcp/\"" prefix) lines)
+      (push (format "cp \"$SCRIPT_DIR/mcp/%smcp.toml\" \"$TARGET_DIR/mcp/\"" prefix) lines)
+      (push "" lines))
     (push "# Copy services discovery overlay (dashboard + swank)" lines)
     (push "echo \"Installing services overlay configs...\"" lines)
     (push "mkdir -p \"$TARGET_DIR/dot-files/emacs.d/etc\"" lines)
@@ -386,8 +393,9 @@ Returns the install script content as a string."
     (push "echo \"\"" lines)
     (push "echo \"Files installed:\"" lines)
     (push (format "echo \"  - %scompose.yml      (Docker Compose overlay)\"" prefix) lines)
-    (push (format "echo \"  - mcp/%smcp-*.json   (MCP config overlays)\"" prefix) lines)
-    (push (format "echo \"  - mcp/%smcp.toml     (Codex config overlay)\"" prefix) lines)
+    (when has-mcp
+      (push (format "echo \"  - mcp/%smcp-*.json   (MCP config overlays)\"" prefix) lines)
+      (push (format "echo \"  - mcp/%smcp.toml     (Codex config overlay)\"" prefix) lines))
     (push "echo \"\"" lines)
     (push (format "echo \"To start the stack with %s services:\"" 
                   (string-trim-right prefix "-")) lines)
@@ -445,29 +453,32 @@ Examples:
         (insert (skewed--generate-compose-yaml config)))
       (message "Generated: %s" compose-file))
     
-    ;; Generate MCP configs
-    (let ((container-json (expand-file-name 
-                           (format "%smcp-container.json" skewed-gen-output-prefix) mcp-dir)))
-      (with-temp-file container-json
-        (insert "// DO NOT EDIT - Generated from services.sexp\n")
-        (insert (skewed--generate-mcp-json-container config)))
-      (message "Generated: %s" container-json))
+    ;; Generate MCP configs (only when services declare :mcp t)
+    (when (skewed--has-mcp-services-p config)
+      (make-directory mcp-dir t)
+      (let ((container-json (expand-file-name 
+                             (format "%smcp-container.json" skewed-gen-output-prefix) mcp-dir)))
+        (with-temp-file container-json
+          (insert "// DO NOT EDIT - Generated from services.sexp\n")
+          (insert (skewed--generate-mcp-json-container config)))
+        (message "Generated: %s" container-json))
     
-    (let ((windows-json (expand-file-name 
-                         (format "%smcp-windows.json" skewed-gen-output-prefix) mcp-dir)))
-      (with-temp-file windows-json
-        (insert "// DO NOT EDIT - Generated from services.sexp\n")
-        (insert "// For Windows: merge with base config or copy to %APPDATA%\\Claude\\\n")
-        (insert (skewed--generate-mcp-json-windows config)))
-      (message "Generated: %s" windows-json))
+      (let ((windows-json (expand-file-name 
+                           (format "%smcp-windows.json" skewed-gen-output-prefix) mcp-dir)))
+        (with-temp-file windows-json
+          (insert "// DO NOT EDIT - Generated from services.sexp\n")
+          (insert "// For Windows: merge with base config or copy to %APPDATA%\\Claude\\\n")
+          (insert (skewed--generate-mcp-json-windows config)))
+        (message "Generated: %s" windows-json))
     
-    (let ((codex-toml (expand-file-name 
-                       (format "%smcp.toml" skewed-gen-output-prefix) mcp-dir)))
-      (with-temp-file codex-toml
-        (insert "# DO NOT EDIT - Generated from services.sexp\n\n")
-        (insert (skewed--generate-mcp-toml config)))
-      (message "Generated: %s" codex-toml))
-    
+      (let ((codex-toml (expand-file-name 
+                         (format "%smcp.toml" skewed-gen-output-prefix) mcp-dir)))
+        (with-temp-file codex-toml
+          (insert "# DO NOT EDIT - Generated from services.sexp\n\n")
+          (insert (skewed--generate-mcp-toml config)))
+        (message "Generated: %s" codex-toml))
+    ) ;; end when has-mcp-services
+
     ;; Generate Elisp services file (base or overlay, using prefix)
     (let* ((elisp-name (if (string-empty-p skewed-gen-output-prefix)
                            "services-generated.el"
@@ -481,7 +492,7 @@ Examples:
     (unless (string-empty-p skewed-gen-output-prefix)
       (let ((install-file (expand-file-name "install" skewed-gen-output-dir)))
         (with-temp-file install-file
-          (insert (skewed--generate-install-script skewed-gen-output-prefix)))
+          (insert (skewed--generate-install-script skewed-gen-output-prefix (skewed--has-mcp-services-p config))))
         (set-file-modes install-file #o755)
         (message "Generated: %s" install-file)))
     

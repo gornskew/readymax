@@ -339,6 +339,65 @@ result = mcp__gendl_ccl__gendl_ccl__lisp_eval(code='(ql:quickload :my-project)')
 - **Gendl MCP Docs**: Use `gendl-ccl:get_docs(id="claude-md")` or equivalent for each backend
 - **Main Gendl Guide**: `/projects/CLAUDE.md` (top-level project documentation)
 
+## Lessons Learned (March 2026 Session)
+
+### Reading SLIME REPL Buffers via MCP
+When reading `*slime-repl allegro<N>*` buffers from MCP:
+- **Use `(buffer-string)`** — this works reliably
+- **Do NOT use `(buffer-substring-no-properties ...)`** — returns empty strings for SLIME REPL buffers
+- **Send commands**: `(with-current-buffer "*slime-repl allegro<2>*" (goto-char (point-max)) (insert "(your-form)") (slime-repl-return))`
+- **Read SLDB debugger buffers**: `(with-current-buffer "*sldb allegro<2>/N*" (buffer-substring-no-properties (point-min) (min 2000 (point-max))))`
+- **Abort debugger**: `(with-current-buffer "*sldb allegro<2>/N*" (sldb-abort))`
+- **Avoid `sleep-for` between send and read** — timing is unreliable, just read the buffer and check for a prompt
+
+### File Creation Through Emacs When /projects/ Is Not Directly Writable
+Claude's scratch container cannot write to `/projects/`. Create files through Emacs:
+```elisp
+;; Write initial content
+(with-temp-buffer
+  (insert "file header...")
+  (write-region (point-min) (point-max) "/projects/path/to/new-file.lisp"))
+
+;; Append more content
+(with-temp-buffer
+  (insert "more content...")
+  (append-to-file (point-min) (point-max) "/projects/path/to/new-file.lisp"))
+```
+This avoids triple-escaping issues when content contains strings with quotes (e.g., JSON in CL).
+
+### Modern-Mode Allegro CL: Case Sensitivity
+`genworks-gdl-enterprise-smp` runs modern-mode Allegro CL with `(readtable-case *readtable*)` → `:preserve`.
+- Keywords are case-sensitive: `:email` ≠ `:EMAIL`
+- When interning strings as keywords, do NOT upcase: `(intern key :keyword)` not `(intern (string-upcase key) :keyword)`
+- This affects JSON parsing, property access, and any dynamic symbol creation
+
+### `kill-sexp` for Balanced Replacements
+The most reliable pattern for replacing a sexp in Emacs:
+```elisp
+(goto-char (point-min))
+(search-forward "(defun target-function")
+(beginning-of-line)
+(kill-sexp)
+(insert "(defun target-function () ...new balanced body...)")
+```
+This is safer than region-based deletion because `kill-sexp` guarantees structural correctness.
+
+### AllegroServe: Symbol Names to Know
+- `*response-method-not-allowed*` (NOT `*response-not-allowed*`)
+- Use `(do-external-symbols ...)` to discover available symbols when unsure
+- `gwl:with-all-servers` iterates over `gwl:*http-server*` and `gwl:*https-server*`
+- Use `gwl:*http-server*` not `net.aserve:*wserver*` (Franz commandeered the default for their web IDE)
+
+### `*print-readably*` in Error Handlers
+Allegro CL's `dumplisp` and build processes can produce conditions containing unprintable objects (byte arrays).
+Always bind `*print-readably*` to nil in error handlers:
+```lisp
+(handler-case (risky-operation)
+  (error (c)
+    (let ((*print-readably* nil))
+      (format t "Error: ~a" c))))
+```
+
 ## Version History
 
 - **Initial Setup**: Basic container configuration
