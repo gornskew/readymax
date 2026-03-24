@@ -13,27 +13,20 @@ Group=docker
 WorkingDirectory=/home/%%USER%%/projects/skewed-emacs
 Environment=HOME=/home/%%USER%%
 
-# Prepare environment (.env, placeholders, etc.)
 ExecStartPre=/home/%%USER%%/projects/skewed-emacs/compose-dev init
 
-# Start all containers detached
 ExecStart=/home/%%USER%%/projects/skewed-emacs/compose-dev up -d
 
-# Graceful shutdown
 ExecStop=/home/%%USER%%/projects/skewed-emacs/compose-dev down
 
-# Restart containers (faster than full down/up in many cases)
 ExecReload=/home/%%USER%%/projects/skewed-emacs/compose-dev restart
 
-# Timeouts generous enough for many containers + emacs daemon + healthchecks
 TimeoutStartSec=480
 TimeoutStopSec=180
 
-# Auto-retry if the startup script itself fails (docker daemon issues, etc.)
 Restart=on-failure
 RestartSec=10
 
-# Clean logging
 StandardOutput=journal
 StandardError=journal
 
