@@ -4,16 +4,17 @@
 services:
 
   cyclops:
-    image: registry.gitlab.genworks.com/gornskew/cyclops:devo
+    image: registry.gitlab.genworks.com/gornskew/cyclops:master
     container_name: cyclops
     hostname: cyclops
     restart: unless-stopped
     stdin_open: true
     tty: true
     ports:
-      - "19069:9069"
+      - "19069:80"
+      - "19191:9191"
     environment:
-      - HTTP_PORT=9069
+      - HTTP_PORT=80
       - HTTP_HOST_PORT=19069
       - START_HTTP=true
       - TZ=${TZ:-Etc/UTC}
@@ -27,7 +28,7 @@ services:
     networks:
       - skewed-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9069/_cyclops/status"]
+      test: ["CMD", "curl", "-f", "http://localhost:80/_cyclops/status"]
       interval: 30s
       timeout: 3s
       retries: 3
