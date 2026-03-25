@@ -114,3 +114,5 @@ tmp/
 .bash_history
 history.*
 .#*
+*cyclops*.yml
+*cyclops*.el
