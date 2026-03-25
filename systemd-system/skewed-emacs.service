@@ -2,7 +2,7 @@
 Description=Skewed Emacs + Gendl Containerized Development Environment
 Documentation=https://github.com/gornskew/skewed-emacs
 After=docker.service network-online.target
-Requires=docker.service network.target    # added network.target for extra safety
+Requires=docker.service network.target
 Wants=network-online.target
 
 [Service]
