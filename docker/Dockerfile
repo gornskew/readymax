@@ -173,6 +173,12 @@ RUN set -euxo pipefail; \
    ln -sf ~/.gemini/local/node_modules/.bin/gemini ~/.local/bin/gemini; \
    npm cache clean --force || true
 
+RUN set -euxo pipefail; \
+   npm install -g grok-dev
+   ln -sf ~/.gemini/local/node_modules/.bin/gemini ~/.local/bin/gemini; \
+   npm cache clean --force || true
+
+
 # Start daemon to settle async init
 RUN set -euxo pipefail; \
    START_HTTP=true SKEWED_EMACS_DOCKER_BUILD=true emacs --daemon --load "~/.emacs.d/init.el"; \

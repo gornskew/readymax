@@ -337,16 +337,19 @@ Uses placeholder ${SKEWED_CLONE_PATH} which gets substituted at merge time."
 ;;; ============================================================================
 
 (defun skewed--generate-install-script (prefix &optional has-mcp)
-  "Generate install script for overlay repository with PREFIX.
+  "Generate install script for overlay or base repository with PREFIX.
+When PREFIX is empty, generates a base install (copies docker-compose.yml).
 When HAS-MCP is non-nil, include MCP config copy commands.
 Returns the install script content as a string."
-  (let ((lines '()))
+  (let ((lines '())
+        (is-base (string-empty-p prefix))
+        (label (if (string-empty-p prefix) "base config" 
+                 (string-trim-right prefix "-"))))
     (push "#!/bin/bash" lines)
     (push "#" lines)
-    (push (format "# Install script for %s overlay" 
-                  (string-trim-right prefix "-")) lines)
+    (push (format "# Install script for %s" label) lines)
     (push "#" lines)
-    (push "# This copies pre-generated overlay configs to skewed-emacs." lines)
+    (push "# This copies pre-generated configs to skewed-emacs." lines)
     (push "# Docker Compose will automatically merge the .yml files." lines)
     (push "# MCP configs are merged automatically by compose-dev up." lines)
     (push "" lines)
@@ -355,9 +358,7 @@ Returns the install script content as a string."
     (push "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"" lines)
     (push "TARGET_DIR=\"$SCRIPT_DIR/../skewed-emacs\"" lines)
     (push "" lines)
-    (push "echo \"\"" lines)
-    (push (format "echo \"Installing %s overlay...\"" 
-                  (string-trim-right prefix "-")) lines)
+    (push (format "echo \"Installing %s...\"" label) lines)
     (push "echo \"\"" lines)
     (push "" lines)
     (push "# Check if target directory exists" lines)
@@ -367,42 +368,53 @@ Returns the install script content as a string."
     (push "    exit 1" lines)
     (push "fi" lines)
     (push "" lines)
-    (push "# Copy compose overlay" lines)
-    (push (format "echo \"Installing %scompose.yml...\"" prefix) lines)
-    (push (format "cp \"$SCRIPT_DIR/%scompose.yml\" \"$TARGET_DIR/\"" prefix) lines)
+
+    ;; Compose file copy
+    (if is-base
+        (progn
+          (push "# Copy base compose (replaces skewed-emacs default)" lines)
+          (push "echo \"Installing docker-compose.yml (base with networks)...\"" lines)
+          (push "cp \"$SCRIPT_DIR/docker-compose.yml\" \"$TARGET_DIR/docker-compose.yml\"" lines))
+      (push "# Copy compose overlay" lines)
+      (push (format "echo \"Installing %scompose.yml...\"" prefix) lines)
+      (push (format "cp \"$SCRIPT_DIR/%scompose.yml\" \"$TARGET_DIR/\"" prefix) lines))
     (push "" lines)
+
+    ;; MCP configs
     (when has-mcp
-      (push "# Copy MCP overlay configs" lines)
-      (push "echo \"Installing MCP overlay configs...\"" lines)
+      (push "# Copy MCP configs" lines)
+      (push "echo \"Installing MCP configs...\"" lines)
       (push "mkdir -p \"$TARGET_DIR/mcp\"" lines)
-      (push (format "cp \"$SCRIPT_DIR/mcp/%smcp-container.json\" \"$TARGET_DIR/mcp/\"" prefix) lines)
-      (push (format "cp \"$SCRIPT_DIR/mcp/%smcp-windows.json\" \"$TARGET_DIR/mcp/\"" prefix) lines)
-      (push (format "cp \"$SCRIPT_DIR/mcp/%smcp.toml\" \"$TARGET_DIR/mcp/\"" prefix) lines)
+      (if is-base
+          (progn
+            (push "for f in \"$SCRIPT_DIR/mcp/\"*.json \"$SCRIPT_DIR/mcp/\"*.toml; do" lines)
+            (push "    [ -f \"$f\" ] && cp \"$f\" \"$TARGET_DIR/mcp/\"" lines)
+            (push "done" lines))
+        (push (format "cp \"$SCRIPT_DIR/mcp/%smcp-container.json\" \"$TARGET_DIR/mcp/\"" prefix) lines)
+        (push (format "cp \"$SCRIPT_DIR/mcp/%smcp-windows.json\" \"$TARGET_DIR/mcp/\"" prefix) lines)
+        (push (format "cp \"$SCRIPT_DIR/mcp/%smcp.toml\" \"$TARGET_DIR/mcp/\"" prefix) lines))
       (push "" lines))
-    (push "# Copy services discovery overlay (dashboard + swank)" lines)
-    (push "echo \"Installing services overlay configs...\"" lines)
+
+    ;; Services discovery
+    (push "# Copy services discovery (dashboard + swank)" lines)
+    (push "echo \"Installing services discovery...\"" lines)
     (push "mkdir -p \"$TARGET_DIR/dot-files/emacs.d/etc\"" lines)
-    (push "for svc_file in \"$SCRIPT_DIR/dot-files/emacs.d/etc/\"*-services-generated.el; do" lines)
-    (push "    if [ -f \"$svc_file\" ]; then" lines)
-    (push "        cp \"$svc_file\" \"$TARGET_DIR/dot-files/emacs.d/etc/\"" lines)
-    (push "    fi" lines)
-    (push "done" lines)
+    (if is-base
+        (progn
+          (push "for f in \"$SCRIPT_DIR/dot-files/emacs.d/etc/\"*services-generated.el; do" lines)
+          (push "    [ -f \"$f\" ] && cp \"$f\" \"$TARGET_DIR/dot-files/emacs.d/etc/\"" lines)
+          (push "done" lines))
+      (push "for svc_file in \"$SCRIPT_DIR/dot-files/emacs.d/etc/\"*-services-generated.el; do" lines)
+      (push "    if [ -f \"$svc_file\" ]; then" lines)
+      (push "        cp \"$svc_file\" \"$TARGET_DIR/dot-files/emacs.d/etc/\"" lines)
+      (push "    fi" lines)
+      (push "done" lines))
     (push "" lines)
+
     (push "echo \"\"" lines)
     (push "echo \"Installation complete!\"" lines)
     (push "echo \"\"" lines)
-    (push "echo \"Files installed:\"" lines)
-    (push (format "echo \"  - %scompose.yml      (Docker Compose overlay)\"" prefix) lines)
-    (when has-mcp
-      (push (format "echo \"  - mcp/%smcp-*.json   (MCP config overlays)\"" prefix) lines)
-      (push (format "echo \"  - mcp/%smcp.toml     (Codex config overlay)\"" prefix) lines))
-    (push "echo \"\"" lines)
-    (push (format "echo \"To start the stack with %s services:\"" 
-                  (string-trim-right prefix "-")) lines)
-    (push "echo \"  cd $TARGET_DIR\"" lines)
-    (push "echo \"  ./compose-dev up\"" lines)
-    (push "echo \"\"" lines)
-    
+
     (string-join (nreverse lines) "\n")))
 
 ;;; ============================================================================
@@ -488,8 +500,8 @@ Examples:
         (insert (skewed--generate-elisp config)))
       (message "Generated: %s" elisp-file))
 
-    ;; Generate install script for overlays (when prefix is non-empty)
-    (unless (string-empty-p skewed-gen-output-prefix)
+    ;; Generate install script (for any non-skewed-emacs directory)
+    (unless (equal (file-name-nondirectory (directory-file-name skewed-gen-output-dir)) "skewed-emacs")
       (let ((install-file (expand-file-name "install" skewed-gen-output-dir)))
         (with-temp-file install-file
           (insert (skewed--generate-install-script skewed-gen-output-prefix (skewed--has-mcp-services-p config))))
