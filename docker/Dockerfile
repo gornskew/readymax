@@ -173,11 +173,13 @@ RUN set -euxo pipefail; \
    ln -sf ~/.gemini/local/node_modules/.bin/gemini ~/.local/bin/gemini; \
    npm cache clean --force || true
 
+# Install grok-dev (follows same pattern as claude/codex/gemini)
+USER emacs-user
 RUN set -euxo pipefail; \
-   npm install -g grok-dev
-   ln -sf ~/.gemini/local/node_modules/.bin/gemini ~/.local/bin/gemini; \
+   mkdir -p ~/.grok/local; \
+   npm install --omit=dev grok-dev --prefix ~/.grok/local; \
+   ln -sf ~/.grok/local/node_modules/.bin/grok ~/.local/bin/grok; \
    npm cache clean --force || true
-
 
 # Start daemon to settle async init
 RUN set -euxo pipefail; \
@@ -313,6 +315,7 @@ FROM runtime-base AS runtime-aituis
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.claude /home/emacs-user/.claude
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.codex /home/emacs-user/.codex
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.gemini /home/emacs-user/.gemini
+COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.grok /home/emacs-user/.grok
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.local/bin /home/emacs-user/.local/bin
 
 
@@ -375,4 +378,5 @@ FROM runtime-gui-base AS runtime-gui-aituis
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.claude /home/emacs-user/.claude
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.codex /home/emacs-user/.codex
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.gemini /home/emacs-user/.gemini
+COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.grok /home/emacs-user/.grok
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.local/bin /home/emacs-user/.local/bin

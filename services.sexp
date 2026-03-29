@@ -5,7 +5,7 @@
 ;;; Edit this file, then run (skewed-generate-all-configs) to regenerate:
 ;;;
 ;;;   - docker-compose.yml         (base compose config)
-;;;   - mcp/mcp-container.json     (for claude/gemini CLI inside container)
+;;;   - mcp/mcp-container.json     (for claude/gemini/grok CLI inside container)
 ;;;   - mcp/mcp-windows.json       (for Claude Desktop on Windows via WSL)
 ;;;   - mcp/mcp.toml               (for Codex CLI)
 ;;;   - dot-files/emacs.d/etc/services-generated.el
@@ -110,6 +110,8 @@
               :target "/home/emacs-user/.gemini/oauth_creds.json")
              (:source "${USER_HOME}/.codex/auth.json"
               :target "/home/emacs-user/.codex/auth.json")
+             (:source "${USER_HOME}/.grok/user-settings.json"
+              :target "/home/emacs-user/.grok/user-settings.json")
              (:source "/tmp/.X11-unix" :target "/tmp/.X11-unix" :mode "rw")
              (:source "${EMACS_LOCAL_SRC:-/nonexistent}/.emacs-local"
               :target "/home/emacs-user/.emacs-local" :mode "ro")

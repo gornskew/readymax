@@ -143,7 +143,7 @@ if [[ $- == *i* && -z "$DOT_BASH_PROFILE_WELCOME" ]]; then
     echo ""
     echo "Terminal colors: 'theme dark|light|solarized|custom'"
     echo ""
-    echo "Try 'claudly', 'geminly', 'codexly' to launch those agents."  # FLAG: add 'grokly' when available
+    echo "Try 'claudly', 'geminly', 'codexly', 'grokly' to launch those agents."
     echo ""
     echo "Windows users: Run 'export-windows-mcp-config' to get Claude Desktop config."
     echo ""
@@ -215,14 +215,24 @@ function codexly
 }
 
 
-# FLAG: Add grokly when grok-cli available
-# function grokly
-# {
-#     echo "Checking for xAI Grok updates..."
-#     (cd ~/.grok/local && npm update @xai/grok-cli) >/dev/null 2>&1
-#     echo "Starting xAI Grok CLI..."
-#     cd /projects && ~/.local/bin/grok
-# }
+function grokly
+{
+    # Update grok-dev to latest version
+    echo "Checking for grok-dev updates..."
+    (cd ~/.grok/local && npm update grok-dev) >/dev/null 2>&1
+
+    # MCP config is injected into ~/.grok/user-settings.json at container startup
+    # by merge-mcp-configs.el (skewed-update-grok-config-from-json).
+    # Just verify it's there.
+    if [ ! -f ~/.grok/user-settings.json ]; then
+        echo "Warning: ~/.grok/user-settings.json not found. MCP servers may not be available."
+        echo "MCP configs are injected at container startup by compose-dev."
+    fi
+
+    # Run grok
+    echo "Starting xAI Grok CLI with MCP integration..."
+    cd /projects && ~/.local/bin/grok
+}
 
 
 # Windows Claude Desktop MCP config helper
