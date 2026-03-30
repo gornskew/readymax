@@ -1,0 +1,107 @@
+{
+  "mcpServers": {
+    "genworks-gdl-enterprise-non-smp": {
+      "command": "wsl",
+      "args": [
+        "/home/dcooper8/projects/skewed-emacs/mcp/mcp-exec",
+        "--server-name",
+        "genworks-gdl-enterprise-non-smp",
+        "--backend-host",
+        "genworks-gdl-enterprise-non-smp",
+        "--http-port",
+        "9088"
+      ]
+    },
+    "genworks-gdl-enterprise-smp": {
+      "command": "wsl",
+      "args": [
+        "/home/dcooper8/projects/skewed-emacs/mcp/mcp-exec",
+        "--server-name",
+        "genworks-gdl-enterprise-smp",
+        "--backend-host",
+        "genworks-gdl-enterprise-smp",
+        "--http-port",
+        "9098"
+      ]
+    },
+    "cyclops": {
+      "command": "wsl",
+      "args": [
+        "/home/dcooper8/projects/skewed-emacs/mcp/mcp-exec",
+        "--server-name",
+        "cyclops",
+        "--backend-host",
+        "cyclops",
+        "--http-port",
+        "80"
+      ]
+    },
+    "genworks-gdl-non-smp": {
+      "command": "wsl",
+      "args": [
+        "/home/dcooper8/projects/skewed-emacs/mcp/mcp-exec",
+        "--server-name",
+        "genworks-gdl-non-smp",
+        "--backend-host",
+        "genworks-gdl-non-smp",
+        "--http-port",
+        "9088"
+      ]
+    },
+    "genworks-gdl-smp": {
+      "command": "wsl",
+      "args": [
+        "/home/dcooper8/projects/skewed-emacs/mcp/mcp-exec",
+        "--server-name",
+        "genworks-gdl-smp",
+        "--backend-host",
+        "genworks-gdl-smp",
+        "--http-port",
+        "9098"
+      ]
+    },
+    "skewed-emacs": {
+      "command": "wsl",
+      "args": [
+        "/home/dcooper8/projects/skewed-emacs/mcp/mcp-exec",
+        "--server-name",
+        "skewed-emacs",
+        "--backend-host",
+        "skewed-emacs",
+        "--http-port",
+        "7080",
+        "--request-timeout-ms",
+        "30000"
+      ]
+    },
+    "gendl-ccl": {
+      "command": "wsl",
+      "args": [
+        "/home/dcooper8/projects/skewed-emacs/mcp/mcp-exec",
+        "--server-name",
+        "gendl-ccl",
+        "--backend-host",
+        "gendl-ccl",
+        "--http-port",
+        "9080",
+        "--request-timeout-ms",
+        "30000"
+      ]
+    },
+    "gendl-sbcl": {
+      "command": "wsl",
+      "args": [
+        "/home/dcooper8/projects/skewed-emacs/mcp/mcp-exec",
+        "--server-name",
+        "gendl-sbcl",
+        "--backend-host",
+        "gendl-sbcl",
+        "--http-port",
+        "9090",
+        "--request-timeout-ms",
+        "30000"
+      ]
+    }
+  },
+  "globalShortcut": ""
+}

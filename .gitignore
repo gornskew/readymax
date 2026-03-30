@@ -91,6 +91,7 @@ enterprise*.yml
 mcp/*mcp*
 !mcp/merge-mcp-configs.el
 !mcp/mcp-*
+!mcp/claude_desktop_config.json
 
 # ==============================================================================
 # Generated service description .el files
