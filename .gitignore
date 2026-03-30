@@ -87,13 +87,18 @@ enterprise*.yml
 # ==============================================================================
 # Generated MCP configs
 # ==============================================================================
-mcp/genworks-gdl*
-mcp/betatest*
-mcp/enterprise*
-mcp/claude_desktop_config.json
-**/genworks-gdl*.*
-**/betatest*.*
-**/enterprise*.*
+
+mcp/*
+!mcp/mcp-*
+
+# ==============================================================================
+# Generated service description .el files
+# ==============================================================================
+
+dot-files/emacs.d/etc/*-services-generated.el
+
+
+
 
 # ==============================================================================
 # Build artifacts & caches
