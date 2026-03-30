@@ -44,13 +44,17 @@
       (read (current-buffer)))))
 
 (defun skewed--get-prop (plist key)
+  "Get property KEY from PLIST."
+  (plist-get plist key))
 
 (defun skewed--has-mcp-services-p (config)
   "Return non-nil if CONFIG has at least one service with :mcp t."
   (cl-some (lambda (svc) (skewed--get-prop svc :mcp))
            (skewed--get-prop config :services)))
-  "Get property KEY from PLIST."
-  (plist-get plist key))
+
+(defun skewed--mcp-approved-tools (_svc)
+  "Return the standard tool names that should be pre-approved for an MCP service."
+  '("ping_lisp" "http_request" "lisp_eval"))
 
 ;;; ============================================================================
 ;;; skewed_search Config Generation
@@ -280,6 +284,12 @@ Uses placeholder ${SKEWED_CLONE_PATH} which gets substituted at merge time."
             (push (format "args = [%s]"
                           (mapconcat (lambda (arg) (format "\"%s\"" arg)) args ", "))
                   lines))
+          (dolist (tool-name (skewed--mcp-approved-tools svc))
+            (push "" lines)
+            (push (format "[mcp_servers.%s.tools.%s__%s]"
+                          name name tool-name)
+                  lines)
+            (push "approval_mode = \"approve\"" lines))
           (push "" lines))))
     
     (string-join (nreverse lines) "\n")))

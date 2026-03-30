@@ -22,6 +22,54 @@
 
 (require 'json)
 
+(defun skewed--read-file-without-comment-lines (filepath comment-prefix-regexp)
+  "Return FILEPATH contents with full-line comments matching COMMENT-PREFIX-REGEXP removed."
+  (with-temp-buffer
+    (insert-file-contents filepath)
+    (goto-char (point-min))
+    (while (re-search-forward comment-prefix-regexp nil t)
+      (replace-match ""))
+    (buffer-string)))
+
+(defun skewed--parse-toml-sections (content)
+  "Parse CONTENT into an ordered alist of TOML table name to section text.
+Only table sections are returned. Repeated tables later in the file replace
+earlier values when the caller merges the resulting alists."
+  (let ((sections '())
+        (current-table nil)
+        (current-lines '()))
+    (dolist (line (split-string content "\n"))
+      (if (string-match "^\\[\\([^]]+\\)\\][ \\t]*$" line)
+          (progn
+            (when current-table
+              (push (cons current-table
+                          (string-trim-right (string-join (nreverse current-lines) "\n")))
+                    sections))
+            (setq current-table (match-string 1 line))
+            (setq current-lines (list line)))
+        (when current-table
+          (push line current-lines))))
+    (when current-table
+      (push (cons current-table
+                  (string-trim-right (string-join (nreverse current-lines) "\n")))
+            sections))
+    (nreverse sections)))
+
+(defun skewed--merge-toml-files (filepaths)
+  "Merge TOML table sections from FILEPATHS with later files overriding earlier ones."
+  (let ((section-order '())
+        (merged-sections (make-hash-table :test #'equal)))
+    (dolist (filepath filepaths)
+      (dolist (section (skewed--parse-toml-sections
+                        (skewed--read-file-without-comment-lines filepath "^[ \\t]*#.*$")))
+        (let ((table (car section)))
+          (unless (member table section-order)
+            (setq section-order (append section-order (list table))))
+          (puthash table (cdr section) merged-sections))))
+    (mapconcat (lambda (table) (gethash table merged-sections))
+               section-order
+               "\n\n")))
+
 (defun skewed-merge-mcp-json (mcp-dir base-name output-file)
   "Merge base and overlay MCP JSON configs from MCP-DIR to OUTPUT-FILE.
 BASE-NAME is the base config filename (e.g., 'mcp-container.json').
@@ -30,11 +78,8 @@ Merges with any overlay files matching pattern '*-{base-name}'."
          (base-config (unless (file-exists-p base-file)
                         (error "Base config not found: %s" base-file)))
          (base-config (with-temp-buffer
-                        (insert-file-contents base-file)
-                        ;; Remove comment lines
-                        (goto-char (point-min))
-                        (while (re-search-forward "^[ \t]*//.*$" nil t)
-                          (replace-match ""))
+                        (insert (skewed--read-file-without-comment-lines
+                                 base-file "^[ \t]*//.*$"))
                         (goto-char (point-min))
                         (json-read)))
          (merged-servers (copy-alist (alist-get 'mcpServers base-config)))
@@ -45,11 +90,8 @@ Merges with any overlay files matching pattern '*-{base-name}'."
     (dolist (overlay-file overlay-files)
       (message "Merging %s overlay: %s" base-name (file-name-nondirectory overlay-file))
       (let* ((overlay-config (with-temp-buffer
-                               (insert-file-contents overlay-file)
-                               ;; Remove comment lines
-                               (goto-char (point-min))
-                               (while (re-search-forward "^[ \t]*//.*$" nil t)
-                                 (replace-match ""))
+                               (insert (skewed--read-file-without-comment-lines
+                                        overlay-file "^[ \t]*//.*$"))
                                (goto-char (point-min))
                                (json-read)))
              (overlay-servers (alist-get 'mcpServers overlay-config)))
@@ -74,30 +116,15 @@ Merges with any overlay files matching pattern '*-{base-name}'."
   "Merge base and overlay MCP TOML configs from MCP-DIR to OUTPUT-FILE.
 Reads mcp.toml as base, then merges any *-mcp.toml overlay files."
   (let* ((base-file (expand-file-name "mcp.toml" mcp-dir))
-         (base-servers (unless (file-exists-p base-file)
-                         (error "Base TOML config not found: %s" base-file)))
-         (base-servers (with-temp-buffer
-                         (insert-file-contents base-file)
-                         ;; Remove comment lines
-                         (goto-char (point-min))
-                         (while (re-search-forward "^[ \t]*#.*$" nil t)
-                           (replace-match ""))
-                         (buffer-string)))
+         (_base-servers (unless (file-exists-p base-file)
+                          (error "Base TOML config not found: %s" base-file)))
          (overlay-files (directory-files mcp-dir t "-mcp\\.toml$"))
-         (merged-content base-servers))
+         (all-files (cons base-file overlay-files))
+         (merged-content nil))
 
-    ;; Merge each overlay file
     (dolist (overlay-file overlay-files)
-      (message "Merging TOML overlay: %s" (file-name-nondirectory overlay-file))
-      (let ((overlay-content (with-temp-buffer
-                               (insert-file-contents overlay-file)
-                               ;; Remove comment lines
-                               (goto-char (point-min))
-                               (while (re-search-forward "^[ \t]*#.*$" nil t)
-                                 (replace-match ""))
-                               (buffer-string))))
-        ;; Simple concatenation for TOML (later entries override earlier ones)
-        (setq merged-content (concat merged-content "\n" overlay-content))))
+      (message "Merging TOML overlay: %s" (file-name-nondirectory overlay-file)))
+    (setq merged-content (skewed--merge-toml-files all-files))
 
     ;; Write merged TOML
     (with-temp-file output-file
@@ -120,7 +147,8 @@ Reads mcp.toml as base, then merges any *-mcp.toml overlay files."
     (goto-char (point-min))
     (while (re-search-forward "^\\[\\([^]]+\\)\\]" nil t)
       (let ((table (match-string 1)))
-        (unless (string-prefix-p "mcp_servers." table)
+        (unless (or (string-prefix-p "mcp_servers." table)
+                    (string-match-p "\\." table))
           (replace-match (format "[mcp_servers.%s]" table) t t))))
     (buffer-string)))
 
@@ -138,11 +166,12 @@ Replaces the managed block if it already exists."
 
       ;; Remove any existing managed block.
       (goto-char (point-min))
-      (when (re-search-forward (concat "^" (regexp-quote begin-marker) "$" ) nil t)
+      (while (re-search-forward (concat "^" (regexp-quote begin-marker) "$") nil t)
         (let ((start (match-beginning 0)))
-          (when (re-search-forward (concat "^" (regexp-quote end-marker) "$" ) nil t)
+          (when (re-search-forward (concat "^" (regexp-quote end-marker) "$") nil t)
             (delete-region start (match-end 0))
-            (delete-blank-lines))))
+            (delete-blank-lines)
+            (goto-char start))))
 
       ;; Append managed block at end.
       (goto-char (point-max))

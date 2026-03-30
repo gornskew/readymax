@@ -7,12 +7,14 @@
     (:name "skewed-emacs"
      :type "emacs-lisp"
      :lisp-impl "Emacs"
+     :mcp t
      :http-host "skewed-emacs"
      :http-port 7080
     )
     (:name "gendl-ccl"
      :type "common-lisp"
      :lisp-impl "CCL"
+     :mcp t
      :http-host "gendl-ccl"
      :http-port 9080
      :http-host-port 19080
@@ -22,6 +24,7 @@
     (:name "gendl-sbcl"
      :type "common-lisp"
      :lisp-impl "SBCL"
+     :mcp t
      :http-host "gendl-sbcl"
      :http-port 9090
      :http-host-port 29080
