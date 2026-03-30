@@ -304,12 +304,15 @@ Uses placeholder ${SKEWED_CLONE_PATH} which gets substituted at merge time."
       (let* ((name (skewed--get-prop svc :name))
              (type (skewed--get-prop svc :type))
              (lisp-impl (skewed--get-prop svc :lisp-impl))
+             (mcp (skewed--get-prop svc :mcp))
              (ports (skewed--get-prop svc :ports))
              (http-port (cl-find-if (lambda (p) (equal (skewed--get-prop p :name) "http")) ports))
              (swank-port (cl-find-if (lambda (p) (equal (skewed--get-prop p :name) "swank")) ports)))
         (push (format "    (:name \"%s\"" name) lines)
         (push (format "     :type \"%s\"" type) lines)
         (push (format "     :lisp-impl \"%s\"" (or lisp-impl "Unknown")) lines)
+        (when mcp
+          (push "     :mcp t" lines))
         (when http-port
           (push (format "     :http-host \"%s\"" name) lines)
           (push (format "     :http-port %s" (skewed--get-prop http-port :container)) lines)

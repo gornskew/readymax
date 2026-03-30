@@ -19,19 +19,30 @@
 (defvar skewed-services-base-dir nil
   "Base directory for skewed-emacs - computed at load time.")
 
-(let* ((emacs-root (expand-file-name "../.." (file-truename user-emacs-directory)))
-       (candidates (list emacs-root
-                         "/projects/skewed-emacs/"
-                         (expand-file-name "~/skewed-emacs/")
-                         (expand-file-name "~/projects/skewed-emacs/"))))
+(defvar skewed-discovery-script-dir 
+  (let ((this-file (or load-file-name buffer-file-name)))
+    (and this-file (file-name-directory this-file)))
+  "Directory where services-discovery.el resides.")
+
+(let* ((this-dir skewed-discovery-script-dir)
+       ;; Root is 4 levels up: etc/ -> emacs.d/ -> dot-files/ -> ROOT/
+       (derived-root (and this-dir (expand-file-name "../../../../" this-dir)))
+       (env-clone-path (getenv "SKEWED_CLONE_PATH"))
+       (candidates (list env-clone-path
+                         derived-root
+                         (expand-file-name "../.." (file-truename user-emacs-directory))
+                         "/projects/skewed-emacs/")))
   (setq skewed-services-base-dir
-        (seq-find #'file-directory-p candidates)))
+        (seq-find (lambda (dir) (and dir (file-directory-p dir))) candidates)))
 
 (defvar skewed-services-config nil
   "Cached services configuration.")
 
 (defvar skewed-services-cache-time nil
   "Time when services config was last loaded.")
+
+(defvar skewed-services-cache-signature nil
+  "Signature of the service config inputs used for the current cache.")
 
 (defvar skewed-services-cache-timeout 60
   "Seconds before reloading services config.")
@@ -51,24 +62,44 @@
         (puthash name svc table)))
     (mapcar (lambda (name) (gethash name table)) (nreverse order))))
 
+(defun skewed--generated-service-files ()
+  "Return generated service files in deterministic merge order."
+  (let* ((generated-dir (or skewed-discovery-script-dir 
+                           (expand-file-name "dot-files/emacs.d/etc/" skewed-services-base-dir)))
+         (base-file (expand-file-name "services-generated.el" generated-dir))
+         (overlay-files (when (file-directory-p generated-dir)
+                          (sort (directory-files generated-dir t
+                                                 ".*-services-generated\\.el$")
+                                #'string-lessp))))
+    (append (when (file-exists-p base-file) (list base-file))
+            overlay-files)))
+
+(defun skewed--services-source-signature ()
+  "Return a signature for the current service config inputs."
+  (let* ((generated-files (skewed--generated-service-files))
+         (json-file (expand-file-name "services.json" skewed-services-base-dir)))
+    (append
+     (mapcar (lambda (file)
+               (list file
+                     (file-attribute-modification-time
+                      (file-attributes file))))
+             generated-files)
+     (when (file-exists-p json-file)
+       (list (list json-file
+                   (file-attribute-modification-time
+                    (file-attributes json-file))))))))
+
 ;;; ============================================================================
 ;;; Loading from Generated File (preferred)
 ;;; ============================================================================
 
 (defun skewed--load-from-generated ()
   "Load services from pre-generated elisp file."
-  (let* ((generated-dir (expand-file-name "dot-files/emacs.d/etc/"
-                                          skewed-services-base-dir))
-         (base-file (expand-file-name "services-generated.el" generated-dir))
-         (overlay-files (when (file-directory-p generated-dir)
-                          (directory-files generated-dir t ".*-services-generated\\.el$")))
-         (services '()))
-    (when (file-exists-p base-file)
-      (load base-file t t)
-      (when (boundp 'skewed-generated-services)
-        (setq services (append services skewed-generated-services))))
-    (dolist (overlay-file overlay-files)
-      (load overlay-file t t)
+  (let ((services '()))
+    (dolist (service-file (skewed--generated-service-files))
+      ;; Each generated file resets `skewed-generated-services`, so accumulate
+      ;; after every load and merge once at the end.
+      (load service-file t t)
       (when (boundp 'skewed-generated-services)
         (setq services (append services skewed-generated-services))))
     (when services
@@ -139,12 +170,15 @@
 
 (defun skewed-get-services-config ()
   "Get services config, reloading if cache expired."
-  (let ((now (float-time)))
+  (let ((now (float-time))
+        (signature (skewed--services-source-signature)))
     (when (or (null skewed-services-config)
               (null skewed-services-cache-time)
+              (not (equal signature skewed-services-cache-signature))
               (> (- now skewed-services-cache-time) skewed-services-cache-timeout))
       (setq skewed-services-config (skewed--load-services))
-      (setq skewed-services-cache-time now)))
+      (setq skewed-services-cache-time now)
+      (setq skewed-services-cache-signature signature)))
   skewed-services-config)
 
 (defun skewed-get-services ()
@@ -152,9 +186,11 @@
   (skewed-get-services-config))
 
 (defun skewed-get-lisply-backends ()
-  "Return services suitable for lisply backend display (emacs-lisp or common-lisp)."
+  "Return services suitable for lisply backend display.
+Includes Lisp runtimes and any service explicitly marked :mcp t."
   (seq-filter (lambda (svc)
-                (member (plist-get svc :type) '("emacs-lisp" "common-lisp")))
+                (or (member (plist-get svc :type) '("emacs-lisp" "common-lisp"))
+                    (plist-get svc :mcp)))
               (skewed-get-services)))
 
 (defun skewed-get-swank-services ()
@@ -167,6 +203,7 @@
   (interactive)
   (setq skewed-services-config nil)
   (setq skewed-services-cache-time nil)
+  (setq skewed-services-cache-signature nil)
   (message "Reloaded %d services" (length (skewed-get-services))))
 
 ;;; ============================================================================
@@ -194,6 +231,8 @@ Returns list of plists with :host, :port, :name, :icon."
                            ((string-match-p "CCL" impl) :svc-ccl)
                            ((string-match-p "SBCL" impl) :svc-sbcl)
                            ((string-match-p "LispWorks" impl) :svc-lispworks)
+                           ((string-match-p "AllegroCL" impl)
+                            (if (string-match-p "SMP" impl) :svc-smp :svc-commercial))
                            (t :svc-lisp)))))
           (skewed-get-swank-services)))
 
