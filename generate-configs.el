@@ -96,6 +96,7 @@
              (env (skewed--get-prop svc :environment))
              (vols (skewed--get-prop svc :volumes))
              (user (skewed--get-prop svc :user))
+             (network-mode (skewed--get-prop svc :network-mode))
              (extra-hosts (skewed--get-prop svc :extra-hosts))
              (group-add (skewed--get-prop svc :group-add))
              (healthcheck (skewed--get-prop svc :healthcheck))
@@ -111,15 +112,18 @@
         (push (format "    restart: %s" restart) lines)
         (push "    stdin_open: true" lines)
         (push "    tty: true" lines)
+        (when network-mode
+          (push (format "    network_mode: %s" network-mode) lines))
         
         ;; Ports
-        (let ((ports-with-host (cl-remove-if-not (lambda (p) (skewed--get-prop p :host)) ports)))
-          (when ports-with-host
-            (push "    ports:" lines)
-            (dolist (port ports-with-host)
-              (let ((container (skewed--get-prop port :container))
-                    (host (skewed--get-prop port :host)))
-                (push (format "      - \"%s:%s\"" host container) lines)))))
+        (unless network-mode
+          (let ((ports-with-host (cl-remove-if-not (lambda (p) (skewed--get-prop p :host)) ports)))
+            (when ports-with-host
+              (push "    ports:" lines)
+              (dolist (port ports-with-host)
+                (let ((container (skewed--get-prop port :container))
+                      (host (skewed--get-prop port :host)))
+                  (push (format "      - \"%s:%s\"" host container) lines))))))
         
         ;; Environment
         (push "    environment:" lines)
@@ -162,7 +166,7 @@
                 (push (format "      - %s:%s" src tgt) lines)))))
         
         ;; Extra hosts
-        (when extra-hosts
+        (when (and extra-hosts (not network-mode))
           (push "    extra_hosts:" lines)
           (dolist (host-pair extra-hosts)
             (push (format "      - \"%s:%s\"" (car host-pair) (cdr host-pair)) lines)))
@@ -174,8 +178,9 @@
             (push (format "      - \"%s\"" grp) lines)))
         
         ;; Networks
-        (push "    networks:" lines)
-        (push "      - skewed-network" lines)
+        (unless network-mode
+          (push "    networks:" lines)
+          (push "      - skewed-network" lines))
         
         ;; Healthcheck
         (when healthcheck
