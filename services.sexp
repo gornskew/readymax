@@ -48,7 +48,10 @@
  (:network "skewed-network"
   :restart "unless-stopped"
   :volumes ((:source "${PROJECTS_DIR}" :target "/projects"))
-  :timezone "${TZ:-Etc/UTC}")
+  :timezone "${TZ:-Etc/UTC}"
+  :network-ipv6 t
+  :network-ipv4-subnet "172.20.0.0/16"
+  :network-ipv6-subnet "fd00:cafe::/80")
 
  :mcp
  (:wrapper-path-container "/home/emacs-user/lisply-mcp/scripts/mcp-wrapper.js"
