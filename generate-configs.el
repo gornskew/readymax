@@ -79,11 +79,24 @@
     
     ;; Only include networks block for base config (no prefix)
     (when (string-empty-p skewed-gen-output-prefix)
-      (push "networks:" lines)
-      (push "  skewed-network:" lines)
-      (push (format "    name: ${DOCKER_NETWORK_NAME:-%s}" network-name) lines)
-      (push "    driver: bridge" lines)
-      (push "" lines))
+      (let ((ipv6        (skewed--get-prop defaults :network-ipv6))
+            (ipv4-subnet (skewed--get-prop defaults :network-ipv4-subnet))
+            (ipv6-subnet (skewed--get-prop defaults :network-ipv6-subnet)))
+        (push "networks:" lines)
+        (push "  skewed-network:" lines)
+        (push (format "    name: ${DOCKER_NETWORK_NAME:-%s}" network-name) lines)
+        (push "    driver: bridge" lines)
+        (when ipv6
+          (push "    enable_ipv6: true" lines)
+          (when (or ipv4-subnet ipv6-subnet)
+            (push "    ipam:" lines)
+            (push "      config:" lines)
+            (when ipv4-subnet
+              (push (format "        - subnet: \"%s\"" ipv4-subnet) lines))
+            (when ipv6-subnet
+              (push (format "        - subnet: \"%s\"" ipv6-subnet) lines))))
+        (push "" lines)))
+
     
     (push "services:" lines)
     (push "" lines)
