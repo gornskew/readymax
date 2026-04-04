@@ -78,6 +78,7 @@ overlays/local.sexp
 genworks-gdl*.yml
 betatest*.yml
 enterprise*.yml
+*-stack-compose.yml
 
 # Development overlay files (local, not committed)
 *-overlay.yml

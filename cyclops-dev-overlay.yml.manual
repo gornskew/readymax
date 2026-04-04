@@ -1,8 +1,0 @@
-# Cyclops development overlay
-# Exposes port 19069 for browser testing the reverse proxy
-# Usage: ./compose-dev up -f docker-compose.yml -f enterprise-compose.yml -f cyclops-dev-overlay.yml
-
-services:
-  genworks-gdl-enterprise-smp:
-    ports:
-      - "19069:19069"
