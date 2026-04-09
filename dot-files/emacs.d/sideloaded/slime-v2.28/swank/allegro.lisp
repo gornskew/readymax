@@ -497,6 +497,11 @@
                                        load-p external-format
                                        &key policy)
   (declare (ignore policy))
+
+  (setq external-format utf8-ef)
+
+  (gdl:print-variables external-format)
+  
   (handler-case
       (with-compilation-hooks ()
         (let ((*buffer-name* nil)
@@ -846,7 +851,8 @@ to do this, this factors in the length of the inserted header itself."
       ((:unsigned-word :unsigned-byte :unsigned-natural
                        :unsigned-long :unsigned-half-long
                        :unsigned-3byte :unsigned-long32)
-       (label-value-line name (inspect::component-ref-v object access type)))
+       (label-value-line name (inspect::component-ref-v object access ;;type
+                                                        )))
       ((:lisp :value :func)
        (label-value-line name (inspect::component-ref object access)))
       (:indirect

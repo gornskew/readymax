@@ -137,4 +137,6 @@
         
         ))))
 
+(setq slime-compile-file-options '(:external-format :utf-8))
+
 (provide 'slime-config)

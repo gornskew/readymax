@@ -407,6 +407,18 @@ gendl-ccl/4200.")
   (set-file-name-coding-system 'utf-8)
   (set-clipboard-coding-system 'utf-8)
   (set-buffer-file-coding-system 'utf-8)
+
+
+  ;; Force SLIME to use UTF-8 for all Lisp file operations
+  (setq slime-net-coding-system 'utf-8-unix)
+  
+  ;; Also make sure Emacs uses UTF-8 for Lisp files by default
+  (modify-coding-system-alist 'file "\\.lisp\\'" 'utf-8-unix)
+  (modify-coding-system-alist 'file "\\.lsp\\'"  'utf-8-unix)
+  (modify-coding-system-alist 'file "\\.cl\\'"   'utf-8-unix)
+
+
+  
   (setq column-number-mode t)
   (global-font-lock-mode t)
   (setq-default transient-mark-mode t)
