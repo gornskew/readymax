@@ -36,30 +36,6 @@
         "80"
       ]
     },
-    "genworks-gdl-non-smp": {
-      "command": "wsl",
-      "args": [
-        "/home/dcooper8/projects/skewed-emacs/mcp/mcp-exec",
-        "--server-name",
-        "genworks-gdl-non-smp",
-        "--backend-host",
-        "genworks-gdl-non-smp",
-        "--http-port",
-        "9088"
-      ]
-    },
-    "genworks-gdl-smp": {
-      "command": "wsl",
-      "args": [
-        "/home/dcooper8/projects/skewed-emacs/mcp/mcp-exec",
-        "--server-name",
-        "genworks-gdl-smp",
-        "--backend-host",
-        "genworks-gdl-smp",
-        "--http-port",
-        "9098"
-      ]
-    },
     "skewed-emacs": {
       "command": "wsl",
       "args": [
