@@ -290,41 +290,25 @@ start_services() {
             skewed-emacs:/home/emacs-user/skewed-emacs/dot-files/emacs.d/etc/ 2>/dev/null || true
     done
 
-    # Step 2: Merge inside container — retry loop for emacs daemon startup
-    MCP_MERGE_SUCCESS=false
-    _attempt=1
-    while [ "$_attempt" -le 5 ]; do
-        if run_compose exec -T skewed-emacs emacsclient --eval \
-            "(progn (setenv \"SKEWED_CLONE_PATH\" \"${SCRIPT_DIR}\")
-                    (load-file \"/home/emacs-user/skewed-emacs/mcp/merge-mcp-configs.el\")
-                    (skewed-merge-all-mcp-configs \"/home/emacs-user/skewed-emacs/mcp\"))" \
-            > /dev/null 2>&1
-        then
-            MCP_MERGE_SUCCESS=true
-            break
-        fi
-        if [ "$_attempt" -lt 5 ]; then
-            log_info "Waiting for emacs daemon (attempt $_attempt/5)..."
-            sleep 2
-        fi
-        _attempt=$((_attempt + 1))
-    done
-
-    # Step 3: Copy merged Windows config back to host clone
-    if [ "$MCP_MERGE_SUCCESS" = "true" ]; then
-        run_compose cp \
-            skewed-emacs:/tmp/merged-mcp-windows.json \
-            "${SCRIPT_DIR}/mcp/claude_desktop_config.json" 2>/dev/null || true
-
-        if [ -f "${SCRIPT_DIR}/mcp/claude_desktop_config.json" ]; then
-            log_success "MCP configurations ready (container CLI, Windows, Codex)"
-            log_info "Claude Desktop users: copy mcp/claude_desktop_config.json to %APPDATA%\\Claude\\"
-        else
-            log_success "MCP configurations ready (container CLI, Codex)"
-        fi
-    else
-        log_warning "MCP config merge failed (emacsclient not ready yet?)"
-    fi
+    # # Step 2: Merge inside container — retry loop for emacs daemon startup
+    # MCP_MERGE_SUCCESS=false
+    # _attempt=1
+    # while [ "$_attempt" -le 5 ]; do
+    #     if run_compose exec -T skewed-emacs emacsclient --eval \
+    #         "(progn (setenv \"SKEWED_CLONE_PATH\" \"${SCRIPT_DIR}\")
+    #                 (load-file \"/home/emacs-user/skewed-emacs/mcp/merge-mcp-configs.el\")
+    #                 (skewed-merge-all-mcp-configs \"/home/emacs-user/skewed-emacs/mcp\"))" \
+    #         > /dev/null 2>&1
+    #     then
+    #         MCP_MERGE_SUCCESS=true
+    #         break
+    #     fi
+    #     if [ "$_attempt" -lt 5 ]; then
+    #         log_info "Waiting for emacs daemon (attempt $_attempt/5)..."
+    #         sleep 2
+    #     fi
+    #     _attempt=$((_attempt + 1))
+    # done
 
     refresh_emacs_runtime_config
 }
