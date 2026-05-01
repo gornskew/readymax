@@ -60,7 +60,7 @@ done
 if [ -n "${WEBTERM:-}" ] && [ "${WEBTERM}" != "none" ]; then
     case "${WEBTERM}" in
       ttyd)
-        WEBTERM_CMD="/usr/local/bin/ttyd -W -p ${WEBTERM_PORT:-6942} -i 0.0.0.0"
+        WEBTERM_CMD="/usr/local/bin/ttyd -W -p ${WEBTERM_PORT:-6942} -6"
         ;;
       gotty-soren)
         WEBTERM_CMD="/usr/local/bin/gotty-soren -w --port ${WEBTERM_PORT:-6942}"
