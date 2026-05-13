@@ -190,7 +190,21 @@
           (dolist (grp group-add)
             (push (format "      - \"%s\"" grp) lines)))
         
-        ;; Networks
+        ;; Ulimits
+        (let ((ulimits (skewed--get-prop svc :ulimits)))
+          (when ulimits
+            (push "    ulimits:" lines)
+            (dolist (ul ulimits)
+              (let* ((resource (let* ((raw (symbol-name (skewed--get-prop ul :resource)))
+                       (stripped (if (string-prefix-p ":" raw) (substring raw 1) raw)))
+                  (downcase stripped)))
+                     (soft (skewed--get-prop ul :soft))
+                     (hard (skewed--get-prop ul :hard)))
+                (push (format "      %s:" resource) lines)
+                (when soft (push (format "        soft: %s" soft) lines))
+                (when hard (push (format "        hard: %s" hard) lines))))))
+
+                ;; Networks
         (unless network-mode
           (push "    networks:" lines)
           (push "      - skewed-network" lines))

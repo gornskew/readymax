@@ -290,25 +290,32 @@ start_services() {
             skewed-emacs:/home/emacs-user/skewed-emacs/dot-files/emacs.d/etc/ 2>/dev/null || true
     done
 
-    # # Step 2: Merge inside container — retry loop for emacs daemon startup
-    # MCP_MERGE_SUCCESS=false
-    # _attempt=1
-    # while [ "$_attempt" -le 5 ]; do
-    #     if run_compose exec -T skewed-emacs emacsclient --eval \
-    #         "(progn (setenv \"SKEWED_CLONE_PATH\" \"${SCRIPT_DIR}\")
-    #                 (load-file \"/home/emacs-user/skewed-emacs/mcp/merge-mcp-configs.el\")
-    #                 (skewed-merge-all-mcp-configs \"/home/emacs-user/skewed-emacs/mcp\"))" \
-    #         > /dev/null 2>&1
-    #     then
-    #         MCP_MERGE_SUCCESS=true
-    #         break
-    #     fi
-    #     if [ "$_attempt" -lt 5 ]; then
-    #         log_info "Waiting for emacs daemon (attempt $_attempt/5)..."
-    #         sleep 2
-    #     fi
-    #     _attempt=$((_attempt + 1))
-    # done
+    # Step 2: Merge inside container. This writes merged MCP config files and
+    # updates /home/emacs-user/.codex/config.toml for Codex.
+    MCP_MERGE_SUCCESS=false
+    _attempt=1
+    while [ "$_attempt" -le 5 ]; do
+        if run_compose exec -T skewed-emacs emacsclient --eval \
+            "(progn (setenv \"SKEWED_CLONE_PATH\" \"${SCRIPT_DIR}\")
+                    (load-file \"/home/emacs-user/skewed-emacs/mcp/merge-mcp-configs.el\")
+                    (skewed-merge-all-mcp-configs \"/home/emacs-user/skewed-emacs/mcp\"))" \
+            > /dev/null 2>&1
+        then
+            MCP_MERGE_SUCCESS=true
+            break
+        fi
+        if [ "$_attempt" -lt 5 ]; then
+            log_info "Waiting for emacs daemon (attempt $_attempt/5)..."
+            sleep 2
+        fi
+        _attempt=$((_attempt + 1))
+    done
+
+    if [ "$MCP_MERGE_SUCCESS" = true ]; then
+        log_success "MCP configurations merged for container CLI, Windows, and Codex"
+    else
+        log_warning "MCP configuration merge did not complete; Emacs daemon may still be starting"
+    fi
 
     refresh_emacs_runtime_config
 }
