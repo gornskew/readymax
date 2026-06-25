@@ -363,6 +363,14 @@ mcp__skewed_emacs__skewed_emacs__lisp_eval(
    - Paredit-mode remains enabled despite unbalanced content from disk
    - Result: Same inconsistent state
 
+3. **LLM Bulk String Insertion (Agent's Fault, Even With Paredit Enabled):**
+   - The agent calls `(insert "...multi-line lisp code with parens...")` to add a big block
+   - Paredit-mode is enabled, but does NOT validate bulk string insertions
+   - Paredit's invariants protect against incremental editing (self-insert, kill-sexp,
+     paredit-* commands) — they do NOT cover opaque text drops
+   - The string can carry latent imbalance that paredit places verbatim into the buffer
+   - Result: same inconsistent state — paredit on, content unbalanced
+
 ### Why This is Dangerous
 
 **Normal users CANNOT create this state:**
@@ -449,6 +457,46 @@ mcp__skewed_emacs__skewed_emacs__lisp_eval(
 )
 ```
 
+```python
+# WRONG: Bulk multi-line (insert "...") is NOT protected by paredit
+mcp__skewed_emacs__skewed_emacs__lisp_eval(
+    code='''(with-current-buffer "file.lisp"
+               (when (fboundp 'paredit-mode) (paredit-mode 1))
+               (goto-char (point-max))
+               (insert "(define-object foo (bar)
+                          :computed-slots ((x (the y)))) "))'''  ;; opaque to paredit
+)
+```
+
+**✅ DO this instead for large multi-line block inserts — stage in a temp buffer first:**
+```python
+# RIGHT: Validate the block in isolation before committing it
+mcp__skewed_emacs__skewed_emacs__lisp_eval(
+    code='''(let ((staging (generate-new-buffer " *staging*")))
+               (unwind-protect
+                   (progn
+                     (with-current-buffer staging
+                       (lisp-mode)
+                       (when (fboundp 'paredit-mode) (paredit-mode 1))
+                       (insert "(define-object foo (bar)
+                                  :computed-slots ((x (the y))))")
+                       (check-parens))   ;; raises if unbalanced — abort early
+                     ;; Only proceed if the staging buffer is balanced
+                     (with-current-buffer (find-file-noselect "/path/to/file.lisp")
+                       (save-excursion
+                         (goto-char (point-max))
+                         (insert-buffer-substring staging))
+                       (check-parens)
+                       (save-buffer)))
+                 (kill-buffer staging)))'''
+)
+```
+
+**Why staging works:** the temp buffer fails fast on a bad block before it touches the
+real file. The real buffer only ever receives a verified-balanced chunk via
+`insert-buffer-substring`. Even if paredit-mode wouldn't have caught the imbalance
+during the bulk insert, `check-parens` in the staging buffer will.
+
 **â DO use native Emacs buffer operations with paredit:**
 ```python
 # RIGHT: Buffer-based editing with paredit protection
@@ -464,6 +512,137 @@ mcp__skewed_emacs__skewed_emacs__lisp_eval(
                  (save-buffer)))'''
 )
 ```
+
+### Structural Authoring via Elisp Data — a Third Path
+
+When the task is **creating a new Lisp file from scratch** or wholesale-rewriting
+one, there is a more reliable option than either heredoc text generation OR
+in-place paredit surgery: **build the s-expression as elisp data and serialize
+it**.
+
+An elisp quoted-list literal is balanced by construction — the elisp reader
+will refuse to construct an unbalanced list, so by the time you reach the
+serialization step the form is already structurally correct.  Common Lisp
+shares enough surface syntax with elisp that the form round-trips cleanly:
+keywords stay keywords, strings stay strings, Unicode survives intact
+(`kṛṣṇa`, `→`, `←`, etc.).
+
+#### Usage
+
+The helper lives at
+`dot-files/emacs.d/sideloaded/lisply-backend/source/lisply-sexp-write.el`:
+
+```elisp
+(require 'lisply-sexp-write)
+
+(lisply-write-sexp-file
+ "/projects/apps/my-app/source/widget.lisp"
+ "my-package"
+ '((define-object widget (base-html-page)
+     :computed-slots
+     ((title "Hello")
+      (body (with-lhtml-string ()
+              ((:h1 :class "text-2xl") "Hello, world"))))
+     :objects
+     ((sub-widget :type 'other-widget)))))
+```
+
+The function writes `(in-package :my-package)` at the top, pretty-prints each
+form via `pp` (with widened `fill-column` so attribute/value pairs stay
+together), restores `()` for known empty-arg-list idioms (`with-lhtml-string`,
+`with-cl-who-string`), breaks define-object section keywords (`:computed-slots`,
+`:objects`, etc.) onto their own lines, reindents under `lisp-mode`, runs
+`check-parens` as a safety net, and saves.
+
+`check-parens` here is redundant — the form was balanced when constructed —
+but it catches surprises and proves correctness to the caller.
+
+#### When to use this vs paredit
+
+| Situation | Approach |
+|-----------|----------|
+| Brand-new source file | `lisply-write-sexp-file` |
+| Wholesale rewrite (no inline comments to preserve) | `lisply-write-sexp-file` |
+| Generating boilerplate (publishing setup, ASDF stubs, package defs) | `lisply-write-sexp-file` |
+| Localized change inside an existing file | `kill-sexp` + paredit |
+| Need to preserve inline `;;` comments inside the form | paredit (`pp` drops comments — it operates on the AST) |
+| Hand-authored reader macros (`#+nil`, `#-...`) | paredit (`pp` may not preserve) |
+
+#### Avoiding MCP timeouts on large forms
+
+A very large form passed as a single elisp literal in one `lisp_eval` call
+can exceed the MCP payload comfort zone and time out before completion.
+The pattern that has proven reliable: split into two calls.
+
+```elisp
+;; Call 1: store the heavy body in a variable.
+(progn
+  (defvar my-page-body nil)
+  (setq my-page-body
+        '((:main :class "max-w-3xl mx-auto")
+          ((:h1 :class "text-4xl") "Title")
+          ;; ... can be hundreds of lines ...
+          ))
+  (length my-page-body))   ; sanity check
+
+;; Call 2: small write call, splicing the body in via backtick/comma.
+(lisply-write-sexp-file
+ "/path/file.lisp"
+ "my-package"
+ (list `(define-object foo (base-html-page)
+          :computed-slots
+          ((title "...")
+           (body (with-lhtml-string () ,my-page-body))))))
+```
+
+#### A footgun worth internalizing: `lisp_eval` reads ONE top-level form
+
+The lisply-backend `lisp_eval` endpoint reads exactly **one** top-level form
+per call.  Multiple top-level forms in the same payload silently evaluate
+only the first; later forms appear to disappear.
+
+```elisp
+;; BAD — only the defvar runs; the smoke test silently disappears
+(defvar my-var ...)
+(my-test-call ...)        ; never executed; you see only my-var as the return
+
+;; GOOD
+(progn
+  (defvar my-var ...)
+  (my-test-call ...))
+```
+
+This is easy to miss because there is no error — you just get back the first
+form's return value and wonder where the rest went.
+
+#### `(buffer-size)` vs disk file size
+
+`(buffer-size)` returns the **character count**.  `(file-attributes ...)` and
+`ls -l` report **bytes**.  For files containing UTF-8 multi-byte characters
+(`kṛṣṇa`, `→`, `‘…’`, `—`), these differ — typically 5–10% bigger in bytes
+than chars.  If `ls` shows 8350 bytes but `(buffer-size)` shows 8332 chars,
+nothing is wrong; that is the expected multi-byte expansion.
+
+#### Why this is reliable
+
+The chain of guarantees:
+
+1. The elisp reader has already validated paren balance before your `lisp_eval`
+   call returns — you cannot pass an unbalanced literal in the first place.
+2. `pp` walks the AST and emits well-formed output for any data it accepts;
+   it cannot emit unbalanced text.
+3. The cosmetic post-processing (`nil → ()`, section-keyword newlines) uses
+   regex substitutions that do not change paren counts.
+4. `check-parens` catches anything that somehow got past 1–3 before saving.
+
+The failure modes that remain are:
+- The form, when read by the Common Lisp reader, references a symbol or
+  package that doesn't exist (e.g. `'pronunciation` before `define-object
+  pronunciation` has been loaded) — a runtime/load issue, not a syntax issue.
+- A docstring or string literal contains a Common Lisp reader macro sequence
+  that elisp's reader also recognises differently.  In practice this has not
+  come up.
+
 
 ### When Rogue Editing Might Be Justified
 

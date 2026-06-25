@@ -1,6 +1,6 @@
 # Skewed Emacs + Gendl Docker Development Environment
 
-This file provides guidance to Claude Code (claude.ai/code) when working with the integrated Skewed Emacs and Gendl development environment.
+This file provides guidance to Claude Code (claude.ai/code) or other AI agents when working with the integrated Skewed Emacs and Gendl development environment.
 
 ## Overview
 
@@ -507,6 +507,39 @@ Example:
   (check-parens)
   (save-buffer))
 ```
+
+### Wholesale Rewrite Done Safely — Build the S-Expression as Elisp Data
+
+The warning above is about the *heredoc-string* approach to wholesale rewrites.
+When the task genuinely is to author a new file or wholesale-replace one, there
+is a reliable alternative: **build the s-expression as elisp data and let
+Emacs serialize it.**
+
+An elisp quoted-list literal is balanced by construction — the elisp reader
+refuses to construct an unbalanced list, so syntactic correctness is guaranteed
+by the time you call the writer.  CL and elisp share enough surface syntax that
+the form round-trips cleanly (keywords, strings, Unicode all survive).
+
+```elisp
+(require 'lisply-sexp-write)
+
+(lisply-write-sexp-file
+ "/projects/apps/my-app/source/widget.lisp"
+ "my-package"
+ '((define-object widget (base-html-page)
+     :computed-slots
+     ((title "Hello")
+      (body (with-lhtml-string ()
+              ((:h1 :class "text-2xl") "Hello, world")))))))
+```
+
+For when to use this vs `kill-sexp`/paredit, how to avoid MCP timeouts on very
+large forms by splitting into two calls (`setq` the body, then `lisply-write-
+sexp-file` with backtick/comma), and the `lisp_eval`-reads-one-top-level-form
+gotcha — see the backend doc:
+[`dot-files/emacs.d/sideloaded/lisply-backend/CLAUDE.md`](dot-files/emacs.d/sideloaded/lisply-backend/CLAUDE.md),
+section *Structural Authoring via Elisp Data — a Third Path*.
+
 
 ### When Structural Editing Fails
 If you're stuck in unbalanced buffer hell:
