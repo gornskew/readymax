@@ -843,6 +843,35 @@ mcp__skewed_emacs__skewed_emacs__lisp_eval(
 )
 ```
 
+**⚠️ FOOTGUN: `search-forward "(name"` does NOT land you on the `(`**
+
+A frequent mistake when removing or replacing an s-expression by its
+leading symbol:
+
+```elisp
+;; WRONG — after the search, point is BETWEEN the last char of `name'
+;; and whatever follows. `(backward-char)' lands you on the last char
+;; of the symbol, NOT on the opening paren. `forward-sexp' from inside
+;; a symbol just walks to its end — you never reach the value.
+(search-forward "(body-class")
+(backward-char)         ;; point is on the `s' of `class', not on `('
+(forward-sexp)          ;; walks to the end of `body-class', stops there
+(delete-region ...)     ;; ends up deleting characters of the symbol name
+```
+
+Use `re-search-forward` and `match-beginning` instead:
+
+```elisp
+;; RIGHT — `match-beginning' lands on the `(' as intended.
+(re-search-forward "(body-class\\b")
+(goto-char (match-beginning 0))     ;; on the `('
+(forward-sexp)                       ;; walks over the entire (body-class ...) spec
+(delete-region (match-beginning 0) (point))
+```
+
+This is encapsulated by `lisply-kill-named-slot` in
+`lisply-edit-helpers.el` — see the helpers section below.
+
 ### Quick Reference: Most Used Paredit Commands
 
 | Task | Command | Example |
@@ -907,6 +936,36 @@ mcp__skewed_emacs__skewed_emacs__lisp_eval(
                  (when (buffer-modified-p) (save-buffer))))'''
 )
 ```
+
+**Pattern 3: GDL `define-object` Refactors — `lisply-edit-helpers`**
+
+For structural edits of GDL `define-object` forms (removing a slot,
+swapping a parent class, adding a keyword to a child spec), the elisp
+module `lisply-edit-helpers` provides paren-balanced helpers built on
+paredit. It is opt-in:
+
+```python
+mcp__skewed_emacs__skewed_emacs__lisp_eval(
+    code='''(require 'lisply-edit-helpers)'''
+)
+```
+
+The three exported functions are:
+
+| Function | Purpose |
+|----------|---------|
+| `lisply-kill-named-slot` | Remove a `(slot-name ...)` spec, line-clean |
+| `lisply-replace-parent-class` | Swap `(define-object foo (OLD)...)` parent |
+| `lisply-add-keyword-to-object-spec` | Insert ` keyword value` into a child spec |
+
+Each runs `check-parens` on entry and exit. Full GDL-side context — when
+to apply these patterns, what the underlying GDL semantics are, the
+pseudo-input warning behavior, the `(the landing-page ...)` idiom — lives
+in the Gendl lisply-backend CLAUDE.md, available via any Gendl backend's
+`get_docs` tool with `id="claude-lisply-md"`.
+
+Source: `/home/emacs-user/.emacs.d/sideloaded/lisply-backend/source/lisply-edit-helpers.el`
+(or, on the host side, `dot-files/emacs.d/sideloaded/lisply-backend/source/lisply-edit-helpers.el`).
 
 ## SLIME/SWANK BACKDOOR: Alternative Backend Access 🚪🔌
 
