@@ -357,7 +357,8 @@ Returns (:status OK|ERROR :time response-time-ms)."
         (message-log-max nil)           ; Don't log messages
         (url-show-status nil)           ; Don't show URL status
         (url-automatic-caching nil)     ; Disable caching
-        (url-debug nil))                ; Disable debug output
+        (url-debug nil)
+        (url-http-attempt-keepalives nil))                ; Disable debug output
     (condition-case err
         (let ((buffer (url-retrieve-synchronously url nil t url-request-timeout)))
           (if buffer
