@@ -1,0 +1,16 @@
+#+TITLE: Projects
+#+STARTUP: overview
+
+* Getting Started with Skewed Emacs
+** TODO Replace these sample tasks with your own                     :must:
+   Tag tasks with :must:, :should:, or :could: to place them in the
+   corresponding Daily Focus sections (=C-c a d=). Capture new tasks
+   into the Inbox (future.org) with =C-c c t=.
+** TODO Ask your AI agent to read this file via MCP                :should:
+   With an MCP client connected to skewed-emacs, try:
+   "Read /projects/org/projects.org and tell me what's on my plate."
+** TODO Take the Emacs tutorial                                     :could:
+   =C-h t= from anywhere.
+
+* Example Project
+** TODO An example someday/maybe task                               :could:

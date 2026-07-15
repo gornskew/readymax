@@ -41,7 +41,7 @@ This Skewed Emacs repository houses essentially three assets:
 
 This pulls and spins up several Docker containers and leaves your host
 machine untouched except for two shell functions (`eskew`/`egskew`)
-injected into your `~/.bashrc`. You do not need to run `./setup`. You
+made available in your shell (bash, zsh, ksh, or plain sh). You do not need to run `./setup`. You
 do not need Emacs installed on your host. You do need docker installed
 on your host.
 
@@ -97,36 +97,52 @@ other.
 Everything runs inside Docker containers — **you do not run `./setup`,
 install dot-files, or modify your Emacs configuration on the host.**
 Your host machine stays clean. The only intentional side effect is that
-`./compose-dev up` adds `eskew` and `egskew` to your `~/.bashrc`.
+`./compose-dev up` makes `eskew` and `egskew` available in your shell.
 
 ### Requirements
 
  - Git
  - Docker — see [macOS-Specific Section](#macos-specific-section) if on a Mac
 
+### Quickest Start (no clone needed)
 
-### Initial Setup
-
-1. Make a `~/projects/` directory if you don't already have one:
+`compose-dev` is self-contained: run standalone, it extracts the few
+runtime files it needs (`docker-compose.yml`, `generate-env.sh`,
+`mcp/`) from the skewed-emacs container image itself.
 
 ```bash
-
-    cd
-    mkdir -p projects/
-    cd projects/
-    
+mkdir -p ~/skewed-emacs && cd ~/skewed-emacs
+curl -fsSLO https://raw.githubusercontent.com/gornskew/skewed-emacs/devo/compose-dev
+chmod +x compose-dev
+./compose-dev up
 ```
 
-2. Clone this repo into `~/projects/`:
+(Git is not required for this path.) Your `~/projects/` directory is
+mounted at `/projects` in the container and created if missing. To
+refresh the extracted files after pulling a newer image, delete them
+and rerun `./compose-dev up`.
+
+
+
+### Initial Setup (full clone)
+
+1. Clone this repo anywhere you like — `~/skewed-emacs` is fine:
 
 ```bash
 
-   git clone https://github.com/gornskew/skewed-emacs 
+   cd
+   git clone https://github.com/gornskew/skewed-emacs
    cd skewed-emacs
 
 ```
 
-3. Start the default container orchestra:
+   Cloning under `~/projects/` instead is useful only if you want to
+   hack on skewed-emacs internals from inside the container (the host
+   `~/projects/` directory is mounted at `/projects` there). For just
+   *using* skewed-emacs to work on other projects, the clone location
+   doesn't matter — the running container never needs the clone.
+
+2. Start the default container orchestra:
 
 ```
    ./compose-dev up
@@ -155,9 +171,10 @@ containerized Emacs:
 
 `./compose-dev up` writes these to
 `~/.config/skewed-emacs/shell-functions.sh` and adds a single source
-line to your `~/.bashrc`. This is the **only modification** made to
-your host environment. Open a new terminal (or `source ~/.bashrc`) to
-activate them.
+line to your shell's RC file (`~/.bashrc`, `~/.zshrc`, `~/.kshrc`, or
+`~/.profile`, depending on your login shell). This is the **only
+modification** made to your host environment. Open a new terminal (or
+source that RC file) to activate them.
 
 
 After you are in, see the "Getting Started" section near the top of

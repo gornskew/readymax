@@ -451,5 +451,38 @@ Returns (hash-table . earliest-date)."
 
 
 
+;; ============================================================================
+;; First-time Daily Focus setup
+;; ============================================================================
+
+(defun skewed-daily-focus-init ()
+  "Set up Daily Focus org files from bundled starter templates.
+Creates the org directory (~/projects/org on a host, /projects/org
+inside a skewed-emacs container), populates projects.org and future.org
+from templates when absent, and reconfigures org/agenda to use them.
+Idempotent: existing org files are never overwritten."
+  (interactive)
+  (let* ((root (or my/org-root
+                   (if (file-directory-p "/projects")
+                       "/projects/org"
+                     (expand-file-name "~/projects/org"))))
+         (template-dir (expand-file-name "etc/org-templates" user-emacs-directory)))
+    (make-directory root t)
+    (dolist (f '("projects.org" "future.org"))
+      (let ((dest (expand-file-name f root))
+            (src (expand-file-name f template-dir)))
+        (when (and (file-exists-p src) (not (file-exists-p dest)))
+          (copy-file src dest))))
+    (setq my/org-root root
+          my/org-projects-file (expand-file-name "projects.org" root)
+          my/org-future-file (expand-file-name "future.org" root)
+          my/org-journal-file (expand-file-name "journal.org" root))
+    ;; Reload this file so path-derived config (agenda commands, capture
+    ;; templates, refile targets) picks up the new locations. The defvars
+    ;; above retain the values just set; hooks use named functions and
+    ;; add-to-list, so reloading is idempotent.
+    (load "org-config" nil t)
+    (message "Daily Focus ready at %s — open it with C-c a d" root)))
+
 (provide 'org-config)
 ;;; org-config.el ends here

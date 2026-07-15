@@ -66,6 +66,7 @@ dot-files/emacs.d/recentf
 # ==============================================================================
 # Local user configuration
 # ==============================================================================
+.claude/
 .emacs-local
 .emacs-local-early
 custom.el*
@@ -92,7 +93,8 @@ enterprise*.yml
 mcp/*mcp*
 !mcp/merge-mcp-configs.el
 !mcp/mcp-*
-!mcp/claude_desktop_config.json
+mcp/claude_desktop_config.json
+mcp/opening-prompt-local.md
 
 # ==============================================================================
 # Generated service description .el files

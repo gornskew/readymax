@@ -4,6 +4,7 @@
 ;;;   - mcp-container.json  -> for in-container Claude/Gemini CLI
 ;;;   - mcp-windows.json    -> for Windows Claude Desktop via WSL
 ;;;   - mcp.toml            -> for Codex CLI
+;;;   (a native-host Claude Desktop config is derived from the Windows one)
 ;;;
 ;;; Call this at container startup time (from compose-dev or similar)
 ;;;
@@ -216,6 +217,31 @@ Preserves existing keys (apiKey, model, etc.) and only updates mcpServers."
     (message "Updated grok user-settings.json with MCP servers: %s" grok-settings)
     grok-settings))
 
+(defun skewed-derive-host-config (windows-config-file output-file)
+  "Derive a native-host (Linux/macOS) Claude Desktop config.
+Reads WINDOWS-CONFIG-FILE (the merged, path-substituted Windows/WSL
+config) and converts each server entry of the form
+command=\"wsl\", args=[EXEC ARGS...] into command=EXEC, args=[ARGS...],
+suitable for running mcp-exec directly on a Linux or macOS host.
+Writes the result to OUTPUT-FILE and returns it."
+  (let* ((config (with-temp-buffer
+                   (insert-file-contents windows-config-file)
+                   (goto-char (point-min))
+                   (json-read)))
+         (servers (alist-get 'mcpServers config)))
+    (dolist (server servers)
+      (let* ((props (cdr server))
+             (command (alist-get 'command props))
+             (args (append (alist-get 'args props) nil)))
+        (when (and (equal command "wsl") (consp args))
+          (setf (alist-get 'command props) (car args))
+          (setf (alist-get 'args props) (vconcat (cdr args)))
+          (setcdr server props))))
+    (let ((json-encoding-pretty-print t))
+      (with-temp-file output-file
+        (insert (json-encode config))))
+    output-file))
+
 (defun skewed-merge-all-mcp-configs (mcp-dir)
   "Merge all MCP config formats from MCP-DIR to /tmp.
 For Windows config, substitutes ${SKEWED_CLONE_PATH} placeholder with
@@ -243,7 +269,10 @@ Returns list of generated files."
     ;; Update Codex config with MCP servers from merged TOML
     (skewed-update-codex-config-from-mcp toml-config)
     
-    (list container-config windows-config toml-config)))
+    ;; Derive native-host (Linux/macOS) Claude Desktop config
+    (skewed-derive-host-config windows-config "/tmp/merged-mcp-host.json")
+
+    (list container-config windows-config toml-config "/tmp/merged-mcp-host.json")))
 
 ;; Backwards compatibility wrapper
 (defun skewed-merge-mcp-configs (mcp-dir output-file)

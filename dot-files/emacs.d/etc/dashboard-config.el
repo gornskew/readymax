@@ -135,16 +135,31 @@ LIST-SIZE used as boolean"
                                  map)
                        'face 'button
                        'help-echo "Run Emacs tutorial (C-h C-t)"))
-   (concat "    "
-           (propertize (concat (skewed-dashboard-pad-icon :help-target)
-                               "Daily Focus: C-c a d\n")
-                       'keymap (let ((map (make-sparse-keymap))
-                                     (function (lambda () (interactive) (org-agenda nil "d"))))
-                                 (define-key map (kbd "RET") function)
-                                 (define-key map [mouse-1] function)
-                                 map)
-                       'face 'button
-                       'help-echo "Open daily focus agenda view (C-c a d)"))
+   (if (or (file-exists-p "/projects/org/projects.org")
+           (file-exists-p (expand-file-name "~/projects/org/projects.org")))
+       (concat "    "
+               (propertize (concat (skewed-dashboard-pad-icon :help-target)
+                                   "Daily Focus: C-c a d\n")
+                           'keymap (let ((map (make-sparse-keymap))
+                                         (function (lambda () (interactive) (org-agenda nil "d"))))
+                                     (define-key map (kbd "RET") function)
+                                     (define-key map [mouse-1] function)
+                                     map)
+                           'face 'button
+                           'help-echo "Open daily focus agenda view (C-c a d)"))
+     (concat "    "
+             (propertize (concat (skewed-dashboard-pad-icon :help-target)
+                                 "Daily Focus: M-x skewed-daily-focus-init (first-time setup)\n")
+                         'keymap (let ((map (make-sparse-keymap))
+                                       (function (lambda () (interactive)
+                                                   (require 'org)
+                                                   (require 'org-config)
+                                                   (skewed-daily-focus-init))))
+                                   (define-key map (kbd "RET") function)
+                                   (define-key map [mouse-1] function)
+                                   map)
+                         'face 'button
+                         'help-echo "Create starter org files and enable the Daily Focus agenda")))
 
    
    (concat "    "

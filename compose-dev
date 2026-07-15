@@ -44,6 +44,56 @@ $_others}${_devs:+
 $_devs}"
 }
 
+
+# =============================================================================
+# STANDALONE BOOTSTRAP
+#
+# If no docker-compose.yml sits beside this script, assume compose-dev was
+# downloaded standalone (no repo clone). The skewed-emacs image ships its own
+# repo snapshot under /home/emacs-user/skewed-emacs/, so we extract the
+# runtime files (docker-compose.yml, generate-env.sh, mcp/) from the image.
+# To re-bootstrap fresh copies later, delete those files and rerun.
+# Note: runs before the color/log helpers are defined, hence raw printf.
+# =============================================================================
+bootstrap_from_image() {
+    _bfi_image="gornskew/${EMACS_IMAGE_BASE:-skewed-emacs}:${EMACS_IMAGE_BRANCH:-devo}-${EMACS_IMAGE_VARIANT:-full}"
+
+    if ! command -v docker > /dev/null 2>&1 || ! docker info > /dev/null 2>&1; then
+        printf '%s\n' "[ERROR] No docker-compose.yml found beside compose-dev (standalone mode)," >&2
+        printf '%s\n' "        and docker is not available to bootstrap it from ${_bfi_image}." >&2
+        printf '%s\n' "        Install/start docker, or clone the full repo instead:" >&2
+        printf '%s\n' "        https://github.com/gornskew/skewed-emacs" >&2
+        exit 1
+    fi
+
+    printf '%s\n' "[INFO] No docker-compose.yml beside compose-dev - standalone mode."
+    printf '%s\n' "[INFO] Bootstrapping runtime files from image ${_bfi_image} ..."
+
+    if ! docker image inspect "$_bfi_image" > /dev/null 2>&1; then
+        docker pull "$_bfi_image" || {
+            printf '%s\n' "[ERROR] Could not pull ${_bfi_image}" >&2
+            exit 1
+        }
+    fi
+
+    _bfi_cid="$(docker create "$_bfi_image")" || exit 1
+    for _bfi_item in docker-compose.yml generate-env.sh mcp; do
+        if [ ! -e "${SCRIPT_DIR}/${_bfi_item}" ]; then
+            docker cp "${_bfi_cid}:/home/emacs-user/skewed-emacs/${_bfi_item}" \
+                "${SCRIPT_DIR}/${_bfi_item}" || {
+                docker rm -f "$_bfi_cid" > /dev/null 2>&1
+                printf '%s\n' "[ERROR] Could not extract ${_bfi_item} from image" >&2
+                exit 1
+            }
+        fi
+    done
+    docker rm -f "$_bfi_cid" > /dev/null 2>&1
+    chmod +x "${SCRIPT_DIR}/generate-env.sh" "${SCRIPT_DIR}/mcp/mcp-exec" 2>/dev/null || true
+
+    printf '%s\n' "[INFO] Bootstrap complete: docker-compose.yml, generate-env.sh, mcp/"
+}
+
+[ -f "./docker-compose.yml" ] || bootstrap_from_image
 _collect_compose_files
 
 # =============================================================================
@@ -313,6 +363,23 @@ start_services() {
 
     if [ "$MCP_MERGE_SUCCESS" = true ]; then
         log_success "MCP configurations merged for container CLI, Windows, and Codex"
+
+        # Copy the platform-appropriate Claude Desktop config back to the
+        # host clone (regression fix: the pre-POSIX compose-dev did this).
+        # WSL hosts get the wsl-wrapped config; Linux/macOS get the native one.
+        if grep -qi microsoft /proc/version 2>/dev/null; then
+            _cdc_src="/tmp/merged-mcp-windows.json"
+        else
+            _cdc_src="/tmp/merged-mcp-host.json"
+        fi
+        if run_compose cp "skewed-emacs:${_cdc_src}" \
+            "${SCRIPT_DIR}/mcp/claude_desktop_config.json" 2>/dev/null; then
+            log_success "Claude Desktop config ready: mcp/claude_desktop_config.json (see docs/CLAUDE_DESKTOP.md)"
+        else
+            log_warning "Could not copy Claude Desktop config from container"
+            log_warning "(an older skewed-emacs image may not generate ${_cdc_src};"
+            log_warning " try './compose-dev up --pull' to fetch the latest image)"
+        fi
     else
         log_warning "MCP configuration merge did not complete; Emacs daemon may still be starting"
     fi

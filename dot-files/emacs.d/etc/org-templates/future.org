@@ -1,0 +1,7 @@
+#+TITLE: Future / Inbox
+#+STARTUP: overview
+
+* Inbox
+** TODO An example captured task
+   Captured tasks land here via =C-c c t=. Review with =C-c a i= and
+   refile into projects.org.
