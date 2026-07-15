@@ -261,6 +261,41 @@ used, via the MCP config generated at `./compose-dev up` time and
 written to `skewed-emacs/mcp/`.
 
 
+### Language Stack Policy (Bring Your Own Runtimes)
+
+The shipped containers deliberately keep a lean, Lisp-centric runtime:
+Emacs (Emacs Lisp), Common Lisp (free Gendl kernels on CCL and SBCL),
+and Node.js (which powers the lisply-mcp middleware and the bundled AI
+TUIs). Notably, **no Python ships in any skewed-emacs image** — the
+Docker build uses it transiently in the builder stage (a GLib
+dev-header dependency of pdf-tools), but runtime images are
+Python-free by design.
+
+Need Python, Ruby, or any other runtime? Bring it in as a sidecar
+container via a Docker Compose overlay: drop an additional `.yml` file
+beside `docker-compose.yml` defining your service, and `./compose-dev
+up` merges it into the stack automatically, on the shared network,
+visible to Emacs and the other containers. For example:
+
+```yaml
+# python-overlay.yml — any extra .yml in this directory is merged
+services:
+  python-sidecar:
+    image: python:3-slim
+    container_name: python-sidecar
+    command: sleep infinity
+    volumes:
+      - ${PROJECTS_DIR}:/projects
+    networks:
+      - skewed-network
+```
+
+Files matching `*-overlay.yml` are gitignored, so local additions
+never collide with repo updates. The same mechanism supports
+additional Lisply backends — alternative Lisp or Scheme
+implementations speaking the lisply protocol plug in as peer services,
+just as the commercial GDL overlays below do.
+
 ### Supplemental Service Overlays (Commercial GDL)
 
 The base skewed-emacs stack includes three Lisp environments:

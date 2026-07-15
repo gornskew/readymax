@@ -88,12 +88,14 @@
 	(httpd-start)(httpd-stop))
       (dolist (pkg package-names)
 	(message "Pre-loading package: %s" pkg)
-	(require pkg nil t)
-	(await-async-compilations pkg))
+	(require pkg nil t))
+      ;; Await once after the whole preload pass, so the async queue
+      ;; stays full and all CPU workers remain busy throughout.
+      (await-async-compilations "preloaded packages")
       (cl-mapc (lambda (package-name directory)
 		 (when (file-directory-p directory)
 		   (message "Byte Recompiling package: %s" package-name)
-		   (byte-recompile-directory directory 0 t)))  package-names package-dirs)
+		   (byte-recompile-directory directory 0)))  package-names package-dirs)
 
       (byte-compile-file (concat emacs-config-directory "init.el"))
       (byte-compile-file (concat emacs-config-directory "/etc/load-and-compile.el"))

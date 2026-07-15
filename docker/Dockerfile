@@ -83,8 +83,11 @@ RUN set -euxo pipefail; \
    chown emacs-user:emacs-user /projects; \
    ln -s /projects /home/emacs-user/projects
 
-# Copy repo
-COPY --chown=emacs-user:emacs-user . /home/emacs-user/skewed-emacs/
+# Copy only what package install + native compilation need (dot-files,
+# setup). The rest of the repo is copied later, so edits to README,
+# docs/, mcp/, etc. do NOT invalidate the expensive compile layers below.
+COPY --chown=emacs-user:emacs-user dot-files/ /home/emacs-user/skewed-emacs/dot-files/
+COPY --chown=emacs-user:emacs-user setup /home/emacs-user/skewed-emacs/setup
 
 USER emacs-user
 WORKDIR /home/emacs-user
@@ -137,8 +140,7 @@ USER root
 # copy in node.js in /usr/local/
 COPY --from=node /usr/local/ /usr/local/
 
-RUN set -euxo pipefail; \
-   ln -sf /home/emacs-user/skewed-emacs/docker/copilot-language-server /usr/local/bin/copilot-language-server
+
 
 USER emacs-user
 
@@ -182,6 +184,16 @@ RUN set -euxo pipefail; \
    ln -sf ~/.grok/local/node_modules/.bin/grok ~/.local/bin/grok; \
    ln -sf ~/.bun/bin/bun ~/.local/bin/bun; \
    npm cache clean --force || true
+
+# Copy the remainder of the repo (README, docs/, mcp/, docker/,
+# generate-configs.el, services.sexp, ...). Kept late deliberately:
+# changes to these files are cheap and rebuild in seconds.
+COPY --chown=emacs-user:emacs-user . /home/emacs-user/skewed-emacs/
+
+USER root
+RUN set -euxo pipefail; \
+   ln -sf /home/emacs-user/skewed-emacs/docker/copilot-language-server /usr/local/bin/copilot-language-server
+USER emacs-user
 
 # Start daemon to settle async init
 RUN set -euxo pipefail; \
