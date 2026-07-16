@@ -257,6 +257,26 @@ create_arch_aliases_local() {
       fi
     fi
   fi
+
+  # Also create UNSUFFIXED local tags, so docker-compose (which references
+  # e.g. :devo-full) runs locally built images directly — no push/pull
+  # round-trip needed to test a local build with ./compose-dev up.
+  echo "=== Creating unsuffixed local aliases (for compose) ==="
+  for t in $TARGETS; do
+    if docker image inspect "${FINAL_IMAGE}:${branch}-${t}-${ARCH_SUFFIX}" >/dev/null 2>&1; then
+      docker tag "${FINAL_IMAGE}:${branch}-${t}-${ARCH_SUFFIX}" "${FINAL_IMAGE}:${branch}-${t}"
+      echo "✓ ${branch}-${t} → ${branch}-${t}-${ARCH_SUFFIX}"
+    fi
+  done
+  if $has_gui_aituis && docker image inspect "${FINAL_IMAGE}:${branch}-full-${ARCH_SUFFIX}" >/dev/null 2>&1; then
+    docker tag "${FINAL_IMAGE}:${branch}-full-${ARCH_SUFFIX}" "${FINAL_IMAGE}:${branch}-full"
+    docker tag "${FINAL_IMAGE}:${branch}-full-${ARCH_SUFFIX}" "${FINAL_IMAGE}:${branch}"
+    echo "✓ ${branch}-full and ${branch} → ${branch}-full-${ARCH_SUFFIX}"
+  fi
+  if $has_aituis && docker image inspect "${FINAL_IMAGE}:${branch}-tui-${ARCH_SUFFIX}" >/dev/null 2>&1; then
+    docker tag "${FINAL_IMAGE}:${branch}-tui-${ARCH_SUFFIX}" "${FINAL_IMAGE}:${branch}-tui"
+    echo "✓ ${branch}-tui → ${branch}-tui-${ARCH_SUFFIX}"
+  fi
 }
 
 # -----------------------------
