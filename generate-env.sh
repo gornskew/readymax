@@ -9,7 +9,10 @@ USER_HOME="${USER_HOME:-$HOME}"
 
 HOST_USER_UID=$(id -u)
 DOCKER_GROUP_ID=$(getent group docker 2>/dev/null | cut -d: -f3 || echo 999)
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
+# Honor a pre-set CURRENT_BRANCH (e.g. exported by compose-dev standalone
+# bootstrap, which knows which image branch supplied this script); otherwise
+# detect from git, falling back to master.
+CURRENT_BRANCH="${CURRENT_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)}"
 PROJECTS_DIR="${PROJECTS_DIR:-$USER_HOME/projects}"
 
 # Detect host timezone (best-effort across Linux and macOS)
