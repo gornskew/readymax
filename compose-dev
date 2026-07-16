@@ -101,6 +101,15 @@ bootstrap_from_image() {
 }
 
 [ -f "./docker-compose.yml" ] || bootstrap_from_image
+
+# Standalone mode (no clone beside compose-dev): generate-env.sh has no git
+# branch to detect and falls back to master, while the runtime files came
+# from ${EMACS_IMAGE_BRANCH:-devo}. Pin the branch on EVERY run - not just
+# the bootstrap run - so restarts in the same directory do not drift back.
+if [ ! -d "${SCRIPT_DIR}/.git" ]; then
+    CURRENT_BRANCH="${CURRENT_BRANCH:-${EMACS_IMAGE_BRANCH:-devo}}"
+    export CURRENT_BRANCH
+fi
 _collect_compose_files
 
 # =============================================================================
