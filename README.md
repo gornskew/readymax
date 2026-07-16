@@ -122,6 +122,13 @@ mounted at `/projects` in the container and created if missing. To
 refresh the extracted files after pulling a newer image, delete them
 and rerun `./compose-dev up`.
 
+Once an AI client is connected, paste
+[`docs/PROJECT_INSTRUCTIONS.md`](docs/PROJECT_INSTRUCTIONS.md) into a
+Claude Desktop Project's custom instructions (or your `CLAUDE.md` /
+`AGENTS.md`) as standing session instructions, and/or use
+[`mcp/opening-prompt.md`](mcp/opening-prompt.md) as a ready-made first
+message.
+
 
 
 ### Initial Setup (full clone)

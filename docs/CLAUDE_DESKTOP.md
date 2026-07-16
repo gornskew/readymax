@@ -85,6 +85,16 @@ With these MCP servers, Claude Desktop can:
 - Work with the Gendl geometry kernel for CAD/knowledge-based engineering
 - Access documentation and run HTTP requests against the backend services
 
+## Bootstrapping a Session
+
+Optional but recommended: create a Claude Desktop Project and paste
+[`PROJECT_INSTRUCTIONS.md`](PROJECT_INSTRUCTIONS.md) into its custom
+instructions, so every session starts with the dashboard/daily-focus
+routine and safe editing conventions. The same text works in a Claude
+Code `CLAUDE.md` or Codex `AGENTS.md`. For a one-shot alternative,
+paste [`../mcp/opening-prompt.md`](../mcp/opening-prompt.md) as your
+first message.
+
 ## Other MCP Clients
 
 Claude Desktop is just one consumer. The same generated configs work for:
