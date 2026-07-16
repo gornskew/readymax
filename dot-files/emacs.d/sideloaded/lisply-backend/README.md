@@ -43,15 +43,29 @@ evaluated against the running Emacs daemon, best practices are:
 
 ### Direct Installation in Emacs (use with caution if not using a container)
 
+> **Warning:** running this in your host Emacs lets any MCP client evaluate
+> arbitrary Emacs Lisp — i.e. run arbitrary code on your machine. Prefer the
+> container path unless you understand the exposure.
+
 1. Install the required package:
    - simple-httpd: `M-x package-install RET simple-httpd RET`
 
-2. Copy the source files to your Emacs load path.
-
-3. Add to your `init.el`:
+2. Add the `source/` directory to your `load-path`, then load the two
+   entry-point files:
    ```elisp
-   (require 'emacs-lisply-backend)
+   (add-to-list 'load-path "/path/to/lisply-backend/source/")
+   (load "http-setup")
+   (load "endpoints")
    ```
+
+3. Start the server:
+   ```elisp
+   (emacs-lisply-start-server)   ; binds `httpd-host':`emacs-lisply-port' (default 7080)
+   ```
+
+If you are using skewed-emacs you do not need to do any of this by hand —
+see `etc/lisply-config.el` and `docs/HOST_EMACS_MCP.md`, which wrap these
+steps behind `M-x lisply-enable-host-server` and a security confirmation.
 
 ### Docker Container
 

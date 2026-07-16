@@ -258,10 +258,11 @@
     :defer nil
     :load-path ,(lambda () (get-config-path "etc"))
     :config
-    (when (and start-lisply? (not skewed-emacs-docker-build?))
-      (require 'lisply-config)
-      (setq httpd-host "0.0.0.0")
-      (emacs-lisply-start-server)))
+    ;; Always load the config so the command + defcustoms exist; defer the
+    ;; start decision to `emacs-startup-hook' (after custom.el/.emacs-local
+    ;; load) so host opt-in is honored.  See etc/lisply-config.el.
+    (require 'lisply-config)
+    (add-hook 'emacs-startup-hook #'lisply-maybe-autostart))
 
    (htmlize-config
     :ensure nil

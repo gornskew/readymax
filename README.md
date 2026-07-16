@@ -49,7 +49,12 @@ on your host.
 Emacs dot-files and Emacs configuration directly into your host
 account (`~/.emacs.d`, `~/.bash_profile`, etc.). Use this if you want
 the Skewed Emacs configuration in your own personal host Emacs. Does
-not start any containers, does not provide MCP support. You do need
+not start any containers. MCP support is **off by default** on the host,
+but you can opt in — either with `./setup --with-mcp` or, from inside
+Emacs, `M-x lisply-enable-host-server` — to let an MCP client (and thus an
+LLM) drive your host Emacs. Read [docs/HOST_EMACS_MCP.md](docs/HOST_EMACS_MCP.md)
+first: on the host this grants arbitrary code execution on your machine and
+is not sandboxed the way the container path is. You do need
 emacs already installed on your host for it to make sense to use this.
 
 **Both together:** you can do both — run `./setup` to get the

@@ -34,6 +34,10 @@ show_help() {
     echo "  --dry-run                     Show what would happen without making changes"
     echo "  --force, -f                   Force replacement of existing valid symlinks"
     echo ""
+    echo "  --with-mcp                    Enable the Lisply MCP server in your HOST Emacs"
+    echo "                                (opt-in; prompts to confirm; grants an LLM arbitrary"
+    echo "                                 code execution on this machine; see docs/HOST_EMACS_MCP.md)"
+    echo ""
     echo "  --shadow-suffix=NAME          Create symlinks with a \"-NAME\" suffix"
     echo "  --shadow-suffix NAME          (e.g., --shadow-suffix=test -> ~/.emacs.d-test)"
     echo ""
@@ -64,6 +68,7 @@ shadow_suffix=""
 shadow_suffix_set=false   # distinguish "not passed" from "passed as empty"
 dry_run=false
 force=false
+with_mcp=false
 scrub_suffix=""
 scrub_suffix_set=false
 
@@ -98,6 +103,7 @@ while [ $# -gt 0 ]; do
             shift
             [ -n "$1" ] && scrub_suffix="-${1}" || scrub_suffix=""
             ;;
+        --with-mcp|-with-mcp) with_mcp=true ;;
         --dry-run|-dry-run) dry_run=true ;;
         --force|-force|-f)  force=true ;;
     esac
@@ -324,6 +330,81 @@ for _nf in "${dot_files}"*; do
 
     echo ""
 done
+
+# =============================================================================
+# OPTIONAL: enable Lisply MCP server in the HOST Emacs (--with-mcp)
+# =============================================================================
+if [ "$with_mcp" = "true" ]; then
+    _emacs_local="$HOME/.emacs-local"
+    echo ""
+    echo "============================ SECURITY WARNING ============================"
+    echo "Enabling the Lisply MCP server in your HOST Emacs opens an endpoint that"
+    echo "evaluates arbitrary Emacs Lisp sent by any MCP client that can reach it."
+    echo "Because Emacs Lisp can read/write files, run shell commands, and drive your"
+    echo "desktop, this effectively grants an LLM FULL ACCESS TO THIS MACHINE with your"
+    echo "privileges. The container path (./compose-dev up) sandboxes this; the host"
+    echo "path does NOT. It binds to loopback (127.0.0.1:7080) by default."
+    echo "See docs/HOST_EMACS_MCP.md."
+    echo "========================================================================="
+    if [ "$dry_run" = "true" ]; then
+        echo "[dry-run] Would append the host Lisply opt-in to $_emacs_local, and clone/build"
+        echo "          the branch-matched lisply-mcp middleware, after confirmation."
+    elif grep -q 'lisply-host-server-enable' "$_emacs_local" 2>/dev/null; then
+        echo "Host Lisply opt-in already present in $_emacs_local - nothing to do."
+    else
+        printf 'Type YES to enable the host Lisply MCP server: '
+        read _confirm
+        if [ "$_confirm" = "YES" ]; then
+            {
+                echo ""
+                echo ';; --- Added by skewed-emacs `./setup --with-mcp` ---'
+                echo ';; Auto-start the Lisply MCP server (arbitrary elisp eval) in this host Emacs.'
+                echo ';; Remove these two lines to disable. See docs/HOST_EMACS_MCP.md.'
+                echo '(setq lisply-host-server-enable t'
+                echo '      lisply-host-server-risk-acknowledged t)'
+            } >> "$_emacs_local"
+            echo "Enabled. Wrote opt-in to $_emacs_local (restart Emacs to take effect)."
+
+            # --- Provision the lisply-mcp node middleware, branch-matched to this
+            #     skewed-emacs checkout (mirrors docker/Dockerfile). The middleware
+            #     is a SEPARATE repo, so the host path needs its own copy. ---
+            _mcp_dir="$(dirname "$REPO_DIR")/lisply-mcp"
+            _branch="$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)"
+            echo ""
+            echo "Provisioning lisply-mcp middleware (branch: $_branch) at $_mcp_dir ..."
+            if ! command -v git > /dev/null 2>&1; then
+                echo "WARNING: git not found; skipping clone. See docs/HOST_EMACS_MCP.md."
+            elif [ -d "$_mcp_dir/.git" ]; then
+                echo "  Already present; checking out $_branch ..."
+                if git -C "$_mcp_dir" fetch --depth 1 origin "$_branch" > /dev/null 2>&1; then
+                    git -C "$_mcp_dir" checkout "$_branch" > /dev/null 2>&1 || true
+                    git -C "$_mcp_dir" reset --hard "origin/$_branch" > /dev/null 2>&1 || true
+                else
+                    echo "  (branch $_branch unavailable; leaving current checkout in place)"
+                fi
+            elif ! git clone --depth 1 --branch "$_branch" https://github.com/gornskew/lisply-mcp.git "$_mcp_dir" > /dev/null 2>&1; then
+                echo "  Branch $_branch not found in lisply-mcp; falling back to master."
+                git clone --depth 1 --branch master https://github.com/gornskew/lisply-mcp.git "$_mcp_dir" > /dev/null 2>&1 || echo "WARNING: failed to clone lisply-mcp; see docs/HOST_EMACS_MCP.md."
+            fi
+            if [ -d "$_mcp_dir/scripts" ]; then
+                if command -v npm > /dev/null 2>&1; then
+                    echo "  Installing node dependencies (npm ci --omit=dev) ..."
+                    ( cd "$_mcp_dir/scripts" && npm ci --omit=dev ) || echo "WARNING: npm ci failed in $_mcp_dir/scripts; run it yourself."
+                else
+                    echo "WARNING: npm not found; run: cd $_mcp_dir/scripts && npm ci --omit=dev"
+                fi
+            fi
+
+            echo ""
+            echo "Connect an MCP client to the running host server with:"
+            echo "  node $_mcp_dir/scripts/mcp-wrapper.js \\"
+            echo "    --server-name emacs-host --no-auto-start \\"
+            echo "    --backend-host 127.0.0.1 --http-host-port 7080"
+        else
+            echo "Not enabled (confirmation not received)."
+        fi
+    fi
+fi
 
 # =============================================================================
 # SUMMARY
