@@ -258,11 +258,15 @@
     :defer nil
     :load-path ,(lambda () (get-config-path "etc"))
     :config
-    ;; Always load the config so the command + defcustoms exist; defer the
-    ;; start decision to `emacs-startup-hook' (after custom.el/.emacs-local
-    ;; load) so host opt-in is honored.  See etc/lisply-config.el.
+    ;; Always load the config so the command + defcustoms exist.  Container
+    ;; detection is env-based (available now), so start inline to preserve the
+    ;; dashboard self-check timing.  The host opt-in lives in custom.el /
+    ;; .emacs-local, which load later, so defer that case to
+    ;; `emacs-startup-hook'.  See etc/lisply-config.el.
     (require 'lisply-config)
-    (add-hook 'emacs-startup-hook #'lisply-maybe-autostart))
+    (if (getenv "SKEWED_EMACS_CONTAINER")
+        (lisply-maybe-autostart)
+      (add-hook 'emacs-startup-hook #'lisply-maybe-autostart)))
 
    (htmlize-config
     :ensure nil
