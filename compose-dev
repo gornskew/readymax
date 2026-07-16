@@ -89,14 +89,6 @@ bootstrap_from_image() {
     done
     docker rm -f "$_bfi_cid" > /dev/null 2>&1
     chmod +x "${SCRIPT_DIR}/generate-env.sh" "${SCRIPT_DIR}/mcp/mcp-exec" 2>/dev/null || true
-
-    # Standalone dir has no git repo, so generate-env.sh cannot detect a
-    # branch and would fall back to master while the runtime files above
-    # came from ${EMACS_IMAGE_BRANCH:-devo}. Pin the branch to the same
-    # default that selected the bootstrap image so the two cannot drift.
-    CURRENT_BRANCH="${CURRENT_BRANCH:-${EMACS_IMAGE_BRANCH:-devo}}"
-    export CURRENT_BRANCH
-
     printf '%s\n' "[INFO] Bootstrap complete: docker-compose.yml, generate-env.sh, mcp/"
 }
 
