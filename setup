@@ -398,7 +398,7 @@ if [ "$with_mcp" = "true" ]; then
             echo ""
             echo "Connect an MCP client to the running host server with:"
             echo "  node $_mcp_dir/scripts/mcp-wrapper.js \\"
-            echo "    --server-name emacs-host --no-auto-start \\"
+            echo "    --server-name emacs-host \\"
             echo "    --backend-host 127.0.0.1 --http-host-port 7080"
         else
             echo "Not enabled (confirmation not received)."

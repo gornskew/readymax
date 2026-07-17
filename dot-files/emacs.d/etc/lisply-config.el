@@ -87,7 +87,7 @@ to.
   "Return a human-readable hint for connecting an MCP client to the host server."
   (format (concat "Lisply host server listening on %s:%d.  Point an MCP client at it, e.g.:\n"
                   "  node /path/to/lisply-mcp/scripts/mcp-wrapper.js \\\n"
-                  "    --server-name emacs-host --no-auto-start \\\n"
+                  "    --server-name emacs-host \\\n"
                   "    --backend-host %s --http-host-port %d")
           lisply-host-server-bind-address emacs-lisply-port
           lisply-host-server-bind-address emacs-lisply-port))

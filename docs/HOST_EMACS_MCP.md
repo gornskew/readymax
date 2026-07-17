@@ -92,13 +92,12 @@ and the `commander` dependency that `npm ci` installs.
 ## Connecting an MCP client
 
 Point the [lisply-mcp](https://github.com/gornskew/lisply-mcp) middleware at
-the running host server. Because the backend already exists, use
-`--no-auto-start` so the wrapper does **not** try to spin up a container, and
-give it the loopback host and port:
+the running host server — give it the loopback host and the port. The `devo`
+wrapper connects to the backend directly:
 
 ```bash
 node /path/to/lisply-mcp/scripts/mcp-wrapper.js \
-  --server-name emacs-host --no-auto-start \
+  --server-name emacs-host \
   --backend-host 127.0.0.1 --http-host-port 7080
 ```
 
@@ -106,6 +105,12 @@ Note the port flag: lisply-mcp dials `--http-host-port` (default 9081) when the
 backend host is loopback, and `--http-port` only for containerized/networked
 backends. The host server listens on 7080, so `--http-host-port 7080` is
 correct here.
+
+> Version note: some newer wrapper variants can auto-start a backend Docker
+> container and expose a `--no-auto-start` flag to suppress that. The `devo`
+> wrapper does **not** — it only connects to an existing backend and will
+> reject `--no-auto-start` as an unknown option. Run `mcp-wrapper.js --help`
+> to see exactly what your checkout supports.
 
 In a Claude Desktop config that becomes, for example:
 
@@ -117,7 +122,6 @@ In a Claude Desktop config that becomes, for example:
       "args": [
         "/path/to/lisply-mcp/scripts/mcp-wrapper.js",
         "--server-name", "emacs-host",
-        "--no-auto-start",
         "--backend-host", "127.0.0.1",
         "--http-host-port", "7080"
       ]
@@ -125,6 +129,10 @@ In a Claude Desktop config that becomes, for example:
   }
 }
 ```
+
+On Windows with the backend in WSL, set `"command": "wsl"` and make the node
+binary the first arg, e.g.
+`"args": ["/usr/bin/node", "/home/you/projects/lisply-mcp/scripts/mcp-wrapper.js", ...]`.
 
 ## Verifying
 
