@@ -13,6 +13,42 @@ one-stop-shopping, here we are.
 
 ![Skewed Emacs Logo](img/skewed-colorful.png)
 
+## Why Skewed Emacs? The Inversion
+
+Most Emacs+AI projects put the agent *inside* Emacs: Emacs is the UI,
+and an LLM is wired into a buffer. Skewed Emacs inverts that: it puts
+**Emacs inside the agent** — Emacs (and any other Lisply-compliant
+Lisp environment, such as Gendl/Common Lisp) becomes a set of MCP
+tools that *any* agent can drive: Claude Desktop, Claude Code, Cursor,
+Grok Build, Gemini CLI, Codex, LM Studio, or your own MCP client. And
+it ships the whole thing: containerized Emacs + Common Lisp backends +
+generated client configs, one `./compose-dev up` away.
+
+| | Where the agent lives | Emacs's role | MCP role | What ships in the box |
+|---|---|---|---|---|
+| [claude-code-ide.el](https://github.com/manzaltu/claude-code-ide.el) | In Emacs (Claude Code CLI) | UI / IDE for the agent | Emacs↔Claude bridge for IDE features | elisp package |
+| [agent-shell](https://github.com/xenodium/agent-shell) | In an Emacs buffer (via ACP) | UI hosting agent sessions | n/a (uses ACP) | elisp packages |
+| [aidermacs](https://github.com/MatthewZMD/aidermacs) | In Emacs (Aider subprocess) | UI for pair-programming | n/a | elisp package (+ aider) |
+| [emigo](https://github.com/MatthewZMD/emigo) | In Emacs (agentic elisp+python) | UI + agent host | n/a | elisp package |
+| [gptel](https://github.com/karthink/gptel) + [mcp.el](https://github.com/lizqwerscott/mcp.el) | In Emacs | UI; Emacs is the MCP *client* | consumes external MCP servers | elisp packages |
+| **skewed-emacs + lisply-mcp** | **Anywhere — any MCP client** | **Emacs is the MCP *server* (a tool the agent uses)** | **serves `lisp_eval`/`http_request`/`ping` for Emacs *and* Common Lisp backends** | **full stack: containers, backends, client configs, terminal AI CLIs** |
+
+These are complementary, not rivals: the in-Emacs tools give *you* an
+agent while you edit; skewed-emacs gives *agents* a live Lisp machine
+to think with. You can run both at once — the full container images
+even ship Claude Code, Gemini CLI, and Codex preconfigured against the
+in-container MCP servers, so the agent you talk to in a terminal is
+itself wired to the Emacs and Gendl images it lives beside. See a real
+first session in
+[docs/FIRST_SESSION_TRANSCRIPT.md](docs/FIRST_SESSION_TRANSCRIPT.md),
+where a fresh agent builds a parametric staircase in Gendl through MCP.
+
+<!-- demo GIF: record per docs/DEMO_GIF.md, save as img/demo.gif, then
+     uncomment:
+![30-second demo](img/demo.gif)
+-->
+
+
 
 ## What Will I Find Here?
 
