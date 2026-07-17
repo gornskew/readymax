@@ -189,34 +189,6 @@ Replaces the managed block if it already exists."
     (message "Updated Codex config with MCP servers: %s" codex-config)
     codex-config))
 
-(defun skewed--grok-settings-path ()
-  "Return the grok user-settings.json path inside the container."
-  (expand-file-name ".grok/user-settings.json" (expand-file-name "~")))
-
-(defun skewed-update-grok-config-from-json (json-path)
-  "Merge mcpServers from JSON-PATH into grok user-settings.json.
-Preserves existing keys (apiKey, model, etc.) and only updates mcpServers."
-  (let* ((grok-settings (skewed--grok-settings-path))
-         (existing (when (file-exists-p grok-settings)
-                     (with-temp-buffer
-                       (insert-file-contents grok-settings)
-                       (goto-char (point-min))
-                       (condition-case nil (json-read) (error nil)))))
-         (merged-config (with-temp-buffer
-                          (insert-file-contents json-path)
-                          (goto-char (point-min))
-                          (json-read)))
-         (new-servers (alist-get 'mcpServers merged-config))
-         (result (or existing '())))
-    ;; Update mcpServers in existing settings
-    (setf (alist-get 'mcpServers result) new-servers)
-    (make-directory (file-name-directory grok-settings) t)
-    (let ((json-encoding-pretty-print t))
-      (with-temp-file grok-settings
-        (insert (json-encode result))))
-    (message "Updated grok user-settings.json with MCP servers: %s" grok-settings)
-    grok-settings))
-
 (defun skewed-derive-host-config (windows-config-file output-file)
   "Derive a native-host (Linux/macOS) Claude Desktop config.
 Reads WINDOWS-CONFIG-FILE (the merged, path-substituted Windows/WSL
@@ -262,9 +234,6 @@ Returns list of generated files."
           (replace-match clone-path t t))
         (write-region (point-min) (point-max) windows-config))
       (message "Substituted SKEWED_CLONE_PATH=%s in %s" clone-path windows-config))
-
-    ;; Update grok user-settings.json with MCP servers from merged JSON
-    (skewed-update-grok-config-from-json container-config)
 
     ;; Update Codex config with MCP servers from merged TOML
     (skewed-update-codex-config-from-mcp toml-config)

@@ -175,16 +175,6 @@ RUN set -euxo pipefail; \
    ln -sf ~/.gemini/local/node_modules/.bin/gemini ~/.local/bin/gemini; \
    npm cache clean --force || true
 
-# Install Bun runtime (required by grok-dev) + grok-dev CLI
-USER emacs-user
-RUN set -euxo pipefail; \
-   curl -fsSL https://bun.sh/install | bash; \
-   mkdir -p ~/.grok/local ~/.local/bin; \
-   npm install --omit=dev grok-dev --prefix ~/.grok/local; \
-   ln -sf ~/.grok/local/node_modules/.bin/grok ~/.local/bin/grok; \
-   ln -sf ~/.bun/bin/bun ~/.local/bin/bun; \
-   npm cache clean --force || true
-
 # Copy the remainder of the repo (README, docs/, mcp/, docker/,
 # generate-configs.el, services.sexp, ...). Kept late deliberately:
 # changes to these files are cheap and rebuild in seconds.
@@ -329,8 +319,6 @@ FROM runtime-base AS runtime-aituis
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.claude /home/emacs-user/.claude
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.codex /home/emacs-user/.codex
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.gemini /home/emacs-user/.gemini
-COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.grok /home/emacs-user/.grok
-COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.bun /home/emacs-user/.bun
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.local/bin /home/emacs-user/.local/bin
 
 
@@ -393,6 +381,4 @@ FROM runtime-gui-base AS runtime-gui-aituis
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.claude /home/emacs-user/.claude
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.codex /home/emacs-user/.codex
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.gemini /home/emacs-user/.gemini
-COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.grok /home/emacs-user/.grok
-COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.bun /home/emacs-user/.bun
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.local/bin /home/emacs-user/.local/bin
