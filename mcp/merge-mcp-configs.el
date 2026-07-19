@@ -3,8 +3,9 @@
 ;;; This merges base MCP configs with overlays for all three formats:
 ;;;   - mcp-container.json  -> for in-container Claude/Gemini CLI
 ;;;   - mcp-windows.json    -> for Windows Claude Desktop via WSL
-;;;   - mcp.toml            -> for Codex CLI
+;;;   - mcp.toml            -> for Codex CLI and Grok CLI
 ;;;   (a native-host Claude Desktop config is derived from the Windows one)
+;;;   Grok reads the same [mcp_servers.*] tables into ~/.grok/config.toml
 ;;;
 ;;; Call this at container startup time (from compose-dev or similar)
 ;;;
@@ -141,6 +142,11 @@ Reads mcp.toml as base, then merges any *-mcp.toml overlay files."
   (or (getenv "CODEX_CONFIG_PATH")
       "/home/emacs-user/.codex/config.toml"))
 
+(defun skewed--grok-config-path ()
+  "Return the Grok config path inside the container."
+  (or (getenv "GROK_CONFIG_PATH")
+      "/home/emacs-user/.grok/config.toml"))
+
 (defun skewed--mcp-toml-to-codex (toml-path)
   "Return TOML content from TOML-PATH with MCP tables prefixed for Codex."
   (with-temp-buffer
@@ -153,17 +159,37 @@ Reads mcp.toml as base, then merges any *-mcp.toml overlay files."
           (replace-match (format "[mcp_servers.%s]" table) t t))))
     (buffer-string)))
 
-(defun skewed-update-codex-config-from-mcp (toml-path)
-  "Write MCP server entries from TOML-PATH into Codex config.toml.
-Replaces the managed block if it already exists."
-  (let* ((codex-config (skewed--codex-config-path))
-         (begin-marker "# BEGIN SKEWED-EMACS MCP")
-         (end-marker "# END SKEWED-EMACS MCP")
-         (mcp-content (skewed--mcp-toml-to-codex toml-path)))
-    (make-directory (file-name-directory codex-config) t)
+(defun skewed--mcp-toml-to-grok (toml-path)
+  "Return Grok-ready MCP TOML from TOML-PATH.
+
+Keeps only top-level `[mcp_servers.NAME]` server tables (drops nested
+Codex tool-approval tables like `[mcp_servers.NAME.tools....]`), and
+ensures each server has `enabled = true` so Grok loads them."
+  (let* ((sections (skewed--parse-toml-sections
+                    (skewed--read-file-without-comment-lines
+                     toml-path "^[ \t]*#.*$")))
+         (lines '()))
+    (dolist (section sections)
+      (let ((table (car section))
+            (body (cdr section)))
+        ;; mcp_servers.<name> only — one dot after the mcp_servers prefix
+        (when (string-match-p "^mcp_servers\\.[^.]+$" table)
+          (unless (string-match-p "^[ \t]*enabled[ \t]*=" body)
+            (setq body (replace-regexp-in-string
+                        (concat "^\\(\\[" (regexp-quote table) "\\]\\)[ \t]*$")
+                        "\\1\nenabled = true"
+                        body)))
+          (push body lines))))
+    (string-join (nreverse lines) "\n\n")))
+
+(defun skewed--update-config-managed-mcp-block (config-path mcp-content)
+  "Insert or replace the SKEWED-EMACS MCP managed block in CONFIG-PATH."
+  (let ((begin-marker "# BEGIN SKEWED-EMACS MCP")
+        (end-marker "# END SKEWED-EMACS MCP"))
+    (make-directory (file-name-directory config-path) t)
     (with-temp-buffer
-      (when (file-exists-p codex-config)
-        (insert-file-contents codex-config))
+      (when (file-exists-p config-path)
+        (insert-file-contents config-path))
 
       ;; Remove any existing managed block.
       (goto-char (point-min))
@@ -184,10 +210,27 @@ Replaces the managed block if it already exists."
         (insert "\n"))
       (insert end-marker "\n")
 
-      (write-region (point-min) (point-max) codex-config))
+      (write-region (point-min) (point-max) config-path))
+    config-path))
 
+(defun skewed-update-codex-config-from-mcp (toml-path)
+  "Write MCP server entries from TOML-PATH into Codex config.toml.
+Replaces the managed block if it already exists."
+  (let ((codex-config (skewed--update-config-managed-mcp-block
+                       (skewed--codex-config-path)
+                       (skewed--mcp-toml-to-codex toml-path))))
     (message "Updated Codex config with MCP servers: %s" codex-config)
     codex-config))
+
+(defun skewed-update-grok-config-from-mcp (toml-path)
+  "Write MCP server entries from TOML-PATH into Grok config.toml.
+Replaces the managed block if it already exists. Grok reads
+`[mcp_servers.<name>]` tables from `~/.grok/config.toml`."
+  (let ((grok-config (skewed--update-config-managed-mcp-block
+                      (skewed--grok-config-path)
+                      (skewed--mcp-toml-to-grok toml-path))))
+    (message "Updated Grok config with MCP servers: %s" grok-config)
+    grok-config))
 
 (defun skewed-derive-host-config (windows-config-file output-file)
   "Derive a native-host (Linux/macOS) Claude Desktop config.
@@ -235,8 +278,9 @@ Returns list of generated files."
         (write-region (point-min) (point-max) windows-config))
       (message "Substituted SKEWED_CLONE_PATH=%s in %s" clone-path windows-config))
 
-    ;; Update Codex config with MCP servers from merged TOML
+    ;; Update Codex and Grok configs with MCP servers from merged TOML
     (skewed-update-codex-config-from-mcp toml-config)
+    (skewed-update-grok-config-from-mcp toml-config)
     
     ;; Derive native-host (Linux/macOS) Claude Desktop config
     (skewed-derive-host-config windows-config "/tmp/merged-mcp-host.json")

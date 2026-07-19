@@ -310,7 +310,8 @@ start_services() {
         "${HOME}/.claude/.credentials.json" \
         "${HOME}/.gemini/google_accounts.json" \
         "${HOME}/.gemini/oauth_creds.json" \
-        "${HOME}/.codex/auth.json"
+        "${HOME}/.codex/auth.json" \
+        "${HOME}/.grok/auth.json"
     do
         if [ ! -f "$_auth_file" ]; then
             mkdir -p "$(dirname "$_auth_file")"
@@ -349,7 +350,7 @@ start_services() {
     done
 
     # Step 2: Merge inside container. This writes merged MCP config files and
-    # updates /home/emacs-user/.codex/config.toml for Codex.
+    # updates /home/emacs-user/.codex/config.toml and ~/.grok/config.toml.
     MCP_MERGE_SUCCESS=false
     _attempt=1
     while [ "$_attempt" -le 5 ]; do
@@ -370,7 +371,7 @@ start_services() {
     done
 
     if [ "$MCP_MERGE_SUCCESS" = true ]; then
-        log_success "MCP configurations merged for container CLI, Windows, and Codex"
+        log_success "MCP configurations merged for container CLI, Windows, Codex, and Grok"
 
         # Copy the platform-appropriate Claude Desktop config back to the
         # host clone (regression fix: the pre-POSIX compose-dev did this).

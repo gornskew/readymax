@@ -143,7 +143,7 @@ if [[ $- == *i* && -z "$DOT_BASH_PROFILE_WELCOME" ]]; then
     echo ""
     echo "Terminal colors: 'theme dark|light|solarized|custom'"
     echo ""
-    echo "Try 'claudly', 'geminly', 'codexly' to launch those agents."
+    echo "Try 'claudly', 'geminly', 'codexly', 'grokly' to launch those agents."
     echo ""
     echo "Windows users: Run 'export-windows-mcp-config' to get Claude Desktop config."
     echo ""
@@ -212,6 +212,33 @@ function codexly
     # Use pre-merged, pre-positioned MCP TOML config (prepared at container startup)
     echo "Starting OpenAI Codex CLI with MCP integration..."
     cd /projects && ~/.local/bin/codex 
+}
+
+
+
+
+function grokly
+{
+    # Grok Build CLI (xAI). MCP servers are written into ~/.grok/config.toml
+    # at stack startup by merge-mcp-configs.el (same [mcp_servers.*] tables
+    # as Codex, without nested tool-approval sections).
+    local grok_bin="${HOME}/.local/bin/grok"
+    if [ ! -x "$grok_bin" ]; then
+        grok_bin="${HOME}/.grok/bin/grok"
+    fi
+    if [ ! -x "$grok_bin" ]; then
+        echo "Error: grok CLI not found (installs in full/aituis image variants)."
+        echo "Rebuild with: docker/build  (or pull a newer *-full / *-aituis image)"
+        return 1
+    fi
+
+    if [ ! -f "${HOME}/.grok/config.toml" ] || ! grep -q 'BEGIN SKEWED-EMACS MCP' "${HOME}/.grok/config.toml" 2>/dev/null; then
+        echo "Warning: Grok MCP block not found in ~/.grok/config.toml"
+        echo "Run './compose-dev up' so merge-mcp-configs.el can install MCP servers."
+    fi
+
+    echo "Starting Grok CLI with MCP integration..."
+    cd /projects && "$grok_bin" "$@"
 }
 
 

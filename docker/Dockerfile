@@ -175,6 +175,20 @@ RUN set -euxo pipefail; \
    ln -sf ~/.gemini/local/node_modules/.bin/gemini ~/.local/bin/gemini; \
    npm cache clean --force || true
 
+# Grok Build CLI (xAI) — binary installer (not npm). Optional pin via
+# GROK_VERSION=X.Y.Z; default is latest stable from https://x.ai/cli.
+ARG GROK_VERSION=
+RUN set -euxo pipefail; \
+   mkdir -p ~/.grok/bin ~/.grok/downloads ~/.local/bin; \
+   if [ -n "${GROK_VERSION}" ]; then \
+     curl -fsSL https://x.ai/cli/install.sh | bash -s "${GROK_VERSION}"; \
+   else \
+     curl -fsSL https://x.ai/cli/install.sh | bash; \
+   fi; \
+   ln -sfn ~/.grok/bin/grok ~/.local/bin/grok; \
+   ln -sfn ~/.grok/bin/agent ~/.local/bin/agent; \
+   ~/.local/bin/grok --version
+
 # Copy the remainder of the repo (README, docs/, mcp/, docker/,
 # generate-configs.el, services.sexp, ...). Kept late deliberately:
 # changes to these files are cheap and rebuild in seconds.
@@ -319,6 +333,7 @@ FROM runtime-base AS runtime-aituis
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.claude /home/emacs-user/.claude
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.codex /home/emacs-user/.codex
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.gemini /home/emacs-user/.gemini
+COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.grok /home/emacs-user/.grok
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.local/bin /home/emacs-user/.local/bin
 
 
@@ -381,4 +396,5 @@ FROM runtime-gui-base AS runtime-gui-aituis
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.claude /home/emacs-user/.claude
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.codex /home/emacs-user/.codex
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.gemini /home/emacs-user/.gemini
+COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.grok /home/emacs-user/.grok
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.local/bin /home/emacs-user/.local/bin

@@ -55,8 +55,10 @@ Adds:
 - **Claude Code**: @anthropic-ai/claude-code
 - **Codex**: @openai/codex
 - **Gemini CLI**: @google/gemini-cli
+- **Grok Build CLI**: binary from https://x.ai/cli/install.sh
+  (optional pin: build-arg `GROK_VERSION=X.Y.Z`)
 
-Additional size: ~400-500MB
+Additional size: ~400-500MB (+ ~150MB for the Grok binary)
 
 ## Image Variants (per branch)
 

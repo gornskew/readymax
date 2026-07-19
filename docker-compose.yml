@@ -40,6 +40,7 @@ services:
       - ${USER_HOME}/.gemini/google_accounts.json:/home/emacs-user/.gemini/google_accounts.json
       - ${USER_HOME}/.gemini/oauth_creds.json:/home/emacs-user/.gemini/oauth_creds.json
       - ${USER_HOME}/.codex/auth.json:/home/emacs-user/.codex/auth.json
+      - ${USER_HOME}/.grok/auth.json:/home/emacs-user/.grok/auth.json
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ${EMACS_LOCAL_SRC:-/nonexistent}/.emacs-local:/home/emacs-user/.emacs-local:ro
       - ${EMACS_LOCAL_SRC:-/nonexistent}/.emacs-local-early:/home/emacs-user/.emacs-local-early:ro

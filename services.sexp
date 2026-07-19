@@ -7,7 +7,7 @@
 ;;;   - docker-compose.yml         (base compose config)
 ;;;   - mcp/mcp-container.json     (for claude/gemini CLI inside container)
 ;;;   - mcp/mcp-windows.json       (for Claude Desktop on Windows via WSL)
-;;;   - mcp/mcp.toml               (for Codex CLI)
+;;;   - mcp/mcp.toml               (for Codex CLI and Grok CLI)
 ;;;   - dot-files/emacs.d/etc/services-generated.el
 ;;;
 ;;; For overlays (e.g., betatest or commercial images):
@@ -23,7 +23,8 @@
 ;;; ==============
 ;;; The skewed-emacs image supports build variants:
 ;;;
-;;;   full  - Complete installation including TUI LLM CLIs (claude, codex, gemini)
+;;;   full  - Complete installation including TUI LLM CLIs
+;;;           (claude, codex, gemini, grok)
 ;;;           Best for: Emacs power users, developers who use terminal-based AI tools
 ;;;
 ;;;   lite  - Core Emacs + MCP services only, no TUI LLM CLIs
@@ -113,6 +114,10 @@
               :target "/home/emacs-user/.gemini/oauth_creds.json")
              (:source "${USER_HOME}/.codex/auth.json"
               :target "/home/emacs-user/.codex/auth.json")
+             ;; Auth only — do not mount all of ~/.grok (would hide the
+             ;; image-baked binary under ~/.grok/bin and downloads).
+             (:source "${USER_HOME}/.grok/auth.json"
+              :target "/home/emacs-user/.grok/auth.json")
              (:source "/tmp/.X11-unix" :target "/tmp/.X11-unix" :mode "rw")
              (:source "${EMACS_LOCAL_SRC:-/nonexistent}/.emacs-local"
               :target "/home/emacs-user/.emacs-local" :mode "ro")

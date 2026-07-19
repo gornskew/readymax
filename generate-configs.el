@@ -292,7 +292,9 @@ Uses placeholder ${SKEWED_CLONE_PATH} which gets substituted at merge time."
                          (cons 'globalShortcut ""))))))
 
 (defun skewed--generate-mcp-toml (config)
-  "Generate MCP config in TOML format for Codex."
+  "Generate MCP config in TOML format for Codex and Grok.
+Codex also gets nested tool-approval tables; Grok's merge step
+filters those out and keeps only top-level [mcp_servers.NAME] tables."
   (let* ((mcp-config (skewed--get-prop config :mcp))
          (wrapper-path (skewed--get-prop mcp-config :wrapper-path-container))
          (request-timeout (skewed--get-prop mcp-config :request-timeout-ms))

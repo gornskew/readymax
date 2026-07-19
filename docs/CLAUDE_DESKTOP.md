@@ -105,6 +105,9 @@ Claude Desktop is just one consumer. The same generated configs work for:
 - **Codex CLI**: `compose-dev up` maintains `~/.codex/config.toml`
   inside the container automatically; for a host-side Codex, adapt
   `mcp/mcp.toml`
+- **Grok Build CLI**: same merged TOML is written into
+  `~/.grok/config.toml` (`[mcp_servers.*]`); launch with `grokly`
+  from a shell inside the full/aituis image
 - **Any MCP-capable client**: point it at `mcp/mcp-exec` with the args
   shown in `mcp/claude_desktop_config.json`
 
