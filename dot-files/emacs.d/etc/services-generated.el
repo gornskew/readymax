@@ -31,6 +31,10 @@
      :swank-host "gendl-sbcl"
      :swank-port 4210
     )
+    (:name "autoheal"
+     :type "utility"
+     :lisp-impl "Unknown"
+    )
    ))
 ;; Services configuration generated from services.sexp.
 

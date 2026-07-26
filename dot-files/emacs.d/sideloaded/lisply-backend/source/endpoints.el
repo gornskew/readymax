@@ -27,6 +27,7 @@
 (require 'simple-httpd)
 (require 'lisply-http-setup)
 (require 'lisply-search)
+(require 'lisply-shell-guard)
 
 ;; Resolve skewed-emacs root from the real path of ~/.emacs.d.
 (defun emacs-lisply--skewed-root ()
@@ -140,6 +141,14 @@
      ((null code)
       (setq error "Missing required 'code' parameter")
       (setq success nil))
+
+     ((and (fboundp 'lisply-payload-lint) (lisply-payload-lint code))
+      ;; Refusal delivered as a *successful* result: the claude.ai
+      ;; relay flattens success:nil to a bare "Tool execution failed",
+      ;; hiding the steering message (see future.org: surface read/eval
+      ;; errors as structured error results).
+      (setq result (concat "LISPLY-GUARD REFUSED: " (lisply-payload-lint code)))
+      (setq success t))
 
      (t
       (emacs-lisply-log

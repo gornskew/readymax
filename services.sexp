@@ -124,7 +124,7 @@
              (:source "${EMACS_LOCAL_SRC:-/nonexistent}/.emacs-local-early"
               :target "/home/emacs-user/.emacs-local-early" :mode "ro"))
 
-   :healthcheck (:endpoint "/lisply/ping-lisp" :interval "108s"))
+   :healthcheck (:endpoint "/lisply/ping-lisp" :interval "30s"))
 
   (:name "gendl-ccl"
    :type "common-lisp"
@@ -147,5 +147,18 @@
    ;;:environment (("HTTP_HOST" . "::"))
    :mcp t
    :healthcheck (:endpoint "/lisply/ping-lisp" :interval "90s"))
+
+  ;; L4 watchdog (added 2026-07-26 after the unbounded-curl Emacs
+  ;; event-loop wedge): Docker healthchecks only MARK containers
+  ;; unhealthy; nothing restarts them without an actor.  A blocked
+  ;; Emacs cannot self-heal, so recovery must come from outside.
+  ;; autoheal restarts ANY container that flunks its healthcheck.
+  (:name "autoheal"
+   :type "utility"
+   :image "willfarrell/autoheal:latest"
+   :environment (("AUTOHEAL_CONTAINER_LABEL" . "all")
+                 ("AUTOHEAL_INTERVAL" . "15")
+                 ("AUTOHEAL_START_PERIOD" . "60"))
+   :volumes ((:source "/var/run/docker.sock" :target "/var/run/docker.sock")))
   )
  )

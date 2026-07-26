@@ -487,6 +487,20 @@ Example:
 **Cause**: Emacs is waiting for minibuffer input (e.g., "File changed on disk. Discard edits? (yes or no)")
 **Solution**: Alert Dave that Emacs needs input before continuing
 
+### Event-Loop Blocking: Unbounded Child Processes (2026-07-26 Incident)
+**Symptom**: skewed-emacs MCP goes totally dark mid-session — `lisp_eval` AND `ping_lisp` both time out; nothing recovers until the child process dies or the container restarts.
+**Cause**: ANY synchronous child process (`shell-command-to-string`, `call-process`, `process-file`) blocks the single Emacs event loop until the child exits. Timers, `with-timeout`, network filters, and the lisply httpd all starve. An unbounded `curl` (no `--max-time`) against a stalled server is exactly as fatal as `sleep-for`. Demonstrated live 2026-07-26: one `(shell-command-to-string "sleep 60")` blacked out the entire transport for 60 s.
+**Mandatory rules for every shell-out through lisp_eval**:
+- `curl` always gets `--max-time N`
+- generic commands get a `timeout(1)` wrapper: `(shell-command-to-string "timeout 30 ...")`
+- `ssh` gets BOTH `-o ConnectTimeout=N` AND a `timeout N` wrapper — ConnectTimeout does not bound the remote command
+- anything expected to run longer than ~25 s: never run synchronously — use the async helper (`lisply-shell-async` start-process + poll) or nohup + poll via separate calls
+- **Backend enforcement (L3)**: a pre-eval lint (`lisply-shell-guard.el`) now refuses unbounded shell payloads, returning a `LISPLY-GUARD REFUSED:` result. Prefer `(lisply-shell-bounded CMD &optional SECS)` (default 25 s, returns `:exit-code/:output/:timed-out` plist). Deliberate override: include the comment `;; lisply:allow-unbounded` in the payload.
+- **Guard durability (until image rebuild)**: the guard is NOT in the image. After ANY container restart (including autoheal), check `(fboundp 'lisply-shell-bounded)` — if nil, re-sync: copy `lisply-shell-guard.el`, `endpoints.el` (from `/projects/skewed-emacs/dot-files/emacs.d/sideloaded/lisply-backend/source/`) and `CLAUDE.md` to the `/home/emacs-user/skewed-emacs/` counterparts, then `load` both .el files.
+- **After an autoheal restart**: the container self-heals in ~2 min, but the lisply-mcp Node wrapper may wedge on its dead connection (calls sit the full 240 s wait). If pings still fail after the container shows healthy, ask Dave to restart the MCP wrapper.
+**Relay budget**: the claude.ai MCP relay times out responses at ~35–40 s (Claude Desktop wrapper: ~240 s). Longer evals EXECUTE but report a bare "Tool execution failed" — split work into short calls and poll.
+**Recovery runbook (host side)**: `docker exec skewed-emacs ps -ef --forest` → find the stuck child under emacs → `docker exec skewed-emacs pkill -f '<child pattern>'` → service restores instantly (verified: transport recovers the moment the child exits). If no child visible: `docker exec skewed-emacs sh -c 'kill -USR2 $(pgrep -o emacs)'` and read the backtrace from `docker logs`; last resort is container restart.
+
 ### Incremental Editing > Wholesale Replacement
 **WRONG**: Using `with-temp-file` to rewrite entire complex files
 ```elisp

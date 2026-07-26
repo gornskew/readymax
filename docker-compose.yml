@@ -48,7 +48,7 @@ services:
       - skewed-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7080/lisply/ping-lisp"]
-      interval: 108s
+      interval: 30s
       timeout: 3s
       retries: 3
       start_period: 15s
@@ -116,3 +116,25 @@ services:
       timeout: 3s
       retries: 3
       start_period: 15s
+
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: autoheal
+    hostname: autoheal
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=all
+      - AUTOHEAL_INTERVAL=15
+      - AUTOHEAL_START_PERIOD=60
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      - type: bind
+        source: ${PROJECTS_DIR}
+        target: /projects
+        bind:
+          create_host_path: true
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - skewed-network
