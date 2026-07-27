@@ -245,6 +245,37 @@ docker/build --gui-newfeature
 - **Dockerfile.full**: Removed - use multi-stage Dockerfile
 - **Separate build scripts**: Consolidated into `docker/build`
 
+## Authenticated Docker Hub Pulls (rate limits)
+
+Docker Hub limits unauthenticated pulls to 10/hour per IPv4 address (and the
+limit is shared by everything behind that IP). An authenticated free Personal
+account gets 100 pulls/hour, counted per account instead of per IP.
+
+Every host that pulls `gornskew/*` images (dev machines, production servers,
+CI runners) should therefore be logged in:
+
+```bash
+# One-time per host, per user that runs docker/compose:
+docker login -u gornskew   # paste a read-only access token, not the password
+```
+
+Notes:
+
+- Create tokens at hub.docker.com → Account Settings → Personal access
+  tokens. Use **read-only** tokens on pull-only hosts (production servers,
+  runners); only the build/push machine needs read/write.
+- Credentials land in `~/.docker/config.json` for the logged-in user. If a
+  systemd unit runs compose as a different user (e.g. root), that user needs
+  its own `docker login`.
+- Once logged in, everything is covered: `docker pull`, `docker compose
+  pull/up`, classic `docker build` base-image pulls, and `docker buildx`
+  multi-arch builds (buildx forwards credentials from the client's
+  `~/.docker/config.json` to the builder).
+- `compose-dev` exports `DOCKER_CONFIG="$HOME/.docker"`, so compose finds
+  the credentials regardless of invocation context.
+- GitLab CI: for shell executors, `docker login` once as the runner's user;
+  for docker executors, set the `DOCKER_AUTH_CONFIG` CI/CD variable instead.
+
 ## Troubleshooting
 
 ### Build fails with "Unknown target"
