@@ -220,8 +220,65 @@ fi
 
 log "Executing MCP wrapper in service container..."
 
-# Set up cleanup trap - will fire when docker compose exec terminates
+# Set up cleanup trap - fires when the supervise loop exits (Claude Desktop quit)
 trap cleanup_on_exit EXIT
 
-# Run MCP wrapper via docker compose exec
-compose exec -T "${SERVICE_NAME}" node /home/emacs-user/lisply-mcp/scripts/mcp-wrapper.js "$@"
+# Supervise loop (2026-07-26): a container restart (e.g. autoheal after a
+# wedged backend) kills the exec'd wrapper process.  Previously that ended
+# this script, leaving the MCP client with a permanently dead server (the
+# client never respawns servers).  Now we respawn the wrapper once the
+# container is back, so MCP sessions survive container bounces with no
+# human intervention.  Notes:
+#  - fd 0 (the MCP stdio pipe from the client) persists across respawns;
+#    requests written while no wrapper is running buffer in the pipe and
+#    are processed by the next wrapper.  Only requests in flight at the
+#    moment of death are lost (those single calls time out client-side).
+#  - Wrapper exit 0 = clean shutdown (client closed stdin) -> we exit too.
+#  - Nonzero exit -> wait for container running + healthy, then respawn.
+#  - Fast-exit breaker: 20 consecutive sub-60s lifetimes -> give up, so a
+#    permanently broken backend cannot spin forever.
+
+CONSECUTIVE_FAST_EXITS=0
+
+while true; do
+    WRAPPER_START=$(date +%s)
+    compose exec -T "${SERVICE_NAME}" node /home/emacs-user/lisply-mcp/scripts/mcp-wrapper.js "$@"
+    WRAPPER_EXIT=$?
+    WRAPPER_ELAPSED=$(( $(date +%s) - WRAPPER_START ))
+
+    if [ "$WRAPPER_EXIT" -eq 0 ]; then
+        log "Wrapper exited cleanly (status 0, ${WRAPPER_ELAPSED}s) - shutting down"
+        exit 0
+    fi
+
+    log "Wrapper exited status=${WRAPPER_EXIT} after ${WRAPPER_ELAPSED}s - container likely restarted"
+
+    if [ "$WRAPPER_ELAPSED" -ge 60 ]; then
+        CONSECUTIVE_FAST_EXITS=0
+    else
+        CONSECUTIVE_FAST_EXITS=$((CONSECUTIVE_FAST_EXITS + 1))
+        if [ "$CONSECUTIVE_FAST_EXITS" -ge 20 ]; then
+            log "ERROR: ${CONSECUTIVE_FAST_EXITS} consecutive fast wrapper exits - giving up"
+            exit 1
+        fi
+    fi
+
+    # Wait for the service to come back (autoheal wedge-to-healthy is
+    # about 2 minutes; be generous)
+    waited=0
+    while ! is_service_running; do
+        if [ "$waited" -ge 180 ]; then
+            log "ERROR: service ${SERVICE_NAME} did not return within 180s - giving up"
+            exit 1
+        fi
+        sleep 2
+        waited=$((waited + 2))
+        if [ $((waited % 10)) -eq 0 ]; then
+            log "Waiting for ${SERVICE_NAME} to return... (${waited}/180)"
+        fi
+    done
+
+    wait_for_healthy
+    log "Respawning MCP wrapper into recovered ${SERVICE_NAME}"
+    sleep 1
+done
