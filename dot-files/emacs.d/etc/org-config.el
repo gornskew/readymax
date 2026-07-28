@@ -105,18 +105,28 @@
 ;; Org file paths
 ;; ============================================================================
 
-(defvar my/org-root
+(defun skewed-org-root-detect ()
+  "Detect the Org root directory, or nil if unavailable."
   (cond ((file-directory-p "~/projects/org") (expand-file-name "~/projects/org"))
-        ((file-directory-p "/projects/org") "/projects/org")
-        (t nil))
+        ((file-directory-p "/projects/org") "/projects/org")))
+
+(defvar my/org-root nil
   "Root directory for Org files, or nil if unavailable.")
 
-(defvar my/org-projects-file (when my/org-root (expand-file-name "projects.org" my/org-root)))
-(defvar my/org-future-file   (when my/org-root (expand-file-name "future.org" my/org-root)))
-(defvar my/org-journal-file  (when my/org-root (expand-file-name "journal.org" my/org-root)))
+(defvar my/org-projects-file nil)
+(defvar my/org-future-file nil)
+(defvar my/org-journal-file nil)
 
+;; Re-detect on every load: a fresh machine may gain its org clone only
+;; after Emacs (and this file) first loaded, and `defvar' alone would
+;; leave the nil sticky forever.  `skewed-daily-focus-init' reloads this
+;; file, so running it (or the dashboard button) heals a stale session.
+(setq my/org-root (or my/org-root (skewed-org-root-detect)))
 (when my/org-root
-  (setq org-directory my/org-root
+  (setq my/org-projects-file (expand-file-name "projects.org" my/org-root)
+        my/org-future-file   (expand-file-name "future.org" my/org-root)
+        my/org-journal-file  (expand-file-name "journal.org" my/org-root)
+        org-directory my/org-root
         org-agenda-files (delq nil (list my/org-projects-file))))
 
 ;; ============================================================================
@@ -483,6 +493,16 @@ Idempotent: existing org files are never overwritten."
     ;; add-to-list, so reloading is idempotent.
     (load "org-config" nil t)
     (message "Daily Focus ready at %s — open it with C-c a d" root)))
+
+(defun skewed-daily-focus ()
+  "Open the Daily Focus agenda, running first-time setup if needed.
+Self-heals sessions where org-config loaded before the org files
+existed (see `skewed-daily-focus-init')."
+  (interactive)
+  (unless (and my/org-root
+               (file-exists-p (expand-file-name "projects.org" my/org-root)))
+    (skewed-daily-focus-init))
+  (org-agenda nil "d"))
 
 (provide 'org-config)
 ;;; org-config.el ends here

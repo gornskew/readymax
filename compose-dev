@@ -542,11 +542,17 @@ SNIPPET
         *)    _isf_primary="${HOME}/.profile" ;;
     esac
 
-    touch "$_isf_primary" 2>/dev/null || true
+    # Belt and suspenders for fresh machines: login and non-login shells
+    # read different RC files (.profile vs .bashrc), and a fresh account may
+    # have SHELL=/bin/sh.  Ensure both .bashrc and .profile carry the source
+    # line; the grep guard below keeps this idempotent.
+    touch "$_isf_primary" "${HOME}/.bashrc" "${HOME}/.profile" 2>/dev/null || true
 
     _isf_wrote=false
-    # Write to primary, and also to .bash_profile / .zprofile if they exist
-    for _isf_rc in "$_isf_primary" "${HOME}/.bash_profile" "${HOME}/.zprofile"; do
+    _isf_wrote_files=""
+    # Write to primary, .bashrc, and .profile always; .bash_profile / .zprofile if they exist
+    for _isf_rc in "$_isf_primary" "${HOME}/.bashrc" "${HOME}/.profile" \
+                   "${HOME}/.bash_profile" "${HOME}/.zprofile"; do
         [ -f "$_isf_rc" ] || continue
         if grep -qF "skewed-emacs/shell-functions.sh" "$_isf_rc" 2>/dev/null; then
             log_info "Shell helpers already in ${_isf_rc} (no change needed)"
@@ -554,12 +560,15 @@ SNIPPET
             printf '\n# Skewed Emacs shell helpers\n%s\n' "$_isf_source_line" >> "$_isf_rc"
             log_success "Added skewed-emacs shell helpers to ${_isf_rc}"
             _isf_wrote=true
+            _isf_wrote_files="${_isf_wrote_files:+${_isf_wrote_files}, }${_isf_rc}"
             SHELL_HELPERS_CHANGED=true
         fi
     done
 
-    [ "$_isf_wrote" = "true" ] && \
-        log_info "Open a new terminal (or source the RC file shown above) to activate eskew/egskew"
+    if [ "$_isf_wrote" = "true" ]; then
+        log_info "Helpers wired into: ${_isf_wrote_files}"
+        log_info "Open a new terminal (or run:  . ${_isf_file}  ) to activate eskew/egskew"
+    fi
 }
 
 refresh_emacs_runtime_config() {
