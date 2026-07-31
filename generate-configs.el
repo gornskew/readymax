@@ -155,7 +155,14 @@
                 (push (format "      - SWANK_HOST_PORT=%s" host) lines))
               (push "      - START_SWANK=true" lines))))
         (dolist (env-pair env)
-          (push (format "      - %s=%s" (car env-pair) (cdr env-pair)) lines))
+          ;; Quote the whole NAME=VALUE as a YAML single-quoted scalar.
+          ;; Unquoted values with a trailing colon (e.g. HTTP_HOST=::)
+          ;; parse as YAML mappings and break docker compose validation.
+          (push (format "      - '%s=%s'"
+                        (car env-pair)
+                        (replace-regexp-in-string "'" "''"
+                                                  (format "%s" (cdr env-pair))))
+                lines))
         (push (format "      - TZ=%s" (or (skewed--get-prop defaults :timezone) "${TZ:-Etc/UTC}")) lines)
         
         ;; Volumes
