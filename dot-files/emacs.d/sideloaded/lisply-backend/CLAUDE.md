@@ -689,6 +689,69 @@ I am backing off and will not attempt any edits.
 7. **Remember**: Paredit-mode on + unbalanced = IMPOSSIBLE for humans, POSSIBLE for agents
 8. **Think structurally**: Ask "what s-expression am I modifying?" before any edit
 9. **If paredit blocks you**: STOP and reconsider your approach—don't force it
+10. **Every loop must provably make progress**: an elisp loop that doesn't terminate wedges Emacs and the MCP transport (see next section)
+
+## CRITICAL: Loop Termination — Do Not Wedge the Event Loop
+
+**⚠️ Every `while` loop in a `lisp_eval` payload runs synchronously in the
+Emacs event loop. A loop that fails to make progress wedges Emacs AND the
+MCP transport until the watchdog reaps it (or the stack is restarted).**
+
+### Field Incident (August 2026)
+
+An agent-written cleanup helper contained this blank-line collapser:
+
+```elisp
+;; BAD — can loop forever at end-of-buffer
+(while (and (looking-at "^[ \t]*$")
+            (save-excursion (forward-line -1) (looking-at "^[ \t]*$")))
+  (delete-region (line-beginning-position)
+                 (min (point-max) (1+ (line-end-position)))))
+```
+
+When the form being edited was the **last form in the file**, point ended
+up on a trailing blank line at `point-max`. There `line-beginning-position`
+equals `(min (point-max) (1+ (line-end-position)))`, so `delete-region`
+deleted **zero characters**, the `looking-at` conditions stayed true, and
+the loop spun forever. The same payload wedged the backend twice (across
+two sessions) before diagnosis, because the triggering file happened to
+have exactly that shape — and a red-herring stale lockfile prolonged the
+hunt.
+
+### The Rules
+
+1. **Every loop must have a progress guarantee.** Before writing
+   `(while CONDITION (delete-region A B))`, prove that each iteration
+   strictly shrinks the buffer or advances point. Zero-width deletes at
+   buffer boundaries (`point-max`, `point-min`) are the classic trap:
+   clamping with `min`/`max` silently turns a delete into a no-op while
+   leaving the loop condition true.
+2. **Prefer built-ins with termination guarantees** for whitespace and
+   cleanup work: `delete-blank-lines`, `delete-trailing-whitespace`,
+   `just-one-space`, `fixup-whitespace`. They already handle the boundary
+   cases that hand-rolled loops get wrong.
+3. **Search-driven loops are safe by construction.**
+   `(while (search-forward "x" nil t) ...)` terminates because
+   `search-forward` either advances point or returns nil. Keep loop
+   conditions tied to a search result, not to a state predicate that the
+   loop body is responsible for falsifying.
+4. **When in doubt, bound it.** Wrap uncertain iteration in a hard cap,
+   e.g. `(cl-loop repeat 1000 while CONDITION do ...)`. A wrong result
+   beats a wedged Emacs.
+5. **Dry-run degenerate shapes first.** If a routine will run over many
+   files, test it on the boundary cases: target form at end of buffer, at
+   start of buffer, empty file, file with no trailing newline.
+
+### Recovery
+
+If a payload wedges the backend, the watchdog usually reaps the runaway
+eval within a minute or two (`ping_lisp` starts answering again). Unsaved
+buffer edits from the wedged call are lost; files on disk are untouched
+unless the payload had already reached its save/write step. After any hard
+restart, check for and remove stale `.#` lockfiles before re-opening the
+same files — a dead-process lock triggers a minibuffer steal/proceed
+prompt on the next `find-file-noselect`, which is itself another way to
+wedge the event loop.
 
 ## PAREDIT COMMAND REFERENCE
 
