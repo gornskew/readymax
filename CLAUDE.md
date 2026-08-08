@@ -444,6 +444,14 @@ When using MCP file editing, remember that you **share the global current buffer
 | File operations | `(rename-file)`, `(copy-file)` | `(shell-command "mv ...")` |
 | Search in files | `(grep-find)`, `(project-find-regexp)` | `(shell-command "grep ...")` |
 
+**Host-side line tools are out of bounds for /projects files** (Dave,
+2026-08-07): even when an agent runs on the elsie host with ~/projects
+mounted, sed/awk/grep-style edits and filters on project files go
+through the skewed-emacs container -- either elisp temp-buffer edits
+(insert-file-contents + write-region, never find-file-noselect from
+batch evals) or a shell command run inside the container.  Host bash
+is a last resort and needs permission.
+
 **Always refresh stale buffers before consulting:**
 ```elisp
 ;; Dired: refresh before reading
