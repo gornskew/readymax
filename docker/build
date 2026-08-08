@@ -17,6 +17,7 @@ TARGETS=""
 PLATFORMS=""
 CLI_SET_PUSH=""
 CLI_SET_BUILD_INDEX="true"
+MANIFEST_ONLY="false"
 
 # -----------------------------
 # Help
@@ -57,6 +58,7 @@ Push:
 Multi-arch:
   --multi-arch          shorthand for --platforms=linux/amd64,linux/arm64
   --platforms=PLATFORMS explicit platforms for buildx (implies --push)
+  --manifest-only       skip builds; merge existing arch-suffixed tags into canonical manifests
 
 EOF
 }
@@ -77,6 +79,7 @@ while [[ $# -gt 0 ]]; do
     --no-push) CLI_SET_PUSH="false"; shift ;;
     --multi-arch) PLATFORMS="linux/amd64,linux/arm64"; shift ;;
     --platforms=*) PLATFORMS="${1#*=}"; shift ;;
+    --manifest-only) MANIFEST_ONLY="true"; shift ;;
     --with-search-index) CLI_SET_BUILD_INDEX="true"; shift ;;
     --no-search-index) CLI_SET_BUILD_INDEX="false"; shift ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -415,6 +418,14 @@ echo "Image name:       ${IMAGE_NAME}"
 echo "Push:             ${PUSH_IMAGE}"
 echo "Search index:     ${CLI_SET_BUILD_INDEX}"
 echo "═══════════════════════════════════════════════════════════════"
+
+if [[ "$MANIFEST_ONLY" == "true" ]]; then
+  PUSH_IMAGE="true"
+  update_multi_arch_manifests
+  echo ""
+  echo "Done (manifest-only)."
+  exit 0
+fi
 
 if [[ ! -f "$DOCKERFILE_PATH" ]]; then
   echo "Error: Dockerfile not found at $DOCKERFILE_PATH" >&2

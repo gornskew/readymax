@@ -1,0 +1,74 @@
+# GitLab CI for skewed-emacs container images (gornskew/skewed-emacs on
+# Docker Hub).
+#
+# Native per-arch builds -- no QEMU emulation (see the exec-format-error
+# saga on narad, docker/CI.md).  Each architecture builds on its own
+# runner and pushes arch-suffixed tags (e.g. devo-full-arm64); a final
+# job stitches the canonical multi-arch tags (devo-full, devo, latest).
+# Same flow docker/build implements for manual runs, run per-arch.
+#
+# Runners (gitlab.genworks.com):
+#   arm64 -- cl-arm64-build-1-genworks (Mac mini M1 "sevam", docker
+#            executor against the colima socket, instance runner #44,
+#            tag "arm64").  Mirrors the proven cl-docker-images setup:
+#            job runs in a docker CLI image with the VM docker socket
+#            mounted.
+#   amd64 -- balaram (shell executor; registration pending -- build-amd64
+#            is manual + allow_failure until that runner exists, so the
+#            arm64 leg can go green on its own.  Flip to automatic by
+#            deleting the "rules:" block once balaram carries tag
+#            "amd64").  The stitch step merges whatever arch tags exist
+#            on Docker Hub, so canonical tags keep their amd64 leg from
+#            manual pushes in the interim.
+#
+# Required CI/CD variables (Settings -> CI/CD -> Variables):
+#   DOCKERHUB_USER  -- Docker Hub account with push rights to gornskew/*
+#   DOCKERHUB_TOKEN -- read/write access token (masked)
+#
+# docker/build honors CI_COMMIT_REF_NAME for branch detection, so tags
+# come out as <branch>-<target>[-<arch>] automatically.
+
+stages:
+  - build
+  - manifest
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "devo" || $CI_COMMIT_BRANCH == "master"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+default:
+  image: docker:29.6.2
+  before_script:
+    # docker CLI images are alpine: docker/build needs bash + curl.
+    # Shell-executor runners have no apk (and already have bash/curl).
+    - if command -v apk >/dev/null; then apk add --no-cache bash curl; fi
+    - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USER" --password-stdin
+
+build-amd64:
+  stage: build
+  tags:
+    - amd64
+  rules:
+    - when: manual
+      allow_failure: true
+  script:
+    - docker/build --all --push
+
+build-arm64:
+  stage: build
+  tags:
+    - arm64
+  script:
+    - docker/build --all --push
+
+# Each build job already merges whatever arch tags exist when it
+# finishes, but build jobs can race; this job runs after the build stage
+# and guarantees every canonical tag points at a manifest containing all
+# arch tags present on Docker Hub.
+stitch-manifests:
+  stage: manifest
+  tags:
+    - arm64
+  script:
+    - docker/build --manifest-only
