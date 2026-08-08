@@ -18,11 +18,8 @@
 #   arm64 -- cl-arm64-build-1-genworks (Mac mini M1 "sevam", docker
 #            executor against the colima socket, instance runner #44,
 #            tag "arm64").
-#   amd64 -- balaram (shell executor; build-amd64 is manual +
-#            allow_failure until that runner carries tag "amd64" -- then
-#            delete the "rules:" block.  The stitch step merges whatever
-#            arch tags exist on Docker Hub, so canonical tags keep their
-#            amd64 leg from manual pushes in the interim).
+#   amd64 -- balaram (shell executor, tag "amd64"; leg proven green
+#            2026-08-08, job 16201 build phase).
 #
 # Required CI/CD variables (Settings -> CI/CD -> Variables):
 #   DOCKERHUB_USER  -- Docker Hub account with push rights to gornskew/*
@@ -52,9 +49,6 @@ build-amd64:
   stage: build
   tags:
     - amd64
-  rules:
-    - when: manual
-      allow_failure: true
   script:
     - docker/build --all --push --skip-manifests
 
