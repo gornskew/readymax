@@ -591,3 +591,55 @@ GDL uses `with-lhtml-string` for HTML generation. Two syntaxes exist:
 ```
 
 Use the native format for new code in tw-site-2025 and similar projects.
+
+## Lessons Learned (2026-08-07 Session)
+
+### NEVER find-file-noselect Project Source Files from Batch Evals
+Opening a source file (e.g. `.gdl`) via `find-file-noselect` in an
+emacsclient eval can fire mode hooks that prompt in the minibuffer
+(slime-connect and friends) — the daemon blocks on the read and ALL
+lisply/emacsclient traffic goes dark.  For read-only checks use
+`(with-temp-buffer (insert-file-contents "/path") ...)` — no hooks run.
+Balanced-parens check without visiting:
+```elisp
+(with-temp-buffer
+  (insert-file-contents "/path/file.lisp")
+  (with-syntax-table lisp-mode-syntax-table (check-parens)))
+```
+Recovery when the daemon does block and no stuck child shows in
+`ps -ef --forest`: `docker restart skewed-emacs` self-heals in ~20 s
+(then restart any emacs-managed watcher processes).  Do NOT send
+SIGUSR2 + pkill of clients — that combination killed the daemon once.
+Full-stack restarts go through `./compose-dev down && ./compose-dev up`
+(use `up --daemon` from scripts to skip the interactive shell exec).
+
+### webshot: Headless-Chromium Page Captures (gui images 2026-08-07+)
+`webshot URL [out.png] [WxH] [extra chromium flags]` is baked into the
+gui/full images (source: `docker/webshot`).  8-second virtual-time
+budget lets x3dom/ajax settle; WebGL renders via SwiftShader, so 3D
+viewports appear in captures.  For vhost-scoped pages, resolve the
+virtual host inside chromium:
+```bash
+webshot "http://genworks.localhost/demo/staircase" /tmp/s.png 1440x2200 \
+  --host-resolver-rules="MAP genworks.localhost cyclops"
+```
+Host-side agents export binaries without `docker cp` via:
+`docker exec skewed-emacs base64 /tmp/s.png | base64 -d > local.png`.
+
+### Long-Running Dev Processes as Emacs-Managed Processes
+Watchers (e.g. the tailwind CSS watcher) run as async emacs processes —
+visible to the user, no event-loop blocking:
+```elisp
+(start-process "tailwind-demos-watch" "*tailwind-demos-watch*"
+               "sh" "-c" "cd /projects/apps/tailwind && exec npm run dev:demos")
+```
+They die with the daemon/container — restart them after any restart.
+Node/npm live ONLY in the skewed-emacs container, never in gendl/gdl
+containers (those consume compiled artifacts from /projects).
+
+### Git Commits from Inside the Container
+No git identity or ssh keys exist in the container.  Commit with
+explicit identity flags; pushes must happen on the host:
+```bash
+git -c user.name="..." -c user.email="..." commit -m "..."
+```
