@@ -3,7 +3,7 @@
 #   common-runtime-base (ttyd, Node.js, lisply-mcp) - shared foundation
 #   ├── runtime-base (+ emacs-nox)        → Tag: lite
 #   │   └── runtime-aituis                → Tags: -aituis, -tui
-#   └── runtime-gui-base (+ emacs-gtk + fonts)
+#   └── runtime-gui-base (+ emacs-gtk + fonts + headless chromium)
 #       └── runtime-gui                   → Tag: -gui
 #           └── runtime-gui-aituis        → Tags: -gui-aituis, full, latest
 
@@ -345,7 +345,8 @@ FROM common-runtime-base AS runtime-gui-base
 
 USER root
 
-# Install GUI-specific packages (emacs-gtk, fonts, PDF support)
+# Install GUI-specific packages (emacs-gtk, fonts, PDF support,
+# headless chromium for page screenshots -- see docker/webshot)
 RUN set -euxo pipefail; \
    apt-get update; \
    apt-get install -y --no-install-recommends \
@@ -354,12 +355,18 @@ RUN set -euxo pipefail; \
      fontconfig \
      fonts-noto fonts-noto-color-emoji fonts-noto-mono \
      fonts-font-awesome fonts-symbola fonts-powerline \
+     fonts-liberation \
+     chromium \
    ; \
    rm -rf /var/lib/apt/lists/*
 
 # Copy GUI-specific artifacts (Nerd Fonts)
 COPY --from=builder /usr/share/fonts/truetype/nerd-fonts /usr/share/fonts/truetype/nerd-fonts
 RUN fc-cache -fv
+
+# Screenshot helper for headless chromium
+COPY docker/webshot /usr/local/bin/webshot
+RUN chmod +x /usr/local/bin/webshot
 
 USER emacs-user
 

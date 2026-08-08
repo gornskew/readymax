@@ -1,0 +1,14 @@
+#!/bin/bash
+# webshot -- headless-chromium page screenshot, for agent styling loops.
+# usage: webshot URL [OUTPUT.png] [WIDTHxHEIGHT] [extra chromium flags...]
+#   webshot http://gendl-ccl:9080/demo/staircase /tmp/stair.png 1440x900
+# --virtual-time-budget lets page JS (x3dom, ajax) settle before capture.
+set -euo pipefail
+url="${1:?usage: webshot URL [out.png] [WxH] [extra chromium flags...]}"
+out="${2:-/tmp/webshot.png}"
+size="${3:-1440x900}"
+shift $(( $# > 3 ? 3 : $# ))
+chromium --headless=new --no-sandbox --hide-scrollbars \
+  --window-size="${size/x/,}" --screenshot="$out" \
+  --virtual-time-budget=8000 "$@" "$url" >/dev/null 2>&1
+echo "$out"
