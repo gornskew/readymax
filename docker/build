@@ -18,6 +18,7 @@ PLATFORMS=""
 CLI_SET_PUSH=""
 CLI_SET_BUILD_INDEX="true"
 MANIFEST_ONLY="false"
+SKIP_MANIFESTS="false"
 
 # -----------------------------
 # Help
@@ -59,6 +60,7 @@ Multi-arch:
   --multi-arch          shorthand for --platforms=linux/amd64,linux/arm64
   --platforms=PLATFORMS explicit platforms for buildx (implies --push)
   --manifest-only       skip builds; merge existing arch-suffixed tags into canonical manifests
+  --skip-manifests      build/push only; do not update canonical multi-arch manifests
 
 EOF
 }
@@ -80,6 +82,7 @@ while [[ $# -gt 0 ]]; do
     --multi-arch) PLATFORMS="linux/amd64,linux/arm64"; shift ;;
     --platforms=*) PLATFORMS="${1#*=}"; shift ;;
     --manifest-only) MANIFEST_ONLY="true"; shift ;;
+    --skip-manifests) SKIP_MANIFESTS="true"; shift ;;
     --with-search-index) CLI_SET_BUILD_INDEX="true"; shift ;;
     --no-search-index) CLI_SET_BUILD_INDEX="false"; shift ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -453,7 +456,11 @@ if [[ "$USE_BUILDX" == "single" ]]; then
 fi
 
 extract_generated_configs
-update_multi_arch_manifests
+if [[ "$SKIP_MANIFESTS" == "true" ]]; then
+  echo "Skipping multi-arch manifest update (--skip-manifests)"
+else
+  update_multi_arch_manifests
+fi
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"

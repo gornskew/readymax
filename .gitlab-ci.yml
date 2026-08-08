@@ -3,23 +3,26 @@
 #
 # Native per-arch builds -- no QEMU emulation (see the exec-format-error
 # saga on narad, docker/CI.md).  Each architecture builds on its own
-# runner and pushes arch-suffixed tags (e.g. devo-full-arm64); a final
-# job stitches the canonical multi-arch tags (devo-full, devo, latest).
-# Same flow docker/build implements for manual runs, run per-arch.
+# runner and pushes arch-suffixed tags (e.g. devo-full-arm64); the
+# stitch job then merges them into the canonical multi-arch tags
+# (devo-full, devo, latest).
+#
+# Build jobs pass --skip-manifests so the manifest merge happens exactly
+# once per pipeline (in stitch-manifests).  Docker Hub rate-limits are
+# real and shared (200/hr for the gornskew account, 100/hr anonymous per
+# source IP -- and the whole site NATs through one IP): the 2026-08-08
+# pilot died at 429 Too Many Requests because every build job ran the
+# full 8-tag manifest merge and then the stitch job ran it again.
 #
 # Runners (gitlab.genworks.com):
 #   arm64 -- cl-arm64-build-1-genworks (Mac mini M1 "sevam", docker
 #            executor against the colima socket, instance runner #44,
-#            tag "arm64").  Mirrors the proven cl-docker-images setup:
-#            job runs in a docker CLI image with the VM docker socket
-#            mounted.
-#   amd64 -- balaram (shell executor; registration pending -- build-amd64
-#            is manual + allow_failure until that runner exists, so the
-#            arm64 leg can go green on its own.  Flip to automatic by
-#            deleting the "rules:" block once balaram carries tag
-#            "amd64").  The stitch step merges whatever arch tags exist
-#            on Docker Hub, so canonical tags keep their amd64 leg from
-#            manual pushes in the interim.
+#            tag "arm64").
+#   amd64 -- balaram (shell executor; build-amd64 is manual +
+#            allow_failure until that runner carries tag "amd64" -- then
+#            delete the "rules:" block.  The stitch step merges whatever
+#            arch tags exist on Docker Hub, so canonical tags keep their
+#            amd64 leg from manual pushes in the interim).
 #
 # Required CI/CD variables (Settings -> CI/CD -> Variables):
 #   DOCKERHUB_USER  -- Docker Hub account with push rights to gornskew/*
@@ -53,19 +56,18 @@ build-amd64:
     - when: manual
       allow_failure: true
   script:
-    - docker/build --all --push
+    - docker/build --all --push --skip-manifests
 
 build-arm64:
   stage: build
   tags:
     - arm64
   script:
-    - docker/build --all --push
+    - docker/build --all --push --skip-manifests
 
-# Each build job already merges whatever arch tags exist when it
-# finishes, but build jobs can race; this job runs after the build stage
-# and guarantees every canonical tag points at a manifest containing all
-# arch tags present on Docker Hub.
+# The single manifest pass per pipeline: merges the arch-suffixed tags
+# pushed by the build jobs (plus any pre-existing ones on Docker Hub)
+# into the canonical multi-arch tags.
 stitch-manifests:
   stage: manifest
   tags:
