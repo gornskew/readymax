@@ -25,10 +25,10 @@ services:
     environment:
       - HTTP_PORT=7080
       - START_HTTP=true
-      - WEBTERM=${WEBTERM:-ttyd}
-      - WEBTERM_PORT=6942
-      - TERM=xterm-256color
-      - COLORTERM=truecolor
+      - 'WEBTERM=${WEBTERM:-ttyd}'
+      - 'WEBTERM_PORT=6942'
+      - 'TERM=xterm-256color'
+      - 'COLORTERM=truecolor'
       - TZ=${TZ:-Etc/UTC}
     volumes:
       - type: bind
@@ -125,9 +125,9 @@ services:
     stdin_open: true
     tty: true
     environment:
-      - AUTOHEAL_CONTAINER_LABEL=all
-      - AUTOHEAL_INTERVAL=15
-      - AUTOHEAL_START_PERIOD=60
+      - 'AUTOHEAL_CONTAINER_LABEL=all'
+      - 'AUTOHEAL_INTERVAL=15'
+      - 'AUTOHEAL_START_PERIOD=60'
       - TZ=${TZ:-Etc/UTC}
     volumes:
       - type: bind
