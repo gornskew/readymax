@@ -118,7 +118,8 @@
                           "unless-stopped")))
         
         (push (format "  %s:" name) lines)
-        (push (format "    image: %s" image) lines)
+        (when image
+          (push (format "    image: %s" image) lines))
         (push (format "    container_name: %s" name) lines)
         (push (format "    hostname: %s" name) lines)
         (when user (push (format "    user: %s" user) lines))
@@ -360,8 +361,10 @@ filters those out and keeps only top-level [mcp_servers.NAME] tables."
              (http-port (cl-find-if (lambda (p) (equal (skewed--get-prop p :name) "http")) ports))
              (swank-port (cl-find-if (lambda (p) (equal (skewed--get-prop p :name) "swank")) ports)))
         (push (format "    (:name \"%s\"" name) lines)
-        (push (format "     :type \"%s\"" type) lines)
-        (push (format "     :lisp-impl \"%s\"" (or lisp-impl "Unknown")) lines)
+        (when type
+          (push (format "     :type \"%s\"" type) lines))
+        (when lisp-impl
+          (push (format "     :lisp-impl \"%s\"" lisp-impl) lines))
         (when mcp
           (push "     :mcp t" lines))
         (when http-port

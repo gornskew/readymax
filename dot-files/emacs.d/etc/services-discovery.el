@@ -51,15 +51,29 @@
 ;;; Merge Helpers
 ;;; ============================================================================
 
+(defun skewed--plist-merge (base overlay)
+  "Return a copy of BASE with OVERLAY's keys merged in (overlay wins)."
+  (let ((result (copy-sequence base)))
+    (cl-loop for (key val) on overlay by #'cddr
+             do (setq result (plist-put result key val)))
+    result))
+
 (defun skewed--merge-services-by-name (services)
-  "Merge SERVICES by :name, preserving order and letting later entries win."
+  "Merge SERVICES by :name, preserving first-seen order.
+Later entries merge key-wise into earlier ones -- keys present in a
+later (overlay) entry win, keys it omits are inherited.  This mirrors
+docker compose multi-file merge semantics, so sparse overlay entries
+augment rather than clobber the base definition."
   (let ((table (make-hash-table :test 'equal))
         (order '()))
     (dolist (svc services)
-      (let ((name (plist-get svc :name)))
-        (unless (gethash name table)
+      (let* ((name (plist-get svc :name))
+             (existing (gethash name table)))
+        (unless existing
           (push name order))
-        (puthash name svc table)))
+        (puthash name
+                 (if existing (skewed--plist-merge existing svc) svc)
+                 table)))
     (mapcar (lambda (name) (gethash name table)) (nreverse order))))
 
 (defun skewed--generated-service-files ()
@@ -223,7 +237,7 @@ Returns list of plists with :host, :port, :name."
   "Return SWANK services for dashboard display.
 Returns list of plists with :host, :port, :name, :icon."
   (mapcar (lambda (svc)
-            (let ((impl (plist-get svc :lisp-impl)))
+            (let ((impl (or (plist-get svc :lisp-impl) "")))
               (list :host (plist-get svc :swank-host)
                     :port (plist-get svc :swank-port)
                     :name (plist-get svc :name)

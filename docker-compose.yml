@@ -57,7 +57,6 @@ services:
     image: gornskew/${GENDL_IMAGE_BASE:-gendl}:${GENDL_IMAGE_BRANCH:-devo}-ccl
     container_name: gendl-ccl
     hostname: gendl-ccl
-    user: root
     restart: unless-stopped
     stdin_open: true
     tty: true
@@ -89,7 +88,6 @@ services:
     image: gornskew/${GENDL_IMAGE_BASE:-gendl}:${GENDL_IMAGE_BRANCH:-devo}-sbcl
     container_name: gendl-sbcl
     hostname: gendl-sbcl
-    user: root
     restart: unless-stopped
     stdin_open: true
     tty: true

@@ -132,7 +132,6 @@
    :image "gornskew/${GENDL_IMAGE_BASE:-gendl}:${GENDL_IMAGE_BRANCH:-devo}-ccl"
    :ports ((:name "http" :host 19080 :container 9080)
            (:name "swank" :container 4200))
-   :user "root"
    ;;:environment (("HTTP_HOST" . "::"))
    :mcp t
    :healthcheck (:endpoint "/lisply/ping-lisp" :interval "72s"))
@@ -143,7 +142,6 @@
    :image "gornskew/${GENDL_IMAGE_BASE:-gendl}:${GENDL_IMAGE_BRANCH:-devo}-sbcl"
    :ports ((:name "http" :host 29080 :container 9090)
            (:name "swank" :container 4210))
-   :user "root"
    ;;:environment (("HTTP_HOST" . "::"))
    :mcp t
    :healthcheck (:endpoint "/lisply/ping-lisp" :interval "90s"))
