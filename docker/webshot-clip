@@ -1,0 +1,80 @@
+#!/usr/bin/env node
+// webshot-clip -- headless-chromium screenshot of a CSS-selected element,
+// for agent styling loops and hero-image capture.  Companion to webshot.
+//
+// usage: webshot-clip URL SELECTOR [OUTPUT.png] [WIDTHxHEIGHT] [PAD] [extra chromium flags...]
+//   webshot-clip http://gendl-ccl:9080/demo/staircase '#viewport' /tmp/hero.png 1440x900 12
+//
+// Captures the bounding box of the first element matching SELECTOR after
+// page JS settles.  PAD (px, default 0) expands the clip on all sides.
+// Extra args are passed to chromium (e.g. --host-resolver-rules=...).
+
+const { spawn, execSync } = require('node:child_process');
+
+const [url, selector, out = '/tmp/webshot-clip.png',
+       size = '1440x900', pad = '0', ...extra] = process.argv.slice(2);
+if (!url || !selector) {
+  console.error('usage: webshot-clip URL SELECTOR [out.png] [WxH] [pad] [chromium flags...]');
+  process.exit(1);
+}
+const [width, height] = size.split('x').map(Number);
+const padding = Number(pad);
+const port = 9222 + Math.floor(Math.random() * 500);
+
+const chrome = spawn('chromium', [
+  '--headless=new', '--no-sandbox', '--hide-scrollbars',
+  `--remote-debugging-port=${port}`, `--window-size=${width},${height}`,
+  ...extra, 'about:blank',
+], { stdio: 'ignore' });
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function cdp() {
+  let targets;
+  for (let i = 0; i < 50; i++) {
+    try {
+      targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
+      if (targets.length) break;
+    } catch { /* chromium not up yet */ }
+    await sleep(200);
+  }
+  const ws = new WebSocket(targets[0].webSocketDebuggerUrl);
+  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  let id = 0;
+  const pending = new Map();
+  const events = [];
+  ws.onmessage = (m) => {
+    const msg = JSON.parse(m.data);
+    if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
+    else if (msg.method) events.push(msg.method);
+  };
+  const send = (method, params = {}) => new Promise((res) => {
+    pending.set(++id, res);
+    ws.send(JSON.stringify({ id, method, params }));
+  });
+
+  await send('Page.enable');
+  await send('Page.navigate', { url });
+  for (let i = 0; i < 100 && !events.includes('Page.loadEventFired'); i++) await sleep(200);
+  await sleep(3000); // let x3dom / ajax settle
+
+  const { result: { result: box } } = await send('Runtime.evaluate', {
+    expression: `(() => { const el = document.querySelector(${JSON.stringify(selector)});
+                          if (!el) return null;
+                          const r = el.getBoundingClientRect();
+                          return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`,
+    returnByValue: true,
+  });
+  if (!box.value) { console.error(`selector not found: ${selector}`); process.exit(2); }
+  const { x, y, w, h } = box.value;
+  const clip = { x: Math.max(0, x - padding), y: Math.max(0, y - padding),
+                 width: w + 2 * padding, height: h + 2 * padding, scale: 1 };
+  const shot = await send('Page.captureScreenshot',
+                          { format: 'png', clip, captureBeyondViewport: true });
+  require('node:fs').writeFileSync(out, Buffer.from(shot.result.data, 'base64'));
+  console.log(out);
+  ws.close();
+}
+
+cdp().catch((e) => { console.error(e.message); process.exit(3); })
+     .finally(() => { try { chrome.kill(); } catch {} });

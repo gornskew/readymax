@@ -366,7 +366,8 @@ RUN fc-cache -fv
 
 # Screenshot helper for headless chromium
 COPY docker/webshot /usr/local/bin/webshot
-RUN chmod +x /usr/local/bin/webshot
+COPY docker/webshot-clip /usr/local/bin/webshot-clip
+RUN chmod +x /usr/local/bin/webshot /usr/local/bin/webshot-clip
 
 USER emacs-user
 
