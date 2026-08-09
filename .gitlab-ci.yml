@@ -56,6 +56,13 @@ build-arm64:
   stage: build
   tags:
     - arm64
+  before_script:
+    # Same as stitch-manifests: this runs on the arm64 runner (the mini),
+    # which has no persistent docker login, so unauthenticated pulls/HEADs
+    # of gornskew/skewed-emacs manifests hit Docker Hub's anonymous cap
+    # (429).  Authenticate first (DOCKERHUB_TOKEN is unprotected+masked,
+    # reaches devo builds); gornskew owns the repo -> its pulls uncapped.
+    - if [ -n "$DOCKERHUB_TOKEN" ]; then echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USER" --password-stdin; fi
   script:
     - docker/build --all --push --skip-manifests
 
