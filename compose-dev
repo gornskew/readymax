@@ -341,8 +341,15 @@ start_services() {
             skewed-emacs:/home/emacs-user/skewed-emacs/mcp/ 2>/dev/null || true
     done
 
-    # Step 1b: Copy overlay services-generated Emacs files
-    for _overlay in "${SCRIPT_DIR}/dot-files/emacs.d/etc/"*-services-generated.el; do
+    # Step 1b: Copy overlay services-generated Emacs files, PLUS
+    # services-discovery.el -- the discovery/merge logic and the
+    # generated files are a matched pair (sparse overlay entries rely
+    # on key-wise merging in discovery).  Syncing one without the
+    # other skews them when the running image predates a discovery
+    # change (bit us 2026-08-09: gendl-ccl vanished from the dashboard
+    # Swank list on a stale image + fresh sparse overlay).
+    for _overlay in "${SCRIPT_DIR}/dot-files/emacs.d/etc/"*-services-generated.el \
+                    "${SCRIPT_DIR}/dot-files/emacs.d/etc/services-discovery.el"; do
         [ -f "$_overlay" ] || continue
         log_info "Copying overlay: $(basename "$_overlay")"
         run_compose cp "$_overlay" \
