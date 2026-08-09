@@ -334,6 +334,16 @@ if [ -n "$BASH_VERSION" ]; then
             . "$HOME/.bashrc"
             export DOT_BASHRC_LOADED=1
         fi
+
+        # .bashrc's `dircolors -b` restores the stock (dim blue di=01;34)
+        # LS_COLORS, and it runs AFTER the login-time `theme` call above --
+        # clobbering the theme's directory/link colors, so the first
+        # `ls` after attach is low-contrast until you re-run `theme`.
+        # Re-apply the theme's dircolors last, so the chosen theme wins
+        # on first attach.
+        if [[ $- == *i* ]] && type set_dircolors_theme >/dev/null 2>&1; then
+            set_dircolors_theme "${THEME:-dark}"
+        fi
     fi
 fi
 
