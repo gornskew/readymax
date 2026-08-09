@@ -54,7 +54,7 @@ services:
       start_period: 15s
 
   gendl-ccl:
-    image: genworks/${GENDL_IMAGE_BASE:-gendl}:${GENDL_IMAGE_BRANCH:-devo}-ccl
+    image: gornskew/${GENDL_IMAGE_BASE:-gendl}:${GENDL_IMAGE_BRANCH:-devo}-ccl
     container_name: gendl-ccl
     hostname: gendl-ccl
     user: root
@@ -86,7 +86,7 @@ services:
       start_period: 15s
 
   gendl-sbcl:
-    image: genworks/${GENDL_IMAGE_BASE:-gendl}:${GENDL_IMAGE_BRANCH:-devo}-sbcl
+    image: gornskew/${GENDL_IMAGE_BASE:-gendl}:${GENDL_IMAGE_BRANCH:-devo}-sbcl
     container_name: gendl-sbcl
     hostname: gendl-sbcl
     user: root

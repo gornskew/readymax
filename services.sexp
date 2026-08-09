@@ -129,7 +129,7 @@
   (:name "gendl-ccl"
    :type "common-lisp"
    :lisp-impl "CCL"
-   :image "genworks/${GENDL_IMAGE_BASE:-gendl}:${GENDL_IMAGE_BRANCH:-devo}-ccl"
+   :image "gornskew/${GENDL_IMAGE_BASE:-gendl}:${GENDL_IMAGE_BRANCH:-devo}-ccl"
    :ports ((:name "http" :host 19080 :container 9080)
            (:name "swank" :container 4200))
    :user "root"
@@ -140,7 +140,7 @@
   (:name "gendl-sbcl"
    :type "common-lisp"
    :lisp-impl "SBCL"
-   :image "genworks/${GENDL_IMAGE_BASE:-gendl}:${GENDL_IMAGE_BRANCH:-devo}-sbcl"
+   :image "gornskew/${GENDL_IMAGE_BASE:-gendl}:${GENDL_IMAGE_BRANCH:-devo}-sbcl"
    :ports ((:name "http" :host 29080 :container 9090)
            (:name "swank" :container 4210))
    :user "root"
