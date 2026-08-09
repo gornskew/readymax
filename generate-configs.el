@@ -113,6 +113,7 @@
              (extra-hosts (skewed--get-prop svc :extra-hosts))
              (group-add (skewed--get-prop svc :group-add))
              (healthcheck (skewed--get-prop svc :healthcheck))
+             (env-file (skewed--get-prop svc :env-file))
              (restart (or (skewed--get-prop svc :restart)
                           (skewed--get-prop defaults :restart)
                           "unless-stopped")))
@@ -165,6 +166,20 @@
                                                   (format "%s" (cdr env-pair))))
                 lines))
         (push (format "      - TZ=%s" (or (skewed--get-prop defaults :timezone) "${TZ:-Etc/UTC}")) lines)
+
+        ;; env_file (long-form, required:false) -- lets a service read
+        ;; secrets from an uncommitted per-host file without breaking
+        ;; startup when the file is absent (default-secure).  Each spec is
+        ;; a string PATH (required) or a plist (:path P :required BOOL).
+        (when env-file
+          (push "    env_file:" lines)
+          (dolist (spec (cond ((stringp env-file) (list env-file))
+                              ((keywordp (car env-file)) (list env-file))
+                              (t env-file)))
+            (let ((path (if (stringp spec) spec (skewed--get-prop spec :path)))
+                  (required (if (stringp spec) t (skewed--get-prop spec :required))))
+              (push (format "      - path: %s" path) lines)
+              (push (format "        required: %s" (if required "true" "false")) lines))))
         
         ;; Volumes
         (let ((default-vols (skewed--get-prop defaults :volumes))
