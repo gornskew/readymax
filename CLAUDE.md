@@ -634,6 +634,29 @@ webshot "http://genworks.localhost/demo/staircase" /tmp/s.png 1440x2200 \
 Host-side agents export binaries without `docker cp` via:
 `docker exec skewed-emacs base64 /tmp/s.png | base64 -d > local.png`.
 
+`webshot-clip URL SELECTOR [out.png] [WxH] [pad] [extra chromium flags]`
+(source: `docker/webshot-clip`; node + Chrome DevTools Protocol, no
+puppeteer) captures just the first element matching a CSS selector --
+hero images, a single card, a viewport region -- using
+captureBeyondViewport so below-the-fold elements render fully.  PAD
+(px) expands the clip on all sides.  Same `--host-resolver-rules`
+vhost flag as webshot.  Example (2026-08-09, used for the tw-site-2025
+demo hero images):
+```bash
+webshot-clip "http://genworks.localhost/demo/staircase" ".p-6.relative" \
+  /tmp/hero.png 1440x900 0 --host-resolver-rules="MAP genworks.localhost cyclops"
+```
+
+These chromium tools are framework-agnostic -- they snapshot ANY web
+page under development, not only Gendl/GDL-powered ones.  For
+Gendl/GDL GEOMETRY itself the lisply backends additionally carry
+native emitters (inline `render_png` MCP tool; standalone drawing
+system and `with-format` lenses emitting PDF/PNG/JPEG/SVG/DXF files at
+runtime, no browser involved) -- see "Geometry & Image Output
+Channels" in gendl/CLAUDE.md (gendl-ccl doc id `claude-gendl-md`).
+Keep both channels in mind: chromium for web-app UI iteration, native
+emitters for model iteration and runtime file deliverables.
+
 ### Long-Running Dev Processes as Emacs-Managed Processes
 Watchers (e.g. the tailwind CSS watcher) run as async emacs processes —
 visible to the user, no event-loop blocking:
