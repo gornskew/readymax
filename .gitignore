@@ -52,6 +52,7 @@ dot-files/emacs.d/network-security.data
 dot-files/emacs.d/org-clock-save.el
 dot-files/emacs.d/places
 dot-files/emacs.d/projectile-bookmarks.eld
+dot-files/emacs.d/projectile-frecency.eld
 dot-files/emacs.d/recentf
 
 # ==============================================================================
