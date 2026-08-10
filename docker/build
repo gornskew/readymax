@@ -354,9 +354,13 @@ update_multi_arch_manifests() {
       fi
     done
 
-    # If multi-arch buildx already pushed canonical directly, include it too
-    if docker buildx imagetools inspect "${IMAGE_NAME}:${base}" >/dev/null 2>&1; then
-      sources+=("${IMAGE_NAME}:${base}")
+    # Do NOT include the canonical tag itself as a source: imagetools
+    # create flattens source indexes, so self-inclusion re-appends every
+    # historical manifest on each push. If no arch-suffixed sources
+    # exist (multi-arch buildx pushed the canonical tag directly), the
+    # existing manifest is already correct -- leave it untouched.
+    if [[ ${#sources[@]} -eq 0 ]]; then
+      continue
     fi
 
     if [[ ${#sources[@]} -gt 0 ]]; then
