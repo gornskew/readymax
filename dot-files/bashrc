@@ -129,3 +129,11 @@ fi
 
 # Source local environment if it exists
 [ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
+
+# Re-apply the skewed theme in nested interactive shells: the dircolors
+# call above clobbers themed LS_COLORS, and .bash_profile (which would
+# restore it) is skipped when DOT_BASH_PROFILE_LOADED is inherited.
+# theme() is export -f'd from bash_profile, so it exists even here.
+if [[ $- == *i* ]] && type theme >/dev/null 2>&1; then
+    theme "${THEME:-dark}" 1
+fi

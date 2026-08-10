@@ -101,8 +101,19 @@ LINK 38;2;255;215;0"
 theme() {
     local theme="${1:-dark}"
     local quiet=${2:-0}
-    set_prompt_theme "$theme"
+    if [ "$theme" = "auto" ]; then
+        rm -f "$HOME/.config/skewed-theme"
+        unset THEME
+        SKEWED_THEME_NO_STICKY=1 theme "$(detect_theme)" "$quiet"
+        return
+    fi
+    set_prompt_theme "$theme" || return 1
     set_dircolors_theme "$theme"
+    export THEME="$theme"
+    if [ "$quiet" -eq 0 ] && [ -z "$SKEWED_THEME_NO_STICKY" ]; then
+        mkdir -p "$HOME/.config"
+        echo "$theme" > "$HOME/.config/skewed-theme"
+    fi
     alias ls='ls --color=auto'
     alias grep='grep --color=auto'
     alias fgrep='fgrep --color=auto'
@@ -123,7 +134,32 @@ theme_help() {
     echo "  theme light    - Switch to light theme"
     echo "  theme solarized - Switch to solarized theme"
     echo "  theme custom   - Switch to custom theme"
+    echo "  theme auto     - Follow Windows light/dark mode (clears sticky choice)"
+    echo ""
+    echo "Manual picks stick across new tabs via ~/.config/skewed-theme;"
+    echo "'theme auto' deletes that file and follows the OS setting."
 }
+
+# Resolve which theme to apply at login: explicit $THEME wins, then the
+# sticky choice saved by an interactive theme command, then the Windows
+# app light/dark mode (via reg.exe when running under WSL), else dark.
+detect_theme() {
+    if [ -n "$THEME" ]; then echo "$THEME"; return; fi
+    if [ -r "$HOME/.config/skewed-theme" ]; then cat "$HOME/.config/skewed-theme"; return; fi
+    local reg=/mnt/c/Windows/System32/reg.exe
+    if [ -x "$reg" ]; then
+        case "$("$reg" query 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' /v AppsUseLightTheme 2>/dev/null)" in
+            *0x1*) echo light; return ;;
+            *0x0*) echo dark; return ;;
+        esac
+    fi
+    echo dark
+}
+
+# Nested interactive shells re-source .bashrc (whose dircolors call
+# clobbers themed LS_COLORS) without re-reading this file; exporting the
+# functions lets a .bashrc tail hook re-apply the theme there.
+export -f set_prompt_theme set_dircolors_theme theme theme_help detect_theme
 
 # Interactive shell setup add conditional for setting theme and
 # printing Welcome message - welcome message should be printed only
@@ -133,7 +169,7 @@ theme_help() {
 
 if [[ $- == *i* && -z "$DOT_BASH_PROFILE_WELCOME" ]]; then
     # Apply default theme quietly
-    theme "${THEME:-dark}" 1
+    theme "$(detect_theme)" 1
     # Show welcome message
     echo ""
     echo "Welcome to the 🦖 Skewed Emacs 🦖  Bash Setup"
@@ -141,7 +177,7 @@ if [[ $- == *i* && -z "$DOT_BASH_PROFILE_WELCOME" ]]; then
     printf "%b\n" "\`e\` ${BLUE}for a terminal emacsclient, or${NC}"
     printf "%b\n\n" "\`egui\` ${BLUE}for a graphical one.${NC}"
     echo ""
-    echo "Terminal colors: 'theme dark|light|solarized|custom'"
+    echo "Terminal colors: 'theme dark|light|solarized|custom|auto'"
     echo ""
     echo "Try 'claudly', 'geminly', 'codexly', 'grokly' to launch those agents."
     echo ""
