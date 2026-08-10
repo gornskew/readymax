@@ -77,3 +77,34 @@ against the host.
 - lisply-mcp revision lookup in docker/build curls api.github.com
   unauthenticated (60 req/hr/IP) -- fine at current build volume; pass a
   token if it ever starts rate-limiting.
+
+## Runner disk maintenance (added 2026-08-10)
+
+The 2026-08-10 arm64 build failure ("No space left on device,
+/tmp/babel-" during the emacs-daemon settle step) was sevam's colima
+VM at 89%: 45G of orphaned containerd data (namespace moby, content +
+overlayfs snapshots) left behind by an earlier containerd-snapshotter
+experiment.  That data is invisible to every `docker system df/prune`
+-- if VM df and `docker system df` disagree wildly, look in
+/var/lib/containerd (bind of /mnt/lima-colima/containerd).
+
+Guards now in place:
+- colima.yaml on sevam: `docker.builder.gc` enabled with
+  defaultKeepStorage 25GB (build cache self-trims).
+- .gitlab-ci.yml default after_script: `docker image prune -f`
+  (dangling-only) -- tags move every build, so the previous build's
+  ~4GB of layers go dangling each run.
+- .gitlab-ci.yml default before_script prints `df -h` and
+  `docker system df` so disk state heads every job log.
+
+One-off cleanup recipe (services stopped, VM idle):
+```bash
+colima ssh -- sudo systemctl stop docker docker.socket containerd
+colima ssh -- sudo rm -rf /var/lib/containerd/io.containerd.content.v1.content \
+  /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs \
+  /var/lib/containerd/io.containerd.metadata.v1.bolt
+colima ssh -- sudo systemctl start containerd docker
+```
+Gotcha: `colima ssh` consumes stdin -- in scripts fed to a shell via
+stdin, every command after the first `colima ssh` line silently
+disappears.  Chain commands as ssh arguments instead.

@@ -44,6 +44,17 @@ default:
     # Shell-executor runners have no apk (and already have bash/curl).
     - if command -v apk >/dev/null; then apk add --no-cache bash curl; fi
     - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USER" --password-stdin
+    # Disk state at the top of every job log: disk-full on a runner
+    # otherwise surfaces as cryptic mid-build errors (2026-08-10,
+    # sevam colima VM at 89%).
+    - df -h || true
+    - docker system df || true
+  after_script:
+    # Tags move every build, so the previous build's layers go
+    # dangling each run; without this they accumulate ~4GB/build.
+    # Dangling-only (no -a): current layers and base images stay
+    # cached, build speed unaffected.
+    - docker image prune -f || true
 
 build-amd64:
   stage: build
@@ -60,8 +71,7 @@ build-arm64:
     - docker/build --all --push --skip-manifests
 
 # The single manifest pass per pipeline: merges the arch-suffixed tags
-# pushed by the build jobs (plus any pre-existing ones on Docker Hub)
-# into the canonical multi-arch tags.
+# pushed by the build jobs into the canonical multi-arch tags.
 stitch-manifests:
   stage: manifest
   tags:
