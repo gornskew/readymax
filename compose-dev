@@ -271,9 +271,16 @@ SERVICES:
     Services are defined in docker-compose.yml and any other .yml files
     in this directory (generated from services.sexp, the editable SSoT).
 
+VARIANT SWITCHES (skewed-emacs image; anywhere on the command line):
+    --lite | --default | --tui | --gui | --full
+    Set EMACS_IMAGE_VARIANT for this invocation (default: full for the
+    dev stack).  E.g. '$0 up --default' spins up the slim
+    snapshotting image; '$0 pull --full' pulls the kitchen sink.
+
 EXAMPLES:
     $0 up                    # Start all services
     $0 up --pull             # Start all services and pull latest images
+    $0 up --default          # Start with the slim default emacs image
     $0 up <service>          # Start only one service
     $0 up --pull <service>   # Start one service and pull latest image
     $0 logs <service>        # Show service logs
@@ -726,6 +733,40 @@ show_skew_welcome() {
 # MAIN
 # =============================================================================
 main() {
+    # Variant switches: pick the skewed-emacs image variant for this
+    # invocation (same names as docker/build targets).  They set
+    # EMACS_IMAGE_VARIANT, which the compose image tag interpolates;
+    # a shell-exported value wins over .env.  Works with any command
+    # that touches images (up, pull, restart, config, ...).
+    _remaining=""
+    for _arg in "$@"; do
+        case "$_arg" in
+            --lite)              EMACS_IMAGE_VARIANT=lite ;;
+            --default)           EMACS_IMAGE_VARIANT=default ;;
+            --tui|--aituis)      EMACS_IMAGE_VARIANT=tui ;;
+            --gui)               EMACS_IMAGE_VARIANT=gui ;;
+            --full|--gui-aituis) EMACS_IMAGE_VARIANT=full ;;
+            *) _remaining="${_remaining:+$_remaining
+}$_arg" ;;
+        esac
+    done
+    if [ -n "${EMACS_IMAGE_VARIANT:-}" ]; then
+        export EMACS_IMAGE_VARIANT
+        log_info "skewed-emacs image variant: ${EMACS_IMAGE_VARIANT}"
+    fi
+    # Rebuild positional args minus the variant switches (newline
+    # delimiter so service names with spaces would still be wrong, but
+    # compose service names cannot contain spaces).
+    if [ -n "$_remaining" ]; then
+        _old_ifs=$IFS; IFS='
+'
+        # shellcheck disable=SC2086
+        set -- $_remaining
+        IFS=$_old_ifs
+    else
+        set --
+    fi
+
     case "${1:-help}" in
         help|--help|-h) ;;
         *) preflight_checks || exit 1 ;;

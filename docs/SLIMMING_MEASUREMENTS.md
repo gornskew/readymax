@@ -54,8 +54,10 @@ Interactive mode -- the x3dom airfoil renders.  Probe:
 ## Implications for the variant tree (per Dave 2026-08-11 direction)
 
 - Primary split: GUI vs non-GUI.  GUI branch (emacs-gtk = full X
-  workstation) stays, CI-built for proof + footprint tracking, rarely
-  the default anyone pulls.
+  workstation) stays as a first-class, ready-to-spin-up graphical
+  workstation image -- CI builds it every pipeline (which also proves
+  the build and tracks the footprint), it's just no longer what the
+  canonical tags point at.
 - Snapshotting (webshot) outranks AUI TUIs in the default image;
   chrome-headless-shell gets it into the NON-GUI branch for ~610MB
   instead of pulling Debian chromium's 1.1GB closure.
