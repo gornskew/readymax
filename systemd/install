@@ -28,7 +28,27 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 #             sh systemd/install
 TEMPLATE="${TEMPLATE:-${SCRIPT_DIR}/skewed-emacs.service}"
 SERVICE_NAME="skewed-emacs"
-SYSTEMD_DIR="/etc/systemd/system"
+SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
+
+# ---- Stack-vs-factory clash guard -------------------------------------------
+# A unit carrying an EMACS_IMAGE_VARIANT pin was installed by a *-stack
+# repo (host-specific IaC).  Installing the unpinned factory template
+# over it would silently drop the host's variant pin -- refuse unless
+# forced.  Stack-template installs (pinned templates) may always
+# replace: that takeover is the intended direction.
+EXISTING_UNIT="${SYSTEMD_DIR}/${SERVICE_NAME}.service"
+if [ -f "${EXISTING_UNIT}" ] \
+   && grep -q "EMACS_IMAGE_VARIANT" "${EXISTING_UNIT}" \
+   && ! grep -q "EMACS_IMAGE_VARIANT" "${TEMPLATE}" \
+   && [ -z "${SKEWED_VARIANT:-}" ] \
+   && [ "${FORCE:-0}" != "1" ]; then
+    existing_pin=$(sed -n 's/^Environment=EMACS_IMAGE_VARIANT=//p' "${EXISTING_UNIT}" | head -1)
+    echo "ERROR: ${EXISTING_UNIT} is a stack-installed unit (variant pin: ${existing_pin:-unknown})."
+    echo "       Installing the factory template would drop this host's pin."
+    echo "       Use the stack repo's installer instead:  sh <host>-stack/systemd/install"
+    echo "       Or override deliberately:  FORCE=1 sh systemd/install"
+    exit 1
+fi
 
 # Optional image-variant pin for the factory template (stack templates
 # carry their own pin; SKEWED_VARIANT is refused there to avoid two
