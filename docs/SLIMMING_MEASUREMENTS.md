@@ -85,7 +85,20 @@ dot-files is itself ~77MB source + native-comp artifacts.)  Verified
 in the built image: emacs daemon + lisply HTTP up, webshot renders the
 naca-nurbs x3dom viewport through cyclops via chrome-headless-shell,
 `skewed-install claude-code` installs a working claude 2.1.227 and
-removes cleanly.  Compressed download size: read off Docker Hub after
-the first CI push.
+removes cleanly.
+
+CI-pushed compressed sizes (Docker Hub, amd64, first post-restructure
+pipeline 2026-08-11):
+
+| Tag | Download | vs old default (977MB) |
+|---|---|---|
+| devo-lite | 260MB | 27% |
+| **devo-default (= devo, latest)** | **482MB** | **49%** |
+| devo-gui | 604MB | 62% |
+| devo-aituis | 825MB | 84% |
+| devo-gui-aituis (= devo-full) | 947MB | 97% (dedup savings) |
+
+Both headline numbers halved: 3.72GB → 1.87GB on disk, 977MB → 482MB
+download.
 - zstd layer compression (separate projects.org item) folds into the
   same build pass: pull time on small nodes is unpack-bound.
