@@ -401,6 +401,10 @@ start_services() {
     fi
 
     refresh_emacs_runtime_config
+
+    # Catch alive-but-dead startups (CCL ASLR "exception 11" hangs
+    # etc.) before declaring the stack up; restarts flunkers.
+    verify_service_health
 }
 
 stop_services() {
@@ -411,6 +415,94 @@ stop_services() {
 restart_services() {
     log_info "Restarting services: ${*:-all}"
     run_compose restart "$@"
+    verify_service_health
+}
+
+# =============================================================================
+# POST-UP HEALTH WATCHDOG
+#
+# CCL occasionally loses its ASLR dice roll at startup ("exception 11"
+# in the kernel debugger): the process does not exit -- it hangs -- so
+# `restart: unless-stopped` never fires and the container sits there
+# "running" while its healthcheck flunks (observed on balaram
+# 2026-08-11: all gendl-ccl-served sites 404'd through cyclops).
+# autoheal (base compose, since 2026-07-26) restarts unhealthy
+# containers continuously, but a hang at `up` time deserves immediate
+# detection, an immediate restart, and a loud report right here at the
+# console.  This applies to any container with a healthcheck: a
+# restart re-rolls the dice, so a couple of retries normally clears
+# transient startup wedges.
+#
+# Tunables (env): HEALTH_WAIT_SECS (default 180) overall deadline;
+# HEALTH_MAX_RESTARTS (default 2) per-container restart budget.
+# =============================================================================
+verify_service_health() {
+    _vh_deadline="${HEALTH_WAIT_SECS:-180}"
+    _vh_budget="${HEALTH_MAX_RESTARTS:-2}"
+    _vh_ids="$(run_compose ps -q 2>/dev/null)"
+    [ -n "$_vh_ids" ] || return 0
+
+    # Containers that define a healthcheck, as "name" per line.
+    _vh_watched=""
+    for _vh_id in $_vh_ids; do
+        _vh_line="$(docker inspect --format \
+            '{{.Name}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+            "$_vh_id" 2>/dev/null)" || continue
+        case "$_vh_line" in
+            *" none") ;;
+            *) _vh_name="${_vh_line%% *}"
+               _vh_watched="${_vh_watched:+$_vh_watched
+}${_vh_name#/}" ;;
+        esac
+    done
+    [ -n "$_vh_watched" ] || return 0
+
+    log_info "Waiting up to ${_vh_deadline}s for health: $(printf '%s' "$_vh_watched" | tr '\n' ' ')"
+
+    _vh_elapsed=0
+    while :; do
+        _vh_pending=""
+        for _vh_name in $_vh_watched; do
+            _vh_status="$(docker inspect --format \
+                '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+                "$_vh_name" 2>/dev/null)" || _vh_status="missing"
+            case "$_vh_status" in
+                healthy|none) ;;
+                unhealthy)
+                    # Per-container restart counter without arrays:
+                    # sanitized name -> shell variable via eval.
+                    _vh_var="_vh_rc_$(printf '%s' "$_vh_name" | tr -c 'a-zA-Z0-9' '_')"
+                    eval "_vh_count=\${${_vh_var}:-0}"
+                    if [ "$_vh_count" -lt "$_vh_budget" ]; then
+                        eval "${_vh_var}=$((_vh_count + 1))"
+                        log_warning "${_vh_name} is unhealthy (hung startup?) -- restarting ($((_vh_count + 1))/${_vh_budget})"
+                        docker restart "$_vh_name" >/dev/null 2>&1 || \
+                            log_error "docker restart ${_vh_name} failed"
+                    fi
+                    _vh_pending="${_vh_pending} ${_vh_name}"
+                    ;;
+                *)  # starting / missing
+                    _vh_pending="${_vh_pending} ${_vh_name}"
+                    ;;
+            esac
+        done
+
+        [ -z "$_vh_pending" ] && {
+            log_success "All healthchecked services are healthy"
+            return 0
+        }
+        [ "$_vh_elapsed" -ge "$_vh_deadline" ] && break
+        sleep 5
+        _vh_elapsed=$((_vh_elapsed + 5))
+    done
+
+    log_error "Not healthy after ${_vh_deadline}s:${_vh_pending}"
+    for _vh_name in $_vh_pending; do
+        log_error "--- last log lines from ${_vh_name}:"
+        docker logs --tail 5 "$_vh_name" 2>&1 | sed 's/^/    /'
+    done
+    log_error "autoheal (if running) will keep retrying; investigate with: docker logs <name>"
+    return 1
 }
 
 show_logs() {
