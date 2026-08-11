@@ -17,7 +17,11 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TEMPLATE="${SCRIPT_DIR}/skewed-emacs.service"
+# TEMPLATE override lets stack repos install their host-specific unit
+# (variant-pinned) under the same service name, replacing any legacy
+# install:  TEMPLATE=/path/to/stack/systemd/skewed-emacs.service \
+#             sh systemd-system/deploy-systemd.sh
+TEMPLATE="${TEMPLATE:-${SCRIPT_DIR}/skewed-emacs.service}"
 SERVICE_NAME="skewed-emacs"
 SYSTEMD_DIR="/etc/systemd/system"
 

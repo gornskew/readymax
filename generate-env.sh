@@ -15,6 +15,20 @@ DOCKER_GROUP_ID=$(getent group docker 2>/dev/null | cut -d: -f3 || echo 999)
 CURRENT_BRANCH="${CURRENT_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)}"
 PROJECTS_DIR="${PROJECTS_DIR:-$USER_HOME/projects}"
 
+# Per-host image variant pin (lite/default/tui/gui/full).  Precedence:
+# pre-set env (e.g. from a stack repo's systemd unit Environment= line,
+# or a compose-dev --lite/--default/... switch) > existing .env pin
+# (so regeneration never silently un-pins a host) > unset (compose
+# falls back to full).
+if [ -z "${EMACS_IMAGE_VARIANT:-}" ] && [ -f .env ]; then
+    EMACS_IMAGE_VARIANT="$(sed -n 's/^EMACS_IMAGE_VARIANT=//p' .env | head -1)"
+fi
+EMACS_VARIANT_LINE=""
+if [ -n "${EMACS_IMAGE_VARIANT:-}" ]; then
+    EMACS_VARIANT_LINE="EMACS_IMAGE_VARIANT=$EMACS_IMAGE_VARIANT"
+    echo "Pinning skewed-emacs image variant: $EMACS_IMAGE_VARIANT"
+fi
+
 # Detect host timezone (best-effort across Linux and macOS)
 HOST_TZ=$(
     timedatectl show -p Timezone --value 2>/dev/null || \
@@ -45,6 +59,7 @@ DOCKER_GROUP_ID=$DOCKER_GROUP_ID
 CURRENT_BRANCH=$CURRENT_BRANCH
 EMACS_IMAGE_BRANCH=$CURRENT_BRANCH
 EMACS_IMAGE_BASE=skewed-emacs
+$EMACS_VARIANT_LINE
 GENDL_IMAGE_BRANCH=$CURRENT_BRANCH
 GENDL_IMAGE_BASE=gendl
 
