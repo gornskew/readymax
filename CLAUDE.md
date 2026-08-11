@@ -600,6 +600,17 @@ GDL uses `with-lhtml-string` for HTML generation. Two syntaxes exist:
 
 Use the native format for new code in tw-site-2025 and similar projects.
 
+## Lessons Learned (2026-08-11 Session)
+
+### lisp_eval payloads: avoid literal multi-line strings
+Elisp string literals containing REAL newlines inside a `lisp_eval`
+payload hung the emacs backend twice (30s no-socket-activity timeout,
+edit never applied; single-line equivalents using `\n` escapes applied
+instantly).  Until root-caused: keep each `lisp_eval` payload on
+single lines and spell newlines as `\n` inside strings.  Also verify
+after any timeout whether the edit half-applied: check
+`buffer-modified-p` and git status before retrying.
+
 ## Lessons Learned (2026-08-07 Session)
 
 ### NEVER find-file-noselect Project Source Files from Batch Evals
