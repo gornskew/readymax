@@ -19,6 +19,7 @@ CLI_SET_PUSH=""
 CLI_SET_BUILD_INDEX="true"
 MANIFEST_ONLY="false"
 SKIP_MANIFESTS="false"
+USE_ZSTD="false"
 
 # -----------------------------
 # Help
@@ -39,8 +40,10 @@ Multi-arch on one machine:
     - pushes canonical multi-arch tags directly
 
 Targets:
-  --all                 lite, aituis, gui, gui-aituis
+  --all                 lite, default, aituis, gui, gui-aituis
   --lite
+  --default             non-GUI + chrome-headless-shell snapshotting;
+                        canonical {branch} and latest tags point here
   --aituis, --tui
   --gui
   --gui-aituis, --full
@@ -62,6 +65,13 @@ Multi-arch:
   --manifest-only       skip builds; merge existing arch-suffixed tags into canonical manifests
   --skip-manifests      build/push only; do not update canonical multi-arch manifests
 
+Compression:
+  --zstd                buildx-path only: push zstd-compressed layers
+                        (~3-5x faster unpack on pull).  PREREQ: every
+                        pulling node on the containerd image store --
+                        classic graphdriver daemons handle zstd poorly.
+                        Keep off until the fleet migration completes.
+
 EOF
 }
 
@@ -71,11 +81,13 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) show_help; exit 0 ;;
-    --all) TARGETS="lite aituis gui gui-aituis"; shift ;;
+    --all) TARGETS="lite default aituis gui gui-aituis"; shift ;;
     --lite) TARGETS="$TARGETS lite"; shift ;;
+    --default) TARGETS="$TARGETS default"; shift ;;
     --aituis|--tui) TARGETS="$TARGETS aituis"; shift ;;
     --gui) TARGETS="$TARGETS gui"; shift ;;
     --gui-aituis|--full) TARGETS="$TARGETS gui-aituis"; shift ;;
+    --zstd) USE_ZSTD="true"; shift ;;
     --branch=*) OVERRIDE_BRANCH="${1#*=}"; shift ;;
     --push) CLI_SET_PUSH="true"; shift ;;
     --no-push) CLI_SET_PUSH="false"; shift ;;
@@ -141,6 +153,7 @@ FINAL_IMAGE="gornskew/skewed-emacs"
 get_stage_for_target() {
   case "$1" in
     lite)        echo "runtime-base" ;;
+    default)     echo "runtime-default" ;;
     aituis)      echo "runtime-aituis" ;;
     gui)         echo "runtime-gui" ;;
     gui-aituis)  echo "runtime-gui-aituis" ;;
@@ -156,6 +169,11 @@ build_target_single_arch() {
   local base_tag="${branch}-${target}"
   local arch_tag="${base_tag}-${ARCH_SUFFIX}"
   local build_index="${CLI_SET_BUILD_INDEX}"
+
+  if [[ "$USE_ZSTD" == "true" ]]; then
+    echo "Error: --zstd needs the buildx path; add --multi-arch or --platforms=..." >&2
+    exit 1
+  fi
 
   echo ""
   echo "=== Building ${IMAGE_NAME}:${arch_tag} (single-arch ${NATIVE_PLATFORM}) ==="
@@ -213,7 +231,15 @@ build_target_multi_arch() {
     "${BUILD_CONTEXT}"
   )
 
-  if [[ "$PUSH_IMAGE" == "true" ]]; then
+  if [[ "$USE_ZSTD" == "true" ]]; then
+    if [[ "$PUSH_IMAGE" != "true" ]]; then
+      echo "Error: --zstd requires push (buildx --load cannot re-compress layers)" >&2
+      exit 1
+    fi
+    # zstd-compressed layers: ~3-5x faster unpack on pull.  PREREQ:
+    # every pulling node on the containerd image store.
+    args=("--output=type=image,compression=zstd,force-compression=true,push=true" "${args[@]}")
+  elif [[ "$PUSH_IMAGE" == "true" ]]; then
     args=(--push "${args[@]}")
   else
     args=(--load "${args[@]}")
@@ -231,10 +257,12 @@ create_arch_aliases_local() {
   echo ""
   echo "=== Creating arch-suffixed local aliases for branch ${branch} (${ARCH_SUFFIX}) ==="
 
+  local has_default=false
   local has_aituis=false
   local has_gui_aituis=false
 
   for target in $TARGETS; do
+    [[ "$target" == "default" ]] && has_default=true
     [[ "$target" == "aituis" ]] && has_aituis=true
     [[ "$target" == "gui-aituis" ]] && has_gui_aituis=true
   done
@@ -248,14 +276,21 @@ create_arch_aliases_local() {
   fi
 
   # {branch}-full-{arch} → {branch}-gui-aituis-{arch}
-  # {branch}-{arch}      → {branch}-full-{arch}
   if $has_gui_aituis; then
     if docker image inspect "${FINAL_IMAGE}:${branch}-gui-aituis-${ARCH_SUFFIX}" >/dev/null 2>&1; then
       docker tag "${FINAL_IMAGE}:${branch}-gui-aituis-${ARCH_SUFFIX}" "${FINAL_IMAGE}:${branch}-full-${ARCH_SUFFIX}"
       echo "✓ ${branch}-full-${ARCH_SUFFIX} → ${branch}-gui-aituis-${ARCH_SUFFIX}"
+    fi
+  fi
 
-      docker tag "${FINAL_IMAGE}:${branch}-full-${ARCH_SUFFIX}" "${FINAL_IMAGE}:${branch}-${ARCH_SUFFIX}"
-      echo "✓ ${branch}-${ARCH_SUFFIX} → ${branch}-full-${ARCH_SUFFIX}"
+  # Canonical distribution tags follow the DEFAULT variant (non-GUI +
+  # headless-shell snapshotting), 2026-08-11 slimming initiative:
+  # {branch}-{arch} → {branch}-default-{arch}; latest-{arch} on devo.
+  # The heavyweight image remains available as -full/-gui-aituis.
+  if $has_default; then
+    if docker image inspect "${FINAL_IMAGE}:${branch}-default-${ARCH_SUFFIX}" >/dev/null 2>&1; then
+      docker tag "${FINAL_IMAGE}:${branch}-default-${ARCH_SUFFIX}" "${FINAL_IMAGE}:${branch}-${ARCH_SUFFIX}"
+      echo "✓ ${branch}-${ARCH_SUFFIX} → ${branch}-default-${ARCH_SUFFIX}"
 
       if [[ "${branch}" == "devo" ]]; then
         docker tag "${FINAL_IMAGE}:devo-${ARCH_SUFFIX}" "${FINAL_IMAGE}:latest-${ARCH_SUFFIX}"
@@ -276,8 +311,11 @@ create_arch_aliases_local() {
   done
   if $has_gui_aituis && docker image inspect "${FINAL_IMAGE}:${branch}-full-${ARCH_SUFFIX}" >/dev/null 2>&1; then
     docker tag "${FINAL_IMAGE}:${branch}-full-${ARCH_SUFFIX}" "${FINAL_IMAGE}:${branch}-full"
-    docker tag "${FINAL_IMAGE}:${branch}-full-${ARCH_SUFFIX}" "${FINAL_IMAGE}:${branch}"
-    echo "✓ ${branch}-full and ${branch} → ${branch}-full-${ARCH_SUFFIX}"
+    echo "✓ ${branch}-full → ${branch}-full-${ARCH_SUFFIX}"
+  fi
+  if $has_default && docker image inspect "${FINAL_IMAGE}:${branch}-default-${ARCH_SUFFIX}" >/dev/null 2>&1; then
+    docker tag "${FINAL_IMAGE}:${branch}-default-${ARCH_SUFFIX}" "${FINAL_IMAGE}:${branch}"
+    echo "✓ ${branch} → ${branch}-default-${ARCH_SUFFIX}"
   fi
   if $has_aituis && docker image inspect "${FINAL_IMAGE}:${branch}-tui-${ARCH_SUFFIX}" >/dev/null 2>&1; then
     docker tag "${FINAL_IMAGE}:${branch}-tui-${ARCH_SUFFIX}" "${FINAL_IMAGE}:${branch}-tui"
@@ -336,9 +374,10 @@ update_multi_arch_manifests() {
   local canonical_tags=()
 
   # Intermediate variants
-  canonical_tags+=("${branch}-lite" "${branch}-aituis" "${branch}-gui" "${branch}-gui-aituis")
+  canonical_tags+=("${branch}-lite" "${branch}-default" "${branch}-aituis" "${branch}-gui" "${branch}-gui-aituis")
 
-  # Aliases
+  # Aliases ({branch} follows -default since the 2026-08-11 slimming
+  # initiative; -full remains the gui-aituis heavyweight)
   canonical_tags+=("${branch}-tui" "${branch}-full" "${branch}")
 
   # devo-only latest
@@ -386,6 +425,8 @@ extract_generated_configs() {
     preferred="gui"
   elif [[ " $TARGETS " =~ " aituis " ]]; then
     preferred="aituis"
+  elif [[ " $TARGETS " =~ " default " ]]; then
+    preferred="default"
   else
     preferred="lite"
   fi
@@ -472,6 +513,7 @@ echo "Done!"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 echo "Examples:"
-echo "  docker pull ${IMAGE_NAME}:${branch}-full"
-echo "  docker run -p 7081:7080 -p 6942:6942 ${IMAGE_NAME}:${branch}-full"
+echo "  docker pull ${IMAGE_NAME}:${branch}          # default: non-GUI + snapshotting"
+echo "  docker run -i -p 7081:7080 -p 6942:6942 ${IMAGE_NAME}:${branch}"
+echo "  docker pull ${IMAGE_NAME}:${branch}-full     # GUI + AI TUIs baked in"
 echo ""

@@ -1,14 +1,37 @@
 #!/bin/bash
-# webshot -- headless-chromium page screenshot, for agent styling loops.
-# usage: webshot URL [OUTPUT.png] [WIDTHxHEIGHT] [extra chromium flags...]
+# webshot -- headless-browser page screenshot, for agent styling loops.
+# usage: webshot URL [OUTPUT.png] [WIDTHxHEIGHT] [extra browser flags...]
 #   webshot http://gendl-ccl:9080/demo/staircase /tmp/stair.png 1440x900
 # --virtual-time-budget lets page JS (x3dom, ajax) settle before capture.
+#
+# Browser resolution: $WEBSHOT_BROWSER if set, else chromium (gui
+# images), else chrome-headless-shell (default images, or installed via
+# `skewed-install headless-shell`).  headless-shell needs
+# --enable-unsafe-swiftshader for software WebGL (x3dom viewports).
 set -euo pipefail
-url="${1:?usage: webshot URL [out.png] [WxH] [extra chromium flags...]}"
+url="${1:?usage: webshot URL [out.png] [WxH] [extra browser flags...]}"
 out="${2:-/tmp/webshot.png}"
 size="${3:-1440x900}"
 shift $(( $# > 3 ? 3 : $# ))
-chromium --headless=new --no-sandbox --hide-scrollbars \
+
+flags=()
+if [[ -n "${WEBSHOT_BROWSER:-}" ]]; then
+  browser="$WEBSHOT_BROWSER"
+  [[ "$browser" == *headless-shell* || "$browser" == *headless_shell* ]] \
+    && flags=(--headless --disable-gpu --enable-unsafe-swiftshader) \
+    || flags=(--headless=new)
+elif command -v chromium >/dev/null 2>&1; then
+  browser=chromium
+  flags=(--headless=new)
+elif command -v chrome-headless-shell >/dev/null 2>&1; then
+  browser=chrome-headless-shell
+  flags=(--headless --disable-gpu --enable-unsafe-swiftshader)
+else
+  echo "webshot: no browser found; run: skewed-install headless-shell" >&2
+  exit 4
+fi
+
+"$browser" "${flags[@]}" --no-sandbox --hide-scrollbars \
   --window-size="${size/x/,}" --screenshot="$out" \
   --virtual-time-budget=8000 "$@" "$url" >/dev/null 2>&1
 echo "$out"

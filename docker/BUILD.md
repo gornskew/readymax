@@ -17,20 +17,19 @@ Where:
 **devo branch:**
 ```
 gornskew/skewed-emacs:devo-lite              # Base only
-gornskew/skewed-emacs:devo-aituis            # Base + AI TUIs
-gornskew/skewed-emacs:devo-gui               # Base + GUI support
+gornskew/skewed-emacs:devo-default           # Base + snapshotting (THE default)
+gornskew/skewed-emacs:devo-aituis            # Default + AI TUIs
+gornskew/skewed-emacs:devo-gui               # Base + GUI workstation
 gornskew/skewed-emacs:devo-gui-aituis        # Everything
 ```
 
-**master branch:**
-```
-gornskew/skewed-emacs:master-lite
-gornskew/skewed-emacs:master-aituis
-gornskew/skewed-emacs:master-gui
-gornskew/skewed-emacs:master-gui-aituis
-```
+**master branch:** same pattern with the `master-` prefix.
 
 ## Feature Breakdown
+
+The primary split is **non-GUI vs GUI** (see the build tree at the top
+of `docker/Dockerfile`).  Measurements behind the layering:
+`docs/SLIMMING_MEASUREMENTS.md`.
 
 ### Base (included in all variants)
 - **Emacs configuration**: Full skewed-emacs config
@@ -38,36 +37,48 @@ gornskew/skewed-emacs:master-gui-aituis
 - **vterm**: Terminal emulator in Emacs
 - **ttyd**: Web-based terminal
 - **Node.js**: Required for lisply-mcp
+- **skewed-install**: on-demand module installer (elisp-first:
+  `M-x skewed-install`; modules: AI TUIs, copilot-language-server,
+  headless-shell).  Installs are ephemeral — for baked-in persistence
+  pull `-aituis` or `-full`.
 
-Size: ~700-800MB
+### Snapshotting (`-default`, and the canonical `{branch}`/`latest` tags)
+Adds web-page screenshot capability (`webshot`, `webshot-clip`) via
+**chrome-headless-shell** (Playwright's build — Chrome-for-Testing has
+no linux/arm64) plus its shared-library closure and fonts.  Software
+WebGL via SwiftShader, so x3dom viewports render.  ~610MB extra vs
+Debian chromium's ~1.1GB closure.
 
 ### GUI Support (`-gui`)
-Adds:
-- **emacs-gtk**: GUI Emacs instead of emacs-nox
+Adds an intentionally heavy full X workstation:
+- **emacs-gtk**: GUI Emacs instead of emacs-nox (drive a full graphical
+  workstation on your X terminal)
 - **Fonts**: Noto, Font Awesome, Symbola, Powerline, Nerd Fonts
 - **PDF support**: ghostscript, poppler, pdf-tools
-- **X11 libraries**: For graphical display
+- **chromium** (Debian package): also backs webshot in this branch
 
-Additional size: ~400-500MB
-
-### AI TUIs (`-aituis`)
-Adds:
+### AI TUIs (`-aituis`, `-gui-aituis`)
+Adds (all also installable on demand via `skewed-install`):
 - **Claude Code**: @anthropic-ai/claude-code
 - **Codex**: @openai/codex
 - **Gemini CLI**: @google/gemini-cli
 - **Grok Build CLI**: binary from https://x.ai/cli/install.sh
   (optional pin: build-arg `GROK_VERSION=X.Y.Z`)
-
-Additional size: ~400-500MB (+ ~150MB for the Grok binary)
+- **copilot-language-server**
 
 ## Image Variants (per branch)
 
-| Tag Pattern | Features | Size | Use Case |
-|-------------|----------|------|----------|
-| `{branch}-lite` | Base only | ~800MB | Headless servers, minimal deployments |
-| `{branch}-aituis` | Base + AI CLIs | ~1.3GB | AI-assisted development (terminal only) |
-| `{branch}-gui` | Base + GUI | ~1.2GB | Visual Emacs workstation (no AI CLIs) |
-| `{branch}-gui-aituis` | Everything | ~1.7GB | Full-featured development environment |
+| Tag Pattern | Features | Use Case |
+|-------------|----------|----------|
+| `{branch}-lite` | Base only | Headless servers, minimal deployments |
+| `{branch}-default` | Base + snapshotting | **General distribution default** |
+| `{branch}-aituis` | Default + AI CLIs | AI-assisted development (terminal only) |
+| `{branch}-gui` | Base + GUI workstation | Visual Emacs workstation (no AI CLIs) |
+| `{branch}-gui-aituis` | Everything | The kitchen-sink-plus-jacuzzi suite |
+
+(Record real sizes from CI after each restructure; the historical
+numbers and the measurement method live in
+`docs/SLIMMING_MEASUREMENTS.md`.)
 
 ## Aliases (per branch)
 
@@ -75,22 +86,24 @@ Each branch has convenience aliases:
 
 - `{branch}-tui` → `{branch}-aituis` (clarity alias)
 - `{branch}-full` → `{branch}-gui-aituis` (everything)
-- `{branch}` → `{branch}-full` (branch default is full-featured)
+- `{branch}` → `{branch}-default` (branch default is the slim
+  snapshotting image, 2026-08-11 slimming initiative — NOT full)
 
 **Special alias:**
-- `latest` → `devo` (tracks the devo branch's full build)
+- `latest` → `devo` (tracks the devo branch's default build)
 
 ### Tag Hierarchy Example (devo branch)
 
 ```
 devo-lite                    [canonical]
+devo-default                 [canonical]
+  └─ devo                   [alias]
+     └─ latest              [special: devo branch only]
 devo-aituis                  [canonical]
   └─ devo-tui               [alias]
 devo-gui                     [canonical]
 devo-gui-aituis              [canonical]
   └─ devo-full              [alias]
-     └─ devo                [alias]
-        └─ latest           [special: devo branch only]
 ```
 
 ## Building

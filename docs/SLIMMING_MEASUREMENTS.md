@@ -72,5 +72,18 @@ Interactive mode -- the x3dom airfoil renders.  Probe:
   ~1.5GB disk / ~450-500MB download, vs 3.72GB / 977MB today.
   Overlapping closures make naive sums overestimate; exact numbers come
   from the first real build.
+
+## Restructure result (2026-08-11, same day)
+
+Implemented as the `runtime-default` stage (see docker/Dockerfile tree
+and docker/BUILD.md).  First local amd64 build of `devo-default`:
+**1.87GB on disk vs 3.72GB for devo-full -- exactly half.**  (Above
+the 1.5GB ballpark mostly because the elpa-compiled emacs config in
+dot-files is itself ~77MB source + native-comp artifacts.)  Verified
+in the built image: emacs daemon + lisply HTTP up, webshot renders the
+naca-nurbs x3dom viewport through cyclops via chrome-headless-shell,
+`skewed-install claude-code` installs a working claude 2.1.227 and
+removes cleanly.  Compressed download size: read off Docker Hub after
+the first CI push.
 - zstd layer compression (separate projects.org item) folds into the
   same build pass: pull time on small nodes is unpack-bound.

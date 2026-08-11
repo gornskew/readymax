@@ -632,11 +632,14 @@ SIGUSR2 + pkill of clients — that combination killed the daemon once.
 Full-stack restarts go through `./compose-dev down && ./compose-dev up`
 (use `up --daemon` from scripts to skip the interactive shell exec).
 
-### webshot: Headless-Chromium Page Captures (gui images 2026-08-07+)
-`webshot URL [out.png] [WxH] [extra chromium flags]` is baked into the
-gui/full images (source: `docker/webshot`).  8-second virtual-time
-budget lets x3dom/ajax settle; WebGL renders via SwiftShader, so 3D
-viewports appear in captures.  For vhost-scoped pages, resolve the
+### webshot: Headless-Browser Page Captures (2026-08-07+, all images 2026-08-11+)
+`webshot URL [out.png] [WxH] [extra browser flags]` is baked into all
+images (source: `docker/webshot`).  It resolves a browser at runtime:
+Debian chromium in the gui/full images, chrome-headless-shell in the
+default images (in -lite, `skewed-install headless-shell` provides it).
+8-second virtual-time budget lets x3dom/ajax settle; WebGL renders via
+SwiftShader (headless-shell needs --enable-unsafe-swiftshader, which
+webshot adds itself), so 3D viewports appear in captures.  For vhost-scoped pages, resolve the
 virtual host inside chromium:
 ```bash
 webshot "http://genworks.localhost/demo/staircase" /tmp/s.png 1440x2200 \

@@ -21,22 +21,30 @@
 
 ;;; BUILD VARIANTS
 ;;; ==============
-;;; The skewed-emacs image supports build variants:
+;;; The skewed-emacs image supports build variants (docker/BUILD.md):
 ;;;
-;;;   full  - Complete installation including TUI LLM CLIs
-;;;           (claude, codex, gemini, grok)
-;;;           Best for: Emacs power users, developers who use terminal-based AI tools
+;;;   full    - Everything: GUI workstation + TUI LLM CLIs
+;;;             (claude, codex, gemini, grok) + copilot-ls + chromium
+;;;             Best for: Emacs power users; sticky AI-TUI installs
 ;;;
-;;;   lite  - Core Emacs + MCP services only, no TUI LLM CLIs
-;;;           Best for: Claude Desktop users, MCP-only workflows, smaller image size
+;;;   default - Non-GUI + web-page snapshotting (chrome-headless-shell);
+;;;             AI TUIs installable on demand (M-x skewed-install)
+;;;             Best for: general distribution; Claude Desktop users
+;;;
+;;;   lite    - Core Emacs + MCP services only, no snapshot browser
+;;;             Best for: minimal deployments
+;;;
+;;;   Also: aituis/tui (default + AI TUIs), gui (workstation, no TUIs)
 ;;;
 ;;; Image tag format: {branch}-{variant}
-;;;   Examples: devo-full, devo-lite, master-full, master-lite
+;;;   Examples: devo-full, devo-default, devo-lite, master-full
 ;;;
-;;; To use lite variant, set EMACS_IMAGE_VARIANT=lite in your environment
-;;; or in .env file before running compose-dev.
+;;; To pick a variant, set EMACS_IMAGE_VARIANT in your environment
+;;; or in .env file before running compose-dev.  This dev-stack
+;;; default stays "full" (the kitchen-sink image); the Docker Hub
+;;; canonical {branch}/latest tags point at "default".
 ;;;
-;;; The MCP configuration is identical for both variants - only the
+;;; The MCP configuration is identical across variants - only the
 ;;; docker-compose.yml image tag changes based on variant.
 
 

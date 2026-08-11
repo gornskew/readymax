@@ -226,6 +226,11 @@
     :ensure nil
     :defer nil
     :load-path ,(lambda () (get-config-path "etc")))
+   (skewed-install-config
+    :ensure nil
+    :defer t
+    :load-path ,(lambda () (get-config-path "etc"))
+    :commands (skewed-install skewed-uninstall skewed-install-list))
    (dashboard-config
     :ensure nil
     :defer nil

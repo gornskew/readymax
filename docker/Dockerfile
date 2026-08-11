@@ -1,11 +1,21 @@
 # Skewed Emacs — Additive Multi-Stage Build with Clean Layering
-# Build tree:
-#   common-runtime-base (ttyd, Node.js, lisply-mcp) - shared foundation
-#   ├── runtime-base (+ emacs-nox)        → Tag: lite
-#   │   └── runtime-aituis                → Tags: -aituis, -tui
-#   └── runtime-gui-base (+ emacs-gtk + fonts + headless chromium)
-#       └── runtime-gui                   → Tag: -gui
-#           └── runtime-gui-aituis        → Tags: -gui-aituis, full, latest
+# Build tree (primary split: non-GUI vs GUI):
+#   common-runtime-base (ttyd, Node.js, lisply-mcp, webshot, skewed-install)
+#   ├── runtime-base (+ emacs-nox)                    → Tag: -lite
+#   │   └── runtime-default (+ chrome-headless-shell + fonts)
+#   │       │                     → Tags: -default, {branch}, latest (devo)
+#   │       └── runtime-aituis (+ AI CLIs + copilot-ls) → Tags: -aituis, -tui
+#   └── runtime-gui-base (+ emacs-gtk + fonts + chromium: full X workstation)
+#       └── runtime-gui                               → Tag: -gui
+#           └── runtime-gui-aituis (+ AI CLIs + copilot-ls)
+#                                     → Tags: -gui-aituis, -full
+#
+# The general-distribution default ({branch}/latest) is the non-GUI image
+# with web-page snapshotting via chrome-headless-shell (Playwright's
+# build: Chrome-for-Testing ships no linux/arm64).  AI TUIs install
+# on demand via skewed-install (M-x skewed-install in Emacs); for them
+# baked-in, pull -aituis or -full.  Size rationale and measurements:
+# docs/SLIMMING_MEASUREMENTS.md.
 
 FROM debian:stable-slim AS node
 ARG DEBIAN_FRONTENT=noninteractive
@@ -195,8 +205,12 @@ RUN set -euxo pipefail; \
 COPY --chown=emacs-user:emacs-user . /home/emacs-user/skewed-emacs/
 
 USER root
+# Real copy, not a symlink: runtime stages COPY this path from the
+# builder, and the repo copy drops its duplicate below (Cleanup) so the
+# ~65MB binary ships at most once per image.
 RUN set -euxo pipefail; \
-   ln -sf /home/emacs-user/skewed-emacs/docker/copilot-language-server /usr/local/bin/copilot-language-server
+   cp /home/emacs-user/skewed-emacs/docker/copilot-language-server /usr/local/bin/copilot-language-server; \
+   chmod +x /usr/local/bin/copilot-language-server
 USER emacs-user
 
 # Start daemon to settle async init
@@ -221,9 +235,12 @@ RUN set -euxo pipefail; \
        --eval "(lisply-search-build-index-with-clone \"${GIT_BRANCH}\")"; \
    fi
 
-# Cleanup builder caches
+# Cleanup builder caches; drop the repo copy's duplicate of
+# copilot-language-server (already at /usr/local/bin) so runtime images
+# don't ship it twice.
 RUN set -euxo pipefail; \
    rm -rf ~/.cache /tmp/*; \
+   rm -f ~/skewed-emacs/docker/copilot-language-server; \
    rm -rf ~/.emacs.d/elpa/*/.git 2>/dev/null || true
 
 
@@ -237,7 +254,10 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 SHELL ["/bin/bash", "-lc"]
 
-# Install minimal common runtime deps (NO Emacs yet)
+# Install minimal common runtime deps (NO Emacs yet).  sudo backs
+# skewed-install's apt-using modules (e.g. headless-shell libs on lite):
+# this is an explicitly trusted sandbox image, so emacs-user gets
+# passwordless sudo for in-container on-demand installs.
 RUN set -euxo pipefail; \
    apt-get update; \
    apt-get install -y --no-install-recommends \
@@ -245,8 +265,11 @@ RUN set -euxo pipefail; \
      curl wget git ca-certificates openssh-client \
      libvterm-dev \
      gnupg \
+     sudo \
    ; \
-   rm -rf /var/lib/apt/lists/*
+   rm -rf /var/lib/apt/lists/*; \
+   echo "emacs-user ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/emacs-user; \
+   chmod 0440 /etc/sudoers.d/emacs-user
 
 
 # copy in node.js in /usr/local/
@@ -273,10 +296,25 @@ RUN set -euxo pipefail; \
    chown emacs-user:emacs-user /projects; \
    ln -s /projects /home/emacs-user/projects
 
-# Copy common artifacts from builder (Emacs config, lisply-mcp, vterm)
+# Copy common artifacts from builder (Emacs config, lisply-mcp, vterm).
+# copilot-language-server is NOT here: it ships in the -aituis variants
+# and installs on demand elsewhere (skewed-install copilot-language-server).
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/skewed-emacs /home/emacs-user/skewed-emacs
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/lisply-mcp /home/emacs-user/lisply-mcp
-COPY --from=builder /usr/local/bin/copilot-language-server /usr/local/bin/copilot-language-server
+
+# Common tooling: entrypoint, repl helper, page-snapshot helpers (webshot
+# resolves chromium OR chrome-headless-shell at runtime), on-demand
+# module installer (elisp-first UI: M-x skewed-install).
+COPY mcp/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chown=emacs-user:emacs-user docker/emacs-repl.sh /home/emacs-user/emacs-repl.sh
+COPY docker/webshot /usr/local/bin/webshot
+COPY docker/webshot-clip /usr/local/bin/webshot-clip
+COPY docker/skewed-install /usr/local/bin/skewed-install
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/webshot \
+      /usr/local/bin/webshot-clip /usr/local/bin/skewed-install \
+      /home/emacs-user/emacs-repl.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 USER emacs-user
 WORKDIR /home/emacs-user
@@ -311,23 +349,58 @@ RUN set -euxo pipefail; \
    cd ~/skewed-emacs; \
    emacs --batch -l generate-configs.el -f skewed-generate-all-configs
 
-
-COPY --chown=emacs-user:emacs-user mcp/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY --chown=emacs-user:emacs-user docker/emacs-repl.sh /home/emacs-user/emacs-repl.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /home/emacs-user/emacs-repl.sh
-
 RUN set -euxo pipefail; \
     /home/emacs-user/skewed-emacs/setup --force
 
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+# ============================================================
+# Runtime Default: lite + web-page snapshotting.
+# The general-distribution default image.
+# Tagged as: {branch}-default, {branch}, latest (devo)
+# ============================================================
+FROM runtime-base AS runtime-default
+
+USER root
+
+# chrome-headless-shell's shared-library closure plus fonts for decent
+# renders.  Measured 2026-08-11 (docs/SLIMMING_MEASUREMENTS.md): ~610MB
+# all-in vs ~1.1GB for Debian's chromium package, which drags the full
+# X/mesa/llvm stack even when only used headless.
+RUN set -euxo pipefail; \
+   apt-get update; \
+   apt-get install -y --no-install-recommends \
+     libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
+     libasound2 libatk1.0-0 libatk-bridge2.0-0 libatspi2.0-0 \
+     libdbus-1-3 libexpat1 libgbm1 libglib2.0-0 libnspr4 libnss3 \
+     libxcb1 libxkbcommon0 \
+     fontconfig fonts-liberation fonts-noto-core fonts-noto-color-emoji \
+     fonts-noto-mono \
+   ; \
+   rm -rf /var/lib/apt/lists/*; \
+   fc-cache -f
+
+# Playwright's chromium-headless-shell build: unlike Chrome-for-Testing
+# it ships linux/arm64, matching this image's native per-arch CI builds.
+# Version pinned for reproducible provenance.
+ARG PLAYWRIGHT_CORE_VERSION=1.62.1
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN set -euxo pipefail; \
+   npx -y "playwright-core@${PLAYWRIGHT_CORE_VERSION}" install chromium-headless-shell; \
+   shell_bin="$(find /opt/ms-playwright -type f \( -name chrome-headless-shell -o -name headless_shell \) | head -1)"; \
+   test -n "${shell_bin}"; \
+   ln -sf "${shell_bin}" /usr/local/bin/chrome-headless-shell; \
+   chmod -R a+rX /opt/ms-playwright; \
+   rm -rf /root/.npm /root/.cache; \
+   /usr/local/bin/chrome-headless-shell --version
+
+USER emacs-user
 
 
 # ============================================================
-# Runtime AI TUIs: Base + AI CLIs
+# Runtime AI TUIs: Default + AI CLIs + copilot-language-server
 # Tagged as: {branch}-aituis, {branch}-tui
 # ============================================================
-FROM runtime-base AS runtime-aituis
+FROM runtime-default AS runtime-aituis
 
 # Copy AI CLI installations from builder
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.claude /home/emacs-user/.claude
@@ -335,6 +408,7 @@ COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.codex /home/
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.gemini /home/emacs-user/.gemini
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.grok /home/emacs-user/.grok
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.local/bin /home/emacs-user/.local/bin
+COPY --from=builder /usr/local/bin/copilot-language-server /usr/local/bin/copilot-language-server
 
 
 # ============================================================
@@ -364,11 +438,6 @@ RUN set -euxo pipefail; \
 COPY --from=builder /usr/share/fonts/truetype/nerd-fonts /usr/share/fonts/truetype/nerd-fonts
 RUN fc-cache -fv
 
-# Screenshot helper for headless chromium
-COPY docker/webshot /usr/local/bin/webshot
-COPY docker/webshot-clip /usr/local/bin/webshot-clip
-RUN chmod +x /usr/local/bin/webshot /usr/local/bin/webshot-clip
-
 USER emacs-user
 
 # Regenerate configs
@@ -376,15 +445,8 @@ RUN set -euxo pipefail; \
    cd ~/skewed-emacs; \
    emacs --batch -l generate-configs.el -f skewed-generate-all-configs
 
-
-COPY --chown=emacs-user:emacs-user mcp/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY --chown=emacs-user:emacs-user docker/emacs-repl.sh /home/emacs-user/emacs-repl.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /home/emacs-user/emacs-repl.sh
-
 RUN set -euxo pipefail; \
     /home/emacs-user/skewed-emacs/setup --force
-
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 
 # ============================================================
@@ -395,8 +457,8 @@ FROM runtime-gui-base AS runtime-gui
 
 
 # ============================================================
-# Runtime GUI + AI TUIs: Everything
-# Tagged as: {branch}-gui-aituis, {branch}-full, {branch}, latest
+# Runtime GUI + AI TUIs: Everything (the kitchen-sink-plus-jacuzzi suite)
+# Tagged as: {branch}-gui-aituis, {branch}-full
 # ============================================================
 FROM runtime-gui-base AS runtime-gui-aituis
 
@@ -406,3 +468,4 @@ COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.codex /home/
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.gemini /home/emacs-user/.gemini
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.grok /home/emacs-user/.grok
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.local/bin /home/emacs-user/.local/bin
+COPY --from=builder /usr/local/bin/copilot-language-server /usr/local/bin/copilot-language-server

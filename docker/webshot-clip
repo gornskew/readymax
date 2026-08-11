@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// webshot-clip -- headless-chromium screenshot of a CSS-selected element,
+// webshot-clip -- headless-browser screenshot of a CSS-selected element,
 // for agent styling loops and hero-image capture.  Companion to webshot.
 //
 // usage: webshot-clip URL SELECTOR [OUTPUT.png] [WIDTHxHEIGHT] [PAD] [extra chromium flags...]
@@ -14,15 +14,38 @@ const { spawn, execSync } = require('node:child_process');
 const [url, selector, out = '/tmp/webshot-clip.png',
        size = '1440x900', pad = '0', ...extra] = process.argv.slice(2);
 if (!url || !selector) {
-  console.error('usage: webshot-clip URL SELECTOR [out.png] [WxH] [pad] [chromium flags...]');
+  console.error('usage: webshot-clip URL SELECTOR [out.png] [WxH] [pad] [browser flags...]');
   process.exit(1);
 }
 const [width, height] = size.split('x').map(Number);
 const padding = Number(pad);
 const port = 9222 + Math.floor(Math.random() * 500);
 
-const chrome = spawn('chromium', [
-  '--headless=new', '--no-sandbox', '--hide-scrollbars',
+// Browser resolution mirrors webshot: $WEBSHOT_BROWSER, else chromium
+// (gui images), else chrome-headless-shell (default images /
+// `skewed-install headless-shell`).  headless-shell needs
+// --enable-unsafe-swiftshader for software WebGL (x3dom viewports).
+function resolveBrowser() {
+  const which = (bin) => {
+    try { execSync(`command -v ${bin}`, { shell: '/bin/bash', stdio: 'pipe' }); return true; }
+    catch { return false; }
+  };
+  const env = process.env.WEBSHOT_BROWSER;
+  const bin = env || (which('chromium') ? 'chromium'
+              : which('chrome-headless-shell') ? 'chrome-headless-shell' : null);
+  if (!bin) {
+    console.error('webshot-clip: no browser found; run: skewed-install headless-shell');
+    process.exit(4);
+  }
+  const headlessShell = /headless[-_]shell/.test(bin);
+  return { bin, flags: headlessShell
+           ? ['--headless', '--disable-gpu', '--enable-unsafe-swiftshader']
+           : ['--headless=new'] };
+}
+
+const { bin: browserBin, flags: browserFlags } = resolveBrowser();
+const chrome = spawn(browserBin, [
+  ...browserFlags, '--no-sandbox', '--hide-scrollbars',
   `--remote-debugging-port=${port}`, `--window-size=${width},${height}`,
   ...extra, 'about:blank',
 ], { stdio: 'ignore' });
