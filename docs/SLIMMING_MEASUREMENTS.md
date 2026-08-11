@@ -9,7 +9,7 @@ experiments on `debian:latest` containers.
 
 | Block | Size |
 |---|---|
-| GUI mega-layer (one RUN: emacs-gtk + chromium + fonts + gs/poppler) | 1.18GB |
+| GUI giga-layer (one RUN: emacs-gtk + chromium + fonts + gs/poppler) | 1.18GB |
 | AUI homes: .claude 285 + .codex 301 + .gemini 122 + .grok 157 | 865MB |
 | Node 24 (/usr/local copy) | 212MB |
 | skewed-emacs repo copy (dot-files 77, docker/ 65 -- see dup below) | 147MB |
@@ -18,7 +18,7 @@ experiments on `debian:latest` containers.
 | copilot-language-server (/usr/local/bin) | 67MB |
 | ttyd, nerd-fonts, config-gen, misc | ~25MB |
 
-Inside the GUI mega-layer (dpkg attribution): chromium closure ~540MB
+Inside the GUI giga-layer (dpkg attribution): chromium closure ~540MB
 (chromium 309 + chromium-common 63 + libllvm19 124 + mesa-libgallium 41),
 emacs-gtk stack ~225MB (emacs-common 79 + emacs-gtk 46 + emacs-el 19 +
 libgccjit 37 + gtk3/adwaita ~45), fonts ~80MB, ghostscript/poppler ~40MB.
@@ -43,6 +43,14 @@ fonts it rendered a styled data: URL to a valid PNG
 Total snapshotting capability: ~610MB disk vs ~1.1GB for Debian
 chromium -- and none of it overlaps the GUI stack.
 
+**x3dom verdict: also works.**  WebGL comes up via SwiftShader
+(software rendering) when launched with `--enable-unsafe-swiftshader`
+(newer Chrome disables software WebGL without it -- webshot grows this
+flag).  Verified against the real workload: screenshotted
+/demo/naca-nurbs through dev cyclops with the right viewport in 3D
+Interactive mode -- the x3dom airfoil renders.  Probe:
+`canvas.getContext("webgl")` -> "WebKit WebGL" renderer.
+
 ## Implications for the variant tree (per Dave 2026-08-11 direction)
 
 - Primary split: GUI vs non-GUI.  GUI branch (emacs-gtk = full X
@@ -55,8 +63,9 @@ chromium -- and none of it overlaps the GUI stack.
   home dirs) move to on-demand in-container install, elisp-first API
   (M-x skewed-install RET claude-code RET style; shell scripts baked
   into the image underneath).  Note: installs land in the container
-  home, which is ephemeral -- installer design must address
-  persistence across container recreation (volume or reinstall hook).
+  home, which is ephemeral BY DESIGN: the persistence story for
+  someone who wants AUIs sticky is "switch to the -full image"
+  (Dave, 2026-08-11).  No installer persistence machinery needed.
 - copilot-language-server: also a candidate for on-demand (67MB), and
   fix the docker/ duplication regardless.
 - Ballpark new default (non-GUI + emacs-nox + headless-shell + fonts):
