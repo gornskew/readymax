@@ -1,4 +1,13 @@
 ;;; merge-mcp-configs.el --- Merge MCP configuration files -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2026 Gornskew Enterprises
+;;
+;; This program is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU Affero General Public License as
+;; published by the Free Software Foundation, either version 3 of the
+;; License, or (at your option) any later version.  Distributed WITHOUT
+;; ANY WARRANTY; see <https://www.gnu.org/licenses/agpl-3.0.html>.
+
 ;;;
 ;;; This merges base MCP configs with overlays for all three formats:
 ;;;   - mcp-container.json  -> for in-container Claude/Gemini CLI

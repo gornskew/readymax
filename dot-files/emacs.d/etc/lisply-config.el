@@ -1,24 +1,12 @@
 ;;; lisply-config.el --- Enablement glue for the Lisply MCP backend -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2025 Genworks
-;; SPDX-License-Identifier: AGPL-3.0-or-later
-
-;;; Commentary:
-;; Wires the sideloaded lisply-backend (an HTTP server that evaluates arbitrary
-;; Emacs Lisp) into skewed-emacs, and decides WHETHER and HOW to start it:
+;; Copyright (C) 2026 Gornskew Enterprises
 ;;
-;;   * In a container (SKEWED_EMACS_CONTAINER set): start on 0.0.0.0, honoring
-;;     START_HTTP, exactly as before.  The container is the sandbox.
-;;
-;;   * On a host Emacs: OFF by default.  Starting the server here hands an LLM
-;;     the ability to run arbitrary code on your machine (see the warning in
-;;     `lisply--risk-warning').  Opt in with `M-x lisply-enable-host-server'
-;;     (interactive, gated) or by setting `lisply-host-server-enable' (e.g. via
-;;     `./setup --with-mcp').  Host binds to loopback by default.
-;;
-;; See docs/HOST_EMACS_MCP.md for the full story and how to connect a client.
-
-;;; Code:
+;; This program is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU Affero General Public License as
+;; published by the Free Software Foundation, either version 3 of the
+;; License, or (at your option) any later version.  Distributed WITHOUT
+;; ANY WARRANTY; see <https://www.gnu.org/licenses/agpl-3.0.html>.
 
 (defconst lisply--backend-source-dir
   (if (boundp 'emacs-config-directory)

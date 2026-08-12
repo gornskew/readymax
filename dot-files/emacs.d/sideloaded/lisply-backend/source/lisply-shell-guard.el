@@ -1,5 +1,14 @@
 ;;; lisply-shell-guard.el --- bounded/async shell helpers + pre-eval lint  -*- lexical-binding: t; -*-
 
+;; Copyright (C) 2026 Gornskew Enterprises
+;;
+;; This program is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU Affero General Public License as
+;; published by the Free Software Foundation, either version 3 of the
+;; License, or (at your option) any later version.  Distributed WITHOUT
+;; ANY WARRANTY; see <https://www.gnu.org/licenses/agpl-3.0.html>.
+
+
 ;; Added 2026-07-26 after the unbounded-curl transport-wedge incident.
 ;; Any synchronous child process blocks the single Emacs event loop until
 ;; the child exits, starving timers, network filters, and the lisply httpd.
