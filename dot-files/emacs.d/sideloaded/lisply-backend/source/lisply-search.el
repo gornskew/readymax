@@ -1,6 +1,6 @@
 ;;; search.el --- Skewed search for GDL/Gendl corpora -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2026 Genworks
+;; Copyright © 2026 Genworks
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
 
 ;;; Commentary:
