@@ -444,6 +444,36 @@ When using MCP file editing, remember that you **share the global current buffer
 | File operations | `(rename-file)`, `(copy-file)` | `(shell-command "mv ...")` |
 | Search in files | `(grep-find)`, `(project-find-regexp)` | `(shell-command "grep ...")` |
 
+### Magit as git plumbing from batch elisp (learned 2026-08-13)
+
+Git history perusal (log, show, diff, blame) goes through magit's
+plumbing layer via `lisp_eval` — not host-side `git` commands:
+
+```elisp
+;; One-time per session: only interactive commands are autoloaded;
+;; magit-git-output & friends need the full load.
+(require 'magit)
+
+;; Bind default-directory to the repo root (trailing slash), then:
+(let ((default-directory "/projects/cyclops/"))
+  (magit-git-output "show" "af5e39e" "--" "source/functions.lisp"))
+```
+
+Useful plumbing calls, all honoring `default-directory`:
+- `(magit-git-output "log" "--oneline" "-10")` — full stdout as one string
+- `(magit-git-lines "diff" "--stat" "HEAD~3..")` — stdout as list of lines
+- `(magit-git-string "rev-parse" "HEAD")` — first line only
+- `(magit-rev-verify "some-branch")`, `(magit-get-current-branch)`
+
+Notes:
+- Repos live under `/projects/` inside the container, so any repo the
+  host sees at `~/projects/foo` is `/projects/foo/` here.
+- `magit-git-output` returns the raw output — no pager, no ANSI, safe
+  for batch use. Prefer it over `(magit-status)` in non-interactive
+  evals (status pops a buffer the user shares).
+- For big diffs, narrow with `-- <path>` per invocation rather than
+  post-filtering one giant string.
+
 **Host-side line tools are out of bounds for /projects files** (Dave,
 2026-08-07): even when an agent runs on the elsie host with ~/projects
 mounted, sed/awk/grep-style edits and filters on project files go
