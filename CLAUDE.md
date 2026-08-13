@@ -474,6 +474,21 @@ Notes:
 - For big diffs, narrow with `-- <path>` per invocation rather than
   post-filtering one giant string.
 
+### Container shell commands from batch elisp (learned 2026-08-13)
+
+The container ships node (prefer it over host node for /projects JS —
+e.g. `node --check`).  The lisply guard refuses bare `shell-command`
+payloads (a synchronous child wedges the whole Emacs event loop), so
+run child processes with an explicit bound:
+
+```elisp
+(lisply-shell-bounded "node --check /projects/apps/foo/static/foo.js" 30)
+;; => (:exit-code 0 :output "..." :timed-out nil)
+```
+
+or `(lisply-shell-async CMD)` + `(lisply-shell-async-result TOKEN)`
+for long-running work.
+
 **Host-side line tools are out of bounds for /projects files** (Dave,
 2026-08-07): even when an agent runs on the elsie host with ~/projects
 mounted, sed/awk/grep-style edits and filters on project files go
