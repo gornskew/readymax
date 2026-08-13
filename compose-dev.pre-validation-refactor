@@ -112,14 +112,7 @@ _collect_compose_files
 # =============================================================================
 _quote_arg() {
     printf "'"
-    # Escape embedded single quotes as '\'' (close, literal ', reopen).
-    # NB the quadruple backslash: the shell halves it, and sed needs \\
-    # in the replacement to emit a literal backslash.  The old double-
-    # backslash version emitted ''' (no backslash), which left an
-    # unterminated quote whenever an argument contained a ' -- e.g. the
-    # elisp sent by refresh_emacs_runtime_config ('ok, 'deferred), which
-    # therefore always failed silently.
-    printf '%s' "$1" | sed "s/'/'\\\\''/g"
+    printf '%s' "$1" | sed "s/'/'\\''/g"
     printf "'"
 }
 
@@ -302,13 +295,6 @@ ENVIRONMENT:
     Key variables:
         PROJECTS_DIR    Projects directory to mount (default: ~/projects)
 
-    Startup validation (see STARTUP VALIDATION section in this script):
-        HEALTH_WAIT_SECS        per-service validation budget (default 30)
-        HEALTH_BUDGET_<name>    per-service override (name sanitized to
-                                [A-Za-z0-9_], e.g. HEALTH_BUDGET_gendl_ccl=45)
-        HEALTH_MAX_RESTARTS     kill+recreate retries per service (default 2)
-        HEALTH_POLL_SECS        probe cadence (default 2)
-
 NETWORK:
     Services communicate via Docker network 'skewed-emacs-network'
     - From host: localhost:<host-port>
@@ -347,71 +333,8 @@ start_services() {
     # shellcheck disable=SC2086  (word-split intentional: service names)
     run_compose up -d $_ss_services
 
-    # Started != validated: actively probe every healthchecked service
-    # (kill + recreate hung-on-start containers, e.g. the CCL ASLR
-    # wedge) BEFORE doing anything that depends on a running daemon.
-    _ss_rc=0
-    validate_services || _ss_rc=1
-
-    # MCP merge runs after validation on purpose: a kill+recreate of
-    # skewed-emacs would discard files copied into the container, and
-    # a validated skewed-emacs means the daemon is provably ready --
-    # no blind "waiting for emacs daemon" retry loop needed.
-    merge_mcp_configs
-
-    refresh_emacs_runtime_config
-
-    return "$_ss_rc"
-}
-
-stop_services() {
-    log_info "Stopping all services"
-    run_compose down
-}
-
-restart_services() {
-    log_info "Restarting services: ${*:-all}"
-    run_compose restart "$@"
-    validate_services
-}
-
-# =============================================================================
-# MCP CONFIG MERGE
-#
-# Writes merged MCP config files inside the skewed-emacs container and
-# updates /home/emacs-user/.codex/config.toml and ~/.grok/config.toml.
-# Runs AFTER validate_services: overlay copies into a container that
-# validation might still kill+recreate would be lost, and a validated
-# skewed-emacs (its lisply-ping healthcheck is served by the emacs
-# daemon itself) proves the daemon is ready -- the merge runs exactly
-# once, event-driven, replacing the old 5x2s blind retry loop.
-# =============================================================================
-merge_mcp_configs() {
+    # ---- MCP config merge ----
     log_info "Preparing MCP configurations (JSON + TOML)..."
-
-    case " ${VALIDATED_OK:-} " in
-        *" skewed-emacs "*) ;;
-        *)
-            # skewed-emacs was not validated this run (single-service up,
-            # failed validation, or already running from before): probe the
-            # daemon once directly instead of looping blind.
-            if ! run_compose exec -T skewed-emacs emacsclient --eval t \
-                > /dev/null 2>&1
-            then
-                log_warning "skewed-emacs daemon not available; skipping MCP config merge"
-                return 1
-            fi
-            ;;
-    esac
-
-    # Lite-variant images do not ship ~/.codex and ~/.grok, so docker
-    # creates those file-mount parent dirs ROOT-OWNED at container
-    # create time (a recreate reintroduces them; host-side chown cannot
-    # reach container-fs dirs).  The merge writes config.toml into both,
-    # so repair ownership first; harmless no-op on full images.
-    run_compose exec -T -u root skewed-emacs sh -c \
-        "chown -R emacs-user /home/emacs-user/.codex /home/emacs-user/.grok" \
-        > /dev/null 2>&1 || true
 
     # Step 1: Copy overlay MCP config files into container
     for _overlay in \
@@ -440,13 +363,28 @@ merge_mcp_configs() {
             skewed-emacs:/home/emacs-user/skewed-emacs/dot-files/emacs.d/etc/ 2>/dev/null || true
     done
 
-    # Step 2: Merge inside container -- one shot; the daemon is ready.
-    if run_compose exec -T skewed-emacs emacsclient --eval \
-        "(progn (setenv \"SKEWED_CLONE_PATH\" \"${SCRIPT_DIR}\")
-                (load-file \"/home/emacs-user/skewed-emacs/mcp/merge-mcp-configs.el\")
-                (skewed-merge-all-mcp-configs \"/home/emacs-user/skewed-emacs/mcp\"))" \
-        > /dev/null 2>&1
-    then
+    # Step 2: Merge inside container. This writes merged MCP config files and
+    # updates /home/emacs-user/.codex/config.toml and ~/.grok/config.toml.
+    MCP_MERGE_SUCCESS=false
+    _attempt=1
+    while [ "$_attempt" -le 5 ]; do
+        if run_compose exec -T skewed-emacs emacsclient --eval \
+            "(progn (setenv \"SKEWED_CLONE_PATH\" \"${SCRIPT_DIR}\")
+                    (load-file \"/home/emacs-user/skewed-emacs/mcp/merge-mcp-configs.el\")
+                    (skewed-merge-all-mcp-configs \"/home/emacs-user/skewed-emacs/mcp\"))" \
+            > /dev/null 2>&1
+        then
+            MCP_MERGE_SUCCESS=true
+            break
+        fi
+        if [ "$_attempt" -lt 5 ]; then
+            log_info "Waiting for emacs daemon (attempt $_attempt/5)..."
+            sleep 2
+        fi
+        _attempt=$((_attempt + 1))
+    done
+
+    if [ "$MCP_MERGE_SUCCESS" = true ]; then
         log_success "MCP configurations merged for container CLI, Windows, Codex, and Grok"
 
         # Copy the platform-appropriate Claude Desktop config back to the
@@ -466,198 +404,109 @@ merge_mcp_configs() {
             log_warning " try './compose-dev up --pull' to fetch the latest image)"
         fi
     else
-        log_warning "MCP configuration merge failed (daemon answered but merge errored)"
-        log_warning "Retry with: ./compose-dev up"
-        return 1
+        log_warning "MCP configuration merge did not complete; Emacs daemon may still be starting"
     fi
+
+    refresh_emacs_runtime_config
+
+    # Catch alive-but-dead startups (CCL ASLR "exception 11" hangs
+    # etc.) before declaring the stack up; restarts flunkers.
+    verify_service_health
+}
+
+stop_services() {
+    log_info "Stopping all services"
+    run_compose down
+}
+
+restart_services() {
+    log_info "Restarting services: ${*:-all}"
+    run_compose restart "$@"
+    verify_service_health
 }
 
 # =============================================================================
-# STARTUP VALIDATION ("container started" != "service validated")
+# POST-UP HEALTH WATCHDOG
 #
-# CCL occasionally loses its ASLR dice roll at startup ("exception 11" /
-# "bad frame in rt_sigreturn", upstream Clozure/ccl#85): the process
-# does not exit -- it hangs in the CCL kernel debugger -- so
+# CCL occasionally loses its ASLR dice roll at startup ("exception 11"
+# in the kernel debugger): the process does not exit -- it hangs -- so
 # `restart: unless-stopped` never fires and the container sits there
-# "running" while never becoming healthy.  The generated healthchecks
-# have long intervals (gendl-ccl: 72s x 3 retries), so docker/autoheal
-# take minutes to notice; a gendl container that is going to come up
-# does so well within ~30s.  So compose-dev owns start-time validation
-# itself (autoheal keeps steady-state duty):
+# "running" while its healthcheck flunks (observed on balaram
+# 2026-08-11: all gendl-ccl-served sites 404'd through cyclops).
+# autoheal (base compose, since 2026-07-26) restarts unhealthy
+# containers continuously, but a hang at `up` time deserves immediate
+# detection, an immediate restart, and a loud report right here at the
+# console.  This applies to any container with a healthcheck: a
+# restart re-rolls the dice, so a couple of retries normally clears
+# transient startup wedges.
 #
-#   - Each healthchecked container is actively probed every few seconds
-#     by running its own compose-declared healthcheck test via docker
-#     exec -- no per-service knowledge is hardcoded here, and docker's
-#     slow health interval stops mattering at startup.
-#   - A container that exhausts its budget unvalidated is KILLED
-#     (SIGKILL: the wedged CCL debugger is SIGTERM-immune) and
-#     RECREATED -- a fresh exec re-rolls the ASLR dice; a hung-at-start
-#     container holds no state worth preserving.
-#   - Retries are capped; then we fail LOUDLY with a nonzero exit so a
-#     systemd oneshot unit shows the failure.
-#
-# Tunables (env):
-#   HEALTH_WAIT_SECS        per-service validation budget (default 30)
-#   HEALTH_BUDGET_<name>    per-service override, name sanitized to
-#                           [A-Za-z0-9_], e.g. HEALTH_BUDGET_gendl_ccl=45
-#   HEALTH_MAX_RESTARTS     kill+recreate budget per service (default 2)
-#   HEALTH_POLL_SECS        probe cadence (default 2)
-#   VALIDATE_PROBE_TIMEOUT  in-container timeout per probe (default 5)
-#
-# Results are exported in VALIDATED_OK / VALIDATED_FAILED (space-
-# separated container names) for later phases (e.g. the MCP merge).
+# Tunables (env): HEALTH_WAIT_SECS (default 180) overall deadline;
+# HEALTH_MAX_RESTARTS (default 2) per-container restart budget.
 # =============================================================================
-_vs_sanitize() {
-    printf '%s' "$1" | tr -c 'a-zA-Z0-9' '_'
-}
+verify_service_health() {
+    _vh_deadline="${HEALTH_WAIT_SECS:-180}"
+    _vh_budget="${HEALTH_MAX_RESTARTS:-2}"
+    _vh_ids="$(run_compose ps -q 2>/dev/null)"
+    [ -n "$_vh_ids" ] || return 0
 
-# Run one active probe of a container: its own declared healthcheck
-# test via docker exec, wrapped in an in-container timeout (probe
-# lesson from the rt_sigreturn brief: put the timeout INSIDE the
-# container).  Falls back to docker's health status when the container
-# lacks timeout(1) or the test could not be extracted.
-_vs_probe() {
-    _vp_san="$(_vs_sanitize "$1")"
-    eval "_vp_cmd=\${_vs_probe_cmd_${_vp_san}:-}"
-    if [ -n "$_vp_cmd" ]; then
-        docker exec "$1" sh -c \
-            "timeout -s KILL ${VALIDATE_PROBE_TIMEOUT:-5} $_vp_cmd" \
-            > /dev/null 2>&1
-        _vp_rc=$?
-        [ "$_vp_rc" -eq 0 ] && return 0
-        if [ "$_vp_rc" -eq 127 ]; then
-            # timeout(1) missing in this container: retry bare.
-            docker exec "$1" sh -c "$_vp_cmd" > /dev/null 2>&1 && return 0
-        fi
-    fi
-    [ "$(docker inspect --format \
-        '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' \
-        "$1" 2>/dev/null)" = "healthy" ]
-}
-
-# Kill + recreate one container.  SIGKILL, not SIGTERM: a wedged CCL
-# sits in its kernel debugger, which ignores SIGTERM.  Recreate (not
-# restart) also re-resolves mount sources and image config.
-_vs_recreate() {
-    docker kill "$1" > /dev/null 2>&1
-    if ! run_compose up -d --force-recreate --no-deps "$2" > /dev/null 2>&1; then
-        log_error "  ${1}: recreate failed (docker compose up --force-recreate ${2})"
-    fi
-}
-
-validate_services() {
-    _vs_budget_default="${HEALTH_WAIT_SECS:-30}"
-    _vs_retries_max="${HEALTH_MAX_RESTARTS:-2}"
-    _vs_poll="${HEALTH_POLL_SECS:-2}"
-    VALIDATED_OK=""
-    VALIDATED_FAILED=""
-
-    _vs_ids="$(run_compose ps -q 2>/dev/null)"
-    [ -n "$_vs_ids" ] || { log_warning "No running containers to validate"; return 0; }
-
-    # Build the watch list: containers that declare a usable healthcheck.
-    _vs_watched=""
-    for _vs_id in $_vs_ids; do
-        _vs_name="$(docker inspect --format '{{.Name}}' "$_vs_id" 2>/dev/null)" || continue
-        _vs_name="${_vs_name#/}"
-        _vs_test="$(docker inspect --format \
-            '{{if .Config.Healthcheck}}{{join .Config.Healthcheck.Test " "}}{{end}}' \
-            "$_vs_id" 2>/dev/null)"
-        case "$_vs_test" in
-            ""|NONE|"NONE "*)
-                log_info "  ${_vs_name}: started (no healthcheck; not validated)"
-                continue
-                ;;
+    # Containers that define a healthcheck, as "name" per line.
+    _vh_watched=""
+    for _vh_id in $_vh_ids; do
+        _vh_line="$(docker inspect --format \
+            '{{.Name}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+            "$_vh_id" 2>/dev/null)" || continue
+        case "$_vh_line" in
+            *" none") ;;
+            *) _vh_name="${_vh_line%% *}"
+               _vh_watched="${_vh_watched:+$_vh_watched
+}${_vh_name#/}" ;;
         esac
-        _vs_svc="$(docker inspect --format \
-            '{{index .Config.Labels "com.docker.compose.service"}}' \
-            "$_vs_id" 2>/dev/null)"
-        [ -n "$_vs_svc" ] || _vs_svc="$_vs_name"
-        _vs_san="$(_vs_sanitize "$_vs_name")"
-        _vs_probe_tmp=""
-        case "$_vs_test" in
-            "CMD-SHELL "*) _vs_probe_tmp="${_vs_test#CMD-SHELL }" ;;
-            "CMD "*)       _vs_probe_tmp="${_vs_test#CMD }" ;;
-        esac
-        eval "_vs_svc_${_vs_san}=\$_vs_svc"
-        eval "_vs_probe_cmd_${_vs_san}=\$_vs_probe_tmp"
-        eval "_vs_budget_${_vs_san}=\${HEALTH_BUDGET_${_vs_san}:-\$_vs_budget_default}"
-        eval "_vs_state_${_vs_san}=pending"
-        eval "_vs_elapsed_${_vs_san}=0"
-        eval "_vs_tries_${_vs_san}=0"
-        _vs_watched="${_vs_watched:+$_vs_watched }$_vs_name"
     done
-    [ -n "$_vs_watched" ] || return 0
+    [ -n "$_vh_watched" ] || return 0
 
-    log_info "Validating services (probe every ${_vs_poll}s; kill+recreate on hung start):"
-    for _vs_name in $_vs_watched; do
-        _vs_san="$(_vs_sanitize "$_vs_name")"
-        eval "_vs_budget=\$_vs_budget_${_vs_san}"
-        log_info "  ${_vs_name}: budget ${_vs_budget}s, retries ${_vs_retries_max}"
-    done
+    log_info "Waiting up to ${_vh_deadline}s for health: $(printf '%s' "$_vh_watched" | tr '\n' ' ')"
 
-    _vs_total=0
+    _vh_elapsed=0
     while :; do
-        _vs_pending=0
-        for _vs_name in $_vs_watched; do
-            _vs_san="$(_vs_sanitize "$_vs_name")"
-            eval "_vs_state=\$_vs_state_${_vs_san}"
-            [ "$_vs_state" = "pending" ] || continue
-
-            if _vs_probe "$_vs_name"; then
-                eval "_vs_tries=\$_vs_tries_${_vs_san}"
-                if [ "$_vs_tries" -gt 0 ]; then
-                    log_success "  ${_vs_name}: validated at ${_vs_total}s (after ${_vs_tries} kill+recreate)"
-                else
-                    log_success "  ${_vs_name}: validated at ${_vs_total}s"
-                fi
-                eval "_vs_state_${_vs_san}=ok"
-                VALIDATED_OK="${VALIDATED_OK:+$VALIDATED_OK }$_vs_name"
-                continue
-            fi
-
-            eval "_vs_elapsed=\$_vs_elapsed_${_vs_san}"
-            eval "_vs_budget=\$_vs_budget_${_vs_san}"
-            if [ "$_vs_elapsed" -ge "$_vs_budget" ]; then
-                eval "_vs_tries=\$_vs_tries_${_vs_san}"
-                if [ "$_vs_tries" -lt "$_vs_retries_max" ]; then
-                    _vs_tries=$((_vs_tries + 1))
-                    eval "_vs_tries_${_vs_san}=\$_vs_tries"
-                    eval "_vs_svc=\$_vs_svc_${_vs_san}"
-                    log_warning "  ${_vs_name}: not validated after ${_vs_budget}s (hung start?) -- kill + recreate (${_vs_tries}/${_vs_retries_max})"
-                    _vs_recreate "$_vs_name" "$_vs_svc"
-                    eval "_vs_elapsed_${_vs_san}=0"
-                else
-                    log_error "  ${_vs_name}: FAILED: still not validated after ${_vs_retries_max} kill+recreate retries"
-                    eval "_vs_state_${_vs_san}=failed"
-                    VALIDATED_FAILED="${VALIDATED_FAILED:+$VALIDATED_FAILED }$_vs_name"
-                    continue
-                fi
-            else
-                eval "_vs_elapsed_${_vs_san}=$((_vs_elapsed + _vs_poll))"
-            fi
-            _vs_pending=1
+        _vh_pending=""
+        for _vh_name in $_vh_watched; do
+            _vh_status="$(docker inspect --format \
+                '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+                "$_vh_name" 2>/dev/null)" || _vh_status="missing"
+            case "$_vh_status" in
+                healthy|none) ;;
+                unhealthy)
+                    # Per-container restart counter without arrays:
+                    # sanitized name -> shell variable via eval.
+                    _vh_var="_vh_rc_$(printf '%s' "$_vh_name" | tr -c 'a-zA-Z0-9' '_')"
+                    eval "_vh_count=\${${_vh_var}:-0}"
+                    if [ "$_vh_count" -lt "$_vh_budget" ]; then
+                        eval "${_vh_var}=$((_vh_count + 1))"
+                        log_warning "${_vh_name} is unhealthy (hung startup?) -- restarting ($((_vh_count + 1))/${_vh_budget})"
+                        docker restart "$_vh_name" >/dev/null 2>&1 || \
+                            log_error "docker restart ${_vh_name} failed"
+                    fi
+                    _vh_pending="${_vh_pending} ${_vh_name}"
+                    ;;
+                *)  # starting / missing
+                    _vh_pending="${_vh_pending} ${_vh_name}"
+                    ;;
+            esac
         done
 
-        [ "$_vs_pending" -eq 0 ] && break
-        sleep "$_vs_poll"
-        _vs_total=$((_vs_total + _vs_poll))
+        [ -z "$_vh_pending" ] && {
+            log_success "All healthchecked services are healthy"
+            return 0
+        }
+        [ "$_vh_elapsed" -ge "$_vh_deadline" ] && break
+        sleep 5
+        _vh_elapsed=$((_vh_elapsed + 5))
     done
 
-    if [ -z "$VALIDATED_FAILED" ]; then
-        log_success "All services validated in ${_vs_total}s"
-        return 0
-    fi
-
-    log_error "Validation FAILED for: ${VALIDATED_FAILED}"
-    for _vs_name in $VALIDATED_FAILED; do
-        log_error "--- last log lines from ${_vs_name}:"
-        docker logs --tail 5 "$_vs_name" 2>&1 | sed 's/^/    /'
-        case "$_vs_name" in
-            gendl-*|genworks-*)
-                log_error "    (CCL ASLR wedge? check host kernel log for 'bad frame in rt_sigreturn' -- upstream Clozure/ccl#85)"
-                ;;
-        esac
+    log_error "Not healthy after ${_vh_deadline}s:${_vh_pending}"
+    for _vh_name in $_vh_pending; do
+        log_error "--- last log lines from ${_vh_name}:"
+        docker logs --tail 5 "$_vh_name" 2>&1 | sed 's/^/    /'
     done
     log_error "autoheal (if running) will keep retrying; investigate with: docker logs <name>"
     return 1
@@ -939,7 +788,6 @@ main() {
             done
             # shellcheck disable=SC2086  (word-split intentional: service names)
             start_services $_up_remaining
-            _up_rc=$?
 
             if [ "$_up_daemon" = "false" ]; then
                 install_shell_functions
@@ -948,9 +796,6 @@ main() {
                     exec "${SHELL:-sh}" -i
                 fi
             fi
-            # Propagate validation failure (systemd oneshot units watch
-            # this exit status; the old code always exited 0 under -d).
-            [ "$_up_rc" -eq 0 ] || exit "$_up_rc"
             ;;
         down)   stop_services ;;
         restart) shift; restart_services "$@" ;;
