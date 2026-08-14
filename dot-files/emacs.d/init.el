@@ -34,6 +34,17 @@
 ;; Redirect custom settings to a separate file
 (setq custom-file (concat emacs-config-directory "custom.el"))
 
+;; Inode-safe saves: this stack bind-mounts SINGLE FILES into
+;; containers (every cyclops config, for one), and a container pins
+;; the file's inode at mount time.  Emacs's default first-save-of-a-
+;; session makes the backup by RENAMING the original -- the old inode
+;; becomes file~, the path gets a fresh inode, and the container
+;; silently reads stale content forever after (cyclops reload-config
+;; then "succeeds" against the old bytes).  backup-by-copying makes
+;; Emacs copy the backup aside and truncate-write the original inode
+;; in place.  Keep file-precious-flag nil for the same reason.
+(setq backup-by-copying t)
+
 (defvar second-party-packages nil)
 (defvar third-party-packages nil)
 
