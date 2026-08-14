@@ -323,19 +323,65 @@ dashboard render must never hang or error on this."
       (error nil))))
 
 
+(defconst skewed-cyclops-admin-secret-path "/projects/.secrets/cyclops-admin-secret"
+  "Per-host convention: dashboard only ever asks its OWN local
+cyclops, so the plain unsuffixed filename is right here -- the
+suffixed variants (cyclops-admin-secret-sally, etc) exist only on
+this dev host, where one eyes-only instance holds secrets for
+several REMOTE stacks it probes from afar.")
+
+(defun skewed-dashboard-cyclops-admin-secret ()
+  (when (file-readable-p skewed-cyclops-admin-secret-path)
+    (with-temp-buffer
+      (insert-file-contents skewed-cyclops-admin-secret-path)
+      (string-trim (buffer-string)))))
+
+(defun skewed-dashboard-cyclops-crew-name (host port &optional timeout)
+  "Cyclops's own crew identity via its always-on admin API
+(cyclops source/utility.lisp CREW-IDENTITY-ALIST, folded into
+/_cyclops/runtime) -- secret-gated, NOT the lisply eval gate that
+makes the generic channel unsafe for cyclops (see
+`skewed-dashboard-crew-name''s docstring).  NIL when no secret is
+configured (the default-secure posture, cyclops/CLAUDE.md, Admin API
+section) or on any failure."
+  (let ((secret (skewed-dashboard-cyclops-admin-secret)))
+    (when secret
+      (let* ((url (format "http://%s:%d/_cyclops/runtime" host port))
+             (url-request-extra-headers `(("X-Cyclops-Admin-Secret" . ,secret)))
+             (url-request-timeout (or timeout 1))
+             (inhibit-message t) (message-log-max nil) (url-show-status nil)
+             (url-automatic-caching nil))
+        (condition-case nil
+            (let ((buffer (url-retrieve-synchronously url nil t url-request-timeout)))
+              (when buffer
+                (unwind-protect
+                    (with-current-buffer buffer
+                      (goto-char (point-min))
+                      (when (re-search-forward "
+
+" nil t)
+                        (let* ((body (buffer-substring (point) (point-max)))
+                               (parsed (ignore-errors
+                                         (json-parse-string body :object-type 'plist)))
+                               (crew (and parsed (plist-get parsed :crew_identity))))
+                          (and crew (plist-get crew :name)))))
+                  (kill-buffer buffer))))
+          (error nil))))))
 (defun skewed-dashboard-crew-name (backend-name host port)
   "Crew name for a lisply-backends dashboard entry, or NIL.  Local
 read for skewed-emacs (never a network round trip to itself);
-CYCLOPS is skipped on purpose -- its lisply gate is closed by
-default, and a closed gate transparently proxies /lisply/lisp-eval
-to its OWN default backend instead of refusing (verified 2026-08-14:
-asking cyclops's endpoint for `(lisp-implementation-type)` answered
-Clozian CL, i.e. gendl-ccl, not cyclops's own Allegro) -- so reading
-through it would silently attribute another container's identity to
-the Pilot.  Giving cyclops a real answer needs its own admin API to
-carry identity (org: still open), not this channel."
+CYCLOPS goes through its own admin API (see
+`skewed-dashboard-cyclops-crew-name') rather than the generic lisply
+channel the other backends use -- a closed lisply gate transparently
+PROXIES /lisply/lisp-eval to cyclops's own default backend instead
+of refusing (verified 2026-08-14: asking cyclops's endpoint for
+`(lisp-implementation-type)` answered Clozure CL, i.e. gendl-ccl, not
+cyclops's own Allegro), so reading identity through that channel
+would silently attribute another container's name to the Pilot; the
+admin API is secret-gated instead, correctly answering for cyclops
+itself (cyclops source/utility.lisp CREW-IDENTITY-ALIST)."
   (cond ((string= backend-name "skewed-emacs") (skewed-dashboard-local-crew-name))
-        ((string= backend-name "cyclops") nil)
+        ((string= backend-name "cyclops") (skewed-dashboard-cyclops-crew-name host port 0.5))
         (t (skewed-dashboard-remote-crew-name host port 0.5))))
 
 (defun lisply-backends-strings (list-size)
