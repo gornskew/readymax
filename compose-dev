@@ -353,6 +353,12 @@ start_services() {
     _ss_rc=0
     validate_services || _ss_rc=1
 
+    # crew identities: per-container maintenance pass over the
+    # just-validated fleet, same slot merge_mcp_configs already
+    # occupies below -- order between the two doesn't matter, this
+    # one just needs live containers
+    mint_crew_identities
+
     # MCP merge runs after validation on purpose: a kill+recreate of
     # skewed-emacs would discard files copied into the container, and
     # a validated skewed-emacs means the daemon is provably ready --
@@ -373,7 +379,170 @@ restart_services() {
     log_info "Restarting services: ${*:-all}"
     run_compose restart "$@"
     validate_services
+    # a plain restart keeps the container's filesystem, so this is a
+    # no-op for every service today (see the CREW IDENTITY MINTING
+    # header comment) -- wired in now so the hook point already exists
+    # once recreate-vs-restart semantics get worked out
+    mint_crew_identities
 }
+
+# =============================================================================
+# CREW IDENTITY MINTING (the eyes-only 'Starfleet' conceit, framework-level)
+#
+# Mints a per-container identity -- NAME (random, species-flavored),
+# SPECIES, ROLE -- and writes it into /tmp/skewed-crew-identity inside
+# each running container, once.  Species/role are inferred from the
+# compose SERVICE NAME, the same name services.sexp already assigns as
+# container_name/hostname (generate-configs.el) -- no schema change,
+# every existing overlay (sally-stack, shelly-stack, ...) participates
+# automatically, and any container this script has never heard of
+# before still gets a generic crew/unknown identity.
+#
+# IDEMPOTENT BY DESIGN: skips any container whose identity file already
+# exists.  A plain docker restart (same filesystem) therefore keeps
+# its name; only a genuinely fresh/recreated container (new writable
+# layer, no file) mints one.  Whether that is the full desired restart
+# semantics is an open question (Dave, 2026-08-14) -- this is the
+# conservative default until that gets worked through.
+#
+# Consumers: eyes-only-metrics.lisp's MY-IDENTITY and (for the Captain)
+# EMACS-SAMPLE-ELISP both read this file in preference to minting their
+# own name -- see apps/eyes-only source/metrics.lisp.
+# =============================================================================
+
+# Species = the container's IMAGE, not its compose service name or
+# container name (Dave, 2026-08-14): a service could be renamed in an
+# overlay without changing what it actually runs, and species should
+# track the latter.  Matched against the running container's own
+# Config.Image (docker inspect), so this needs nothing from
+# services.sexp and works for a service this script has never named.
+# The genworks/gdl vs gornskew/gendl ORG NAMESPACE is the real signal
+# behind gendl vs genworks-gdl -- community shop vs commissioned
+# Starfleet engineering IS the licensing-tier distinction (Cluster
+# commercial-tiering thread, org).
+_crew_species_from_image() {
+    case "$1" in
+        */skewed-emacs:*|skewed-emacs:*) echo "skewed-emacs" ;;
+        */cyclops:*|cyclops:*)           echo "cyclops" ;;
+        genworks/gdl:*)                  echo "genworks-gdl" ;;
+        */gendl:*|gendl:*)               echo "gendl" ;;
+        */autoheal:*|autoheal:*)         echo "autohealer" ;;
+        *)                                echo "unknown" ;;
+    esac
+}
+
+# Role follows from species alone -- every species in the fleet maps
+# to exactly one role today (one Captain-shaped thing, one Pilot-
+# shaped thing, ...).  Unknown species still participate (generic
+# crew), so nothing needs to opt in.
+_crew_role_for_species() {
+    case "$1" in
+        skewed-emacs)        echo "captain" ;;
+        cyclops)              echo "pilot" ;;
+        gendl|genworks-gdl)   echo "engineer" ;;
+        autohealer)           echo "doctor" ;;
+        *)                    echo "crew" ;;
+    esac
+}
+
+# Name-pool syllables per species -- kept in sync BY HAND with
+# eyes-only-metrics.lisp's *CREW-NAME-POOLS* (that Lisp copy is now the
+# fallback path only; this shell copy is authoritative whenever
+# compose-dev is what started the stack).
+_crew_onsets_for() {
+    case $1 in
+        skewed-emacs) echo 'Bl Gr Thr Kro Zar Vex Mog Drel' ;;
+        cyclops)      echo 'Bl Zh Vek Skr Yor Tsa Kli Dro' ;;
+        gendl)        echo 'Ka Lis Par Quo Sem Tel Nym Ori' ;;
+        genworks-gdl) echo 'Ad Bex Cor Dal Enn Fir Gal Hux' ;;
+        autohealer)   echo 'Om Sal Vel Lum Mir Ana Eir Thea' ;;
+        *)            echo 'X Yz Qm' ;;
+    esac
+}
+_crew_finals_for() {
+    case $1 in
+        skewed-emacs) echo 'org arn und ath esh ork ilk uz' ;;
+        cyclops)      echo 'ej ix osk arr unn eth yx oa' ;;
+        gendl)        echo 'da per lon ta mir vex is und' ;;
+        genworks-gdl) echo 'mand ton dry well berg worth field ston' ;;
+        autohealer)   echo 'a une is oon ara elle ios em' ;;
+        *)            echo 'ar il ot' ;;
+    esac
+}
+
+# Random 1-based pick from a space-separated word list ($1).  No bash
+# arrays/$RANDOM (dash has neither) -- /dev/urandom via od, same
+# portability posture as the rest of this script.
+_crew_pick() {
+    set -- $1
+    _cp_n=$#
+    _cp_r=$(od -An -N2 -tu2 /dev/urandom | tr -d ' ')
+    _cp_i=$(( (_cp_r % _cp_n) + 1 ))
+    eval "echo \${$_cp_i}"
+}
+
+# One species-flavored name, unique against every name minted so far
+# THIS RUN (_crew_minted_names).  20 collisions -> numeral-disambiguated
+# (mirrors eyes-only-metrics.lisp's MINT-CREW-NAME).
+_crew_unique_name() {
+    _cun_species=$1
+    _cun_tries=0
+    while :; do
+        _cun_name="$(_crew_pick "$(_crew_onsets_for $_cun_species)")$(_crew_pick "$(_crew_finals_for $_cun_species)")"
+        case " ${_crew_minted_names} " in
+            *" ${_cun_name} "*)
+                _cun_tries=$((_cun_tries + 1))
+                [ $_cun_tries -ge 20 ] && {
+                    _cun_name="${_cun_name}-$(od -An -N1 -tu1 /dev/urandom | tr -d ' ')"
+                    break
+                }
+                continue
+                ;;
+            *) break ;;
+        esac
+    done
+    # set a result var, NOT echo+$(...) -- a command-substitution call
+    # would run this function in a SUBSHELL, silently discarding its
+    # write to _crew_minted_names (caught empirically 2026-08-14: two
+    # calls minted the same name back to back).  Callers read
+    # $_crew_unique_name_result after calling this directly.
+    _crew_minted_names="${_crew_minted_names:+$_crew_minted_names }${_cun_name}"
+    _crew_unique_name_result="$_cun_name"
+}
+
+mint_crew_identities() {
+    _ci_ids="$(run_compose ps -q 2>/dev/null)"
+    [ -n "$_ci_ids" ] || return 0
+
+    _crew_minted_names=""
+    for _ci_id in $_ci_ids; do
+        _ci_name="$(docker inspect --format "{{.Name}}" "$_ci_id" 2>/dev/null)" || continue
+        _ci_name="${_ci_name#/}"
+
+        if docker exec "$_ci_name" test -f /tmp/skewed-crew-identity 2>/dev/null; then
+            continue   # already identified -- filesystem survived, keep the name
+        fi
+
+_ci_image="$(docker inspect --format \
+            "{{.Config.Image}}" \
+            "$_ci_id" 2>/dev/null)"
+
+        _ci_species="$(_crew_species_from_image "$_ci_image")"
+        _ci_role="$(_crew_role_for_species "$_ci_species")"
+        _crew_unique_name "$_ci_species"
+        _ci_mint_name="$_crew_unique_name_result"
+
+        if docker exec "$_ci_name" sh -c \
+            "printf 'NAME=%s\nSPECIES=%s\nROLE=%s\n' '$_ci_mint_name' '$_ci_species' '$_ci_role' > /tmp/skewed-crew-identity" \
+            2>/dev/null
+        then
+            log_success "  ${_ci_name}: crew identity minted -- ${_ci_mint_name} (${_ci_role}, ${_ci_species})"
+        else
+            log_warning "  ${_ci_name}: could not write crew identity (no shell/writable rootfs?)"
+        fi
+    done
+}
+
 
 # =============================================================================
 # MCP CONFIG MERGE
