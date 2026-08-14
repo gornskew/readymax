@@ -253,6 +253,91 @@ LIST-SIZE used as boolean"
       (list (format "    --- No %s directory exists ---\n" projects-dir))))))
 
 
+(defconst skewed-crew-identity-elisp-code
+  "(with-open-file (in \"/tmp/skewed-crew-identity\" :if-does-not-exist nil) (when in (let ((line (read-line in nil))) (when (and line (>= (length line) 5) (string= (subseq line 0 5) \"NAME=\")) (subseq line 5)))))"
+  "CL snippet: this backend's own crew NAME from its own in-container
+/tmp/skewed-crew-identity (compose-dev's mint_crew_identities), or
+NIL.  Deliberately raw file I/O, not eyes-only-metrics -- the
+dashboard cannot have a hard dependency on eyes-only being up
+(Dave, 2026-08-14); every CL backend answers the generic lisply eval
+channel regardless of whether any app-level package is loaded.")
+
+(defun skewed-crew-strip-cl-quoting (s)
+  "lisply-eval prin1's string results, so a real name arrives as
+\"Blorg\" (with literal quote chars) and an absent identity as the
+bare token NIL -- strip the former, reject the latter."
+  (cond ((null s) nil)
+        ((string= s "NIL") nil)
+        ((and (> (length s) 1) (= (aref s 0) ?\") (= (aref s (1- (length s))) ?\"))
+         (substring s 1 -1))
+        (t s)))
+
+(defun skewed-dashboard-local-crew-name ()
+  "This process's OWN crew name, read directly -- skewed-emacs IS the
+dashboard, so this never goes over the network at all."
+  (when (file-readable-p "/tmp/skewed-crew-identity")
+    (with-temp-buffer
+      (insert-file-contents "/tmp/skewed-crew-identity")
+      (goto-char (point-min))
+      (when (re-search-forward "^NAME=\\(.*\\)$" nil t)
+        (match-string 1)))))
+
+(defun skewed-dashboard-remote-crew-name (host port &optional timeout)
+  "HOST:PORT's own crew name via a raw lisply eval of
+`skewed-crew-identity-elisp-code' -- NOT eyes-only-metrics, so this
+works whether or not eyes-only is loaded there at all.  Silent NIL on
+any failure (unreachable, gate closed, no identity minted yet): a
+dashboard render must never hang or error on this."
+  (let* ((url (format "http://%s:%d/lisply/lisp-eval" host port))
+         (url-request-method "POST")
+         (url-request-extra-headers '(("Content-Type" . "application/json")))
+         (url-request-data
+          (encode-coding-string
+           (json-encode (list (cons 'code skewed-crew-identity-elisp-code)))
+           'utf-8))
+         (url-request-timeout (or timeout 1))
+         (inhibit-message t) (message-log-max nil) (url-show-status nil)
+         (url-automatic-caching nil))
+    (condition-case nil
+        (let ((buffer (url-retrieve-synchronously url nil t url-request-timeout)))
+          (when buffer
+            (unwind-protect
+                (with-current-buffer buffer
+                  (goto-char (point-min))
+                  (when (re-search-forward "
+
+" nil t)
+                    ;; proper JSON decode, not a hand-rolled regex on the raw
+                    ;; wire text -- the wire text has the result string
+                    ;; double-escaped (it is a JSON string wrapping a CL
+                    ;; PRIN1'd string), and a regex grab would return that
+                    ;; still-escaped text instead of the real value (caught
+                    ;; empirically, 2026-08-14: got the 9-char raw escaped
+                    ;; form back instead of the 5-char name)
+                    (let* ((body (buffer-substring (point) (point-max)))
+                           (parsed (ignore-errors
+                                     (json-parse-string body :object-type 'plist)))
+                           (result (and parsed (plist-get parsed :result))))
+                      (skewed-crew-strip-cl-quoting result))))
+              (kill-buffer buffer))))
+      (error nil))))
+
+
+(defun skewed-dashboard-crew-name (backend-name host port)
+  "Crew name for a lisply-backends dashboard entry, or NIL.  Local
+read for skewed-emacs (never a network round trip to itself);
+CYCLOPS is skipped on purpose -- its lisply gate is closed by
+default, and a closed gate transparently proxies /lisply/lisp-eval
+to its OWN default backend instead of refusing (verified 2026-08-14:
+asking cyclops's endpoint for `(lisp-implementation-type)` answered
+Clozian CL, i.e. gendl-ccl, not cyclops's own Allegro) -- so reading
+through it would silently attribute another container's identity to
+the Pilot.  Giving cyclops a real answer needs its own admin API to
+carry identity (org: still open), not this channel."
+  (cond ((string= backend-name "skewed-emacs") (skewed-dashboard-local-crew-name))
+        ((string= backend-name "cyclops") nil)
+        (t (skewed-dashboard-remote-crew-name host port 0.5))))
+
 (defun lisply-backends-strings (list-size)
   "Return a list of propertized strings for lisply backends dashboard item."
   (if list-size
@@ -266,15 +351,22 @@ LIST-SIZE used as boolean"
                              (name (or (plist-get backend :name) "unknown"))
                              (result (silent-http-ping host port "/lisply/ping-lisp" 0.5))
                              (is-ok (string= (plist-get result :status) "OK"))
-                             (icon (if is-ok :check :cross)))
+                             (icon (if is-ok :check :cross))
+                             ;; only chase identity for a backend that
+                             ;; already answered the health ping -- no
+                             ;; point risking a second round trip to
+                             ;; something already down
+                             (crew-name (and is-ok
+                                             (skewed-dashboard-crew-name name host port))))
                         (format "    %s\n"
                                (propertize
-                                (format "%s%s (%s:%s)%s"
+                                (format "%s%s (%s:%s)%s%s"
                                         (skewed-dashboard-pad-icon icon)
                                         name host port
                                         (if is-ok
                                             (format " - %s" (or (plist-get result :time) "?ms"))
-                                          ""))
+                                          "")
+                                        (if crew-name (format " -- %s" crew-name) ""))
                                 'keymap (let ((map (make-sparse-keymap)))
                                           (define-key map (kbd "RET")
                                                       `(lambda () (interactive)
