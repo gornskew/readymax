@@ -733,3 +733,37 @@ explicit identity flags; pushes must happen on the host:
 ```bash
 git -c user.name="..." -c user.email="..." commit -m "..."
 ```
+
+## Verifying mechanical/bulk edits (2026-08-13 production incident)
+
+After any find/replace or bulk edit, verify by PRESENCE of the correct
+result, and compile with warnings VISIBLE.  A `remhash -> remhash-scrubbed`
+replace_all glued 12 of 17 arglists (`(remhash-scrubbed fd*request-registry*)`)
+and shipped to the production cyclops fleet, because two verifications
+lied:
+
+- an **absence-grep** whose exclusion pattern (`remhash-scrubbed `, with
+  trailing space) also matched the broken lines, so "no matches" read as
+  "clean" when it meant "all broken";
+- `ql:quickload ... :silent t`, which suppressed the very
+  undefined-variable / wrong-arity warnings that named every broken site.
+
+Rules: (a) grep the edited call sites and READ the resulting lines —
+verify presence of the right form, never absence of the mistake; (b)
+compile with warnings visible and read them (never `:silent` for a
+verification build — on ACL capture compiler output and scan for
+undefined-variable/arity warnings); (c) prefer whole-expression old/new
+strings over token-splice replacements so whitespace is never
+load-bearing.  Corollary: a build that emits warnings you routinely
+scroll past will hide the next real one — keep verification builds at
+zero warnings.
+
+### Inspecting MCP tool-result dumps (2026-08-13)
+
+When a large `lisp_eval`/`get_docs` result is persisted to
+`~/.claude/.../tool-results/*.json`, do NOT reach for host-side
+python/grep to search it.  Pull it back through the container instead —
+re-request `get_docs` with a narrower id, or fetch/search the text in an
+elisp temp-buffer.  General rule: once content originated in the
+container's world, keep working it there rather than shelling out on the
+host (same principle as the file-ops and syntax-check guidance above).
