@@ -30,8 +30,18 @@
   :group 'tools)
 
 (defcustom lisply-search-services-path
-  (expand-file-name "../../services.sexp" (file-truename user-emacs-directory))
-  "Path to services.sexp (Single Source of Truth)."
+  (expand-file-name "sideloaded/lisply-backend/skewed-search-config.sexp"
+                    (file-truename user-emacs-directory))
+  "Path to the file carrying the `:skewed-search-config' plist.
+
+Until 2026-08-15 this pointed at the stack's services.sexp, because that
+was the only single-source-of-truth file around.  The search corpus
+config never belonged there -- nothing in the stack generator ever read
+it, and the only consumer has always been this file -- so when the stack
+machinery moved out to the Basilisk repo it went to
+skewed-search-config.sexp, which ships beside lisply-search.el.
+
+The name is kept for compatibility with callers that set it explicitly."
   :type 'string
   :group 'lisply-search)
 

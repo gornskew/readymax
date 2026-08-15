@@ -226,10 +226,9 @@ RUN set -euxo pipefail; \
      mkdir -p /projects; \
      ln -sfn /home/emacs-user/skewed-emacs /projects/skewed-emacs; \
      cd /home/emacs-user/skewed-emacs; \
-     emacs --batch -l generate-configs.el -f skewed-generate-all-configs; \
      emacs --batch \
        --eval "(add-to-list 'load-path \"/home/emacs-user/skewed-emacs/dot-files/emacs.d/sideloaded/lisply-backend/source\")" \
-       --eval "(setq lisply-search-services-path \"/home/emacs-user/skewed-emacs/services.sexp\")" \
+       --eval "(setq lisply-search-services-path \"/home/emacs-user/skewed-emacs/dot-files/emacs.d/sideloaded/lisply-backend/skewed-search-config.sexp\")" \
        --eval "(setq lisply-search-index-path \"~/.emacs.d/sideloaded/lisply-backend/skewed-search-index.sexp\")" \
        -l lisply-search.el \
        --eval "(lisply-search-build-index-with-clone \"${GIT_BRANCH}\")"; \
