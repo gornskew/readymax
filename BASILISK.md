@@ -111,14 +111,30 @@ of a full-blown Engineer.  The distinction is the licensing story as
 much as the fiction: a compiler is a development seat, a runtime is a
 deployment.
 
-Today that means an Allegro runtime, where "no compiler aboard" is
-literally what the license and the image give you.  We may deliver
-binaries on other CLs some day, and on some of those the compiler is
-physically present because it cannot be removed — CCL's
-`save-application` carries one whether or not you want it.  That does
-not promote anything to Engineer.  The invariant is the ROLE, not the
-vendor and not the byte count: Pilot and Comm are shipped to run one
-system, not to develop new ones.
+### Allegro CL is the supported platform
+
+Every binary product **builds and tests on Allegro CL**, whatever it
+eventually ships on.  That is not inertia and not a vendor box ticked on
+a form — it is where the support actually is, a real relationship with
+Franz Inc. and the people behind it.  Allegro is also where "no compiler
+aboard" is literal rather than aspirational: the runtime license and the
+image give you exactly that.
+
+Shipping on another CL is not ruled out, and Eyes Only may well be
+CCL-shippable sooner rather than later — CCL carries no runtime royalty,
+which is a live consideration at a $69 price point.  But an *additional*
+delivery target does not displace the *reference* one.  The Allegro build
+stays the one that is supported and the one everything else is validated
+against; a second target is measured against it, not instead of it.
+Concretely, for a GWL application that means native aserve on Allegro is
+the reference behavior and a zacl/zaserve delivery is the thing being
+checked.
+
+Note also that on some alternatives the compiler is physically present
+because it cannot be removed — CCL's `save-application` carries one
+whether or not you want it.  That does not promote anything to Engineer.
+The invariant is the ROLE, not the vendor and not the byte count: Pilot
+and Comm are shipped to run one system, not to develop new ones.
 
 So Comm is not a passenger on an Engineer.  Cyclops already ships this
 way (`:lisp-impl "AllegroCL-Runtime"`), and Eyes Only is headed there as
