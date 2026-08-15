@@ -9,7 +9,7 @@ genuine — captured live, trimmed only for brevity.
 The stack was started with nothing but:
 
 ```bash
-./compose-dev up
+./basilisk up
 ```
 
 ---
@@ -175,7 +175,7 @@ list.
   were driven through the same uniform tool protocol
   (`lisp_eval` / `http_request` / `ping_lisp`), served by
   [lisply-mcp](https://github.com/gornskew/lisply-mcp).
-- Everything ran inside the container sandbox that `./compose-dev up`
+- Everything ran inside the container sandbox that `./basilisk up`
   started; the host machine was never touched.
 
 Try it yourself: any MCP client works. See the README Quick Start for

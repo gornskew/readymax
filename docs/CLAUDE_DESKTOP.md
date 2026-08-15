@@ -19,11 +19,11 @@ setup.
 
    ```bash
    cd ~/projects/skewed-emacs
-   ./compose-dev up
+   ./basilisk up
    ```
 
    Wait for the `[SUCCESS] Claude Desktop config ready` message.
-   `compose-dev` detects your platform and writes the appropriate
+   `basilisk` detects your platform and writes the appropriate
    config to `mcp/claude_desktop_config.json` — on Linux and macOS it
    invokes `mcp/mcp-exec` directly; on Windows it goes through `wsl`.
 
@@ -66,14 +66,14 @@ The Docker stack must be running for Claude Desktop to use the MCP servers:
 
 ```bash
 cd ~/projects/skewed-emacs
-./compose-dev up -d   # -d for daemon mode (no interactive shell)
+./basilisk up -d   # -d for daemon mode (no interactive shell)
 ```
 
 To stop the stack:
 
 ```bash
 cd ~/projects/skewed-emacs
-./compose-dev down
+./basilisk down
 ```
 
 ## What You Can Do
@@ -102,7 +102,7 @@ Claude Desktop is just one consumer. The same generated configs work for:
 - **Claude Code**: from the repo root, `claude mcp add` each server from
   `mcp/claude_desktop_config.json`, or copy its `mcpServers` block into
   a `.mcp.json` in your project
-- **Codex CLI**: `compose-dev up` maintains `~/.codex/config.toml`
+- **Codex CLI**: `./basilisk up` maintains `~/.codex/config.toml`
   inside the container automatically; for a host-side Codex, adapt
   `mcp/mcp.toml`
 - **Grok Build CLI**: same merged TOML is written into
@@ -120,7 +120,7 @@ need to manually merge the `mcpServers` entries from the generated
 ## Cloning to a Different Location
 
 The generated `claude_desktop_config.json` contains the absolute path to
-your skewed-emacs clone. It is determined at `./compose-dev up` time
+your skewed-emacs clone. It is determined at `./basilisk up` time
 based on where you run the command, so a non-default clone location
 works automatically.
 
@@ -132,11 +132,11 @@ works automatically.
 - Restart Claude Desktop after copying the config
 
 **`mcp/claude_desktop_config.json` missing or stale:**
-- It is generated (not committed); run `./compose-dev up` and wait for
+- It is generated (not committed); run `./basilisk up` and wait for
   the `[SUCCESS] Claude Desktop config ready` message
 - If the message doesn't appear, the Emacs daemon may still be starting —
-  run `./compose-dev up` again
+  run `./basilisk up` again
 
 **"emacsclient not ready" warning on first start:**
 - This is normal — the Emacs daemon takes a few seconds to initialize
-- Run `./compose-dev up` again and the MCP config will generate successfully
+- Run `./basilisk up` again and the MCP config will generate successfully

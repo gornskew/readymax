@@ -7,7 +7,7 @@ Set Height 600
 Set Theme "Monokai Vivid"
 Set TypingSpeed 40ms
 
-Type "./compose-dev up"
+Type "./basilisk up"
 Enter
 Sleep 8s
 Type "eskew"

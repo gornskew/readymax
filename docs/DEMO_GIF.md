@@ -1,11 +1,11 @@
 # Recording the Demo GIF
 
 Target: a ~30-second GIF for the README showing the arc:
-`compose-dev up` → dashboard → an AI agent driving Gendl through MCP.
+`./basilisk up` → dashboard → an AI agent driving Gendl through MCP.
 
 ## Storyboard
 
-1. (~5s) `./compose-dev up` scrolling, ending on healthy services.
+1. (~5s) `./basilisk up` scrolling, ending on healthy services.
 2. (~5s) `eskew` → the skewed-emacs dashboard (ASCII banner, backends green).
 3. (~15s) `claudly` (or any agent CLI) prompted with:
    "Build me a staircase in Gendl — 3.1m rise, 3.9m run, 2x6 treads"

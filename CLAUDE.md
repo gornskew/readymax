@@ -71,11 +71,11 @@ mcp__skewed_emacs__skewed_emacs__lisp_eval(code='(shell-command-to-string "which
 ### 1. Start the Environment
 
 ```bash
-# Navigate to skewed-emacs directory
-cd ~/projects/skewed-emacs
+# The stack lives in the Basilisk repo, not this one.
+cd ~/projects/basilisk
 
 # Start the full container stack
-./compose-dev up
+./basilisk up
 
 # Verify services are running via MCP
 mcp__skewed_emacs__skewed_emacs__ping_lisp()      # Should return "pong"
@@ -119,8 +119,10 @@ docker exec -it skewed-emacs emacsclient -t
 | `genworks-gdl-non-smp` | 9089 | 4209 |
 | `genworks-gdl-enterprise-smp` | 9098 | 4218 |
 
-Licensed users clone their supplemental repo as a sibling to `skewed-emacs/`,
-run `./install`, then `./compose-dev up` picks up the overlay automatically.
+Licensed users clone their supplemental repo as a sibling to `basilisk/`,
+run `./install` (which copies the overlay into the Basilisk checkout —
+override with `BASILISK_DIR=` if it lives elsewhere), then `./basilisk up`
+picks up the overlay automatically.
 
 All containers mount `~/projects` → `/projects` and join `skewed-network`.
 Check the Dashboard (`*dashboard*` buffer) for current service health.
@@ -294,10 +296,10 @@ gendl_result = mcp__gendl_ccl__gendl_ccl__lisp_eval(code="(+ 1 2 3)")
 ```bash
 # Stop and remove everything
 cd ~/projects/skewed-emacs
-./compose-dev down
+./basilisk down
 
 # Recreate from scratch
-./compose-dev up
+./basilisk up
 ```
 
 ## Integration with Claude Code
@@ -674,7 +676,7 @@ Recovery when the daemon does block and no stuck child shows in
 `ps -ef --forest`: `docker restart skewed-emacs` self-heals in ~20 s
 (then restart any emacs-managed watcher processes).  Do NOT send
 SIGUSR2 + pkill of clients — that combination killed the daemon once.
-Full-stack restarts go through `./compose-dev down && ./compose-dev up`
+Full-stack restarts go through `./basilisk down && ./basilisk up`
 (use `up --daemon` from scripts to skip the interactive shell exec).
 
 ### webshot: Headless-Browser Page Captures (2026-08-07+, all images 2026-08-11+)

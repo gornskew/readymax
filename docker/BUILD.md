@@ -284,7 +284,7 @@ Notes:
   pull/up`, classic `docker build` base-image pulls, and `docker buildx`
   multi-arch builds (buildx forwards credentials from the client's
   `~/.docker/config.json` to the builder).
-- `compose-dev` exports `DOCKER_CONFIG="$HOME/.docker"`, so compose finds
+- `basilisk` exports `DOCKER_CONFIG="$HOME/.docker"`, so compose finds
   the credentials regardless of invocation context.
 - GitLab CI: for shell executors, `docker login` once as the runner's user;
   for docker executors, set the `DOCKER_AUTH_CONFIG` CI/CD variable instead.

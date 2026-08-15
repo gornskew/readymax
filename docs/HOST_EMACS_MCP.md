@@ -15,7 +15,7 @@ effectively grants the connected LLM **full access to your machine with your
 user privileges** — closer to handing an autonomous agent the keys to your
 computer than to a scoped, read-only tool.
 
-The containerized path (`./compose-dev up`) exists precisely to sandbox this:
+The containerized path (`./basilisk up`) exists precisely to sandbox this:
 the agent gets a throwaway Emacs in a container with only the directories you
 chose to mount. **The host path does not sandbox anything.** Enable it only on
 a machine and account where that trade-off is acceptable, keep the listener on

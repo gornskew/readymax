@@ -22,7 +22,7 @@ Lisp environment, such as Gendl/Common Lisp) becomes a set of MCP
 tools that *any* agent can drive: Claude Desktop, Claude Code, Cursor,
 Grok Build, Gemini CLI, Codex, LM Studio, or your own MCP client. And
 it ships the whole thing: containerized Emacs + Common Lisp backends +
-generated client configs, one `./compose-dev up` away.
+generated client configs, one `./basilisk up` away.
 
 | | Where the agent lives | Emacs's role | MCP role | What ships in the box |
 |---|---|---|---|---|
@@ -62,31 +62,36 @@ This Skewed Emacs repository houses essentially three assets:
     built-in `emacs-user` user account.
 
 3.  **Basilisk** — a container composition overlay framework (based on
-    docker compose) that makes it easy to spin up a skewed-emacs
-    container (as per (2) above) side-by-side with any number of
-    "helper" containers, with immediate connectivity for http,
-    Slime/Swank (for Common Lisp development), and MCP consumers
-    including three built-in terminal-based ones that ship with the
-    full variants of the skewed-emacs container images.
+    docker compose) that spins up a skewed-emacs container (as per (2)
+    above) side-by-side with any number of "helper" containers, with
+    immediate connectivity for http, Slime/Swank (for Common Lisp
+    development), and MCP consumers.
+    **Basilisk is a separate repository.** This one carries only (1) and
+    (2).
 
-Asset (3) has its own name because one name for three things was one
+Asset (3) got its own name because one name for three things was one
 name too few: "restart skewed-emacs" is genuinely ambiguous between *the
 editor* and *the whole fleet on this box*, and those are very different
-requests. **Basilisk** is the stack — `./basilisk up` — while
-`skewed-emacs` keeps meaning the configuration and the image that
-carries it. `./compose-dev` remains as the original name of the same
-script, so nothing that already says `compose-dev` breaks.
+requests. As of 2026-08-15 it has its own repo to match, which is what
+the naming was always pointing at. **Basilisk** is the stack —
+`./basilisk up`, from a Basilisk clone — while `skewed-emacs` keeps
+meaning the Emacs configuration and the image that carries it.
 
-The name is not decoration: the stack is what turns a bare box into a
-crewed vessel, and the fleet's ships each run one. See
-[BASILISK.md](BASILISK.md) for the naming, the crew, and where this sits
-in the Gornskew Enterprises lineup.
+In Basilisk's terms this repo is the **Captain**: one fitting among
+several, referenced by image name exactly as `cyclops` is. A Basilisk
+carries a Captain by default and it is recommended that the Captain be
+skewed-emacs or a derived species — but the catalogue references fittings
+by image, not by repo, and nothing here has to be present for a stack to
+come up.
+
+See **BASILISK.md in the Basilisk repo** for the naming, the crew, and
+where this sits in the Gornskew Enterprises lineup.
 
 
 ## Two Ways to Use This
 
-**Option A — Containerized Runnings (recommended):** run
-`./compose-dev up`.
+**Option A — Containerized Runnings (recommended):** clone Basilisk and
+run `./basilisk up` there.
 
 This pulls and spins up several Docker containers and leaves your host
 machine untouched except for two shell functions (`eskew`/`egskew`)
@@ -107,7 +112,7 @@ is not sandboxed the way the container path is. You do need
 emacs already installed on your host for it to make sense to use this.
 
 **Both together:** you can do both — run `./setup` to get the
-configuration in your host Emacs, *and* run `./compose-dev up` to also
+configuration in your host Emacs, *and* run `./basilisk up` to also
 have the full container orchestra with Gendl backends and MCP
 integration. They are each idempotent as well as independent from each
 other.
@@ -151,30 +156,37 @@ other.
 Everything runs inside Docker containers — **you do not run `./setup`,
 install dot-files, or modify your Emacs configuration on the host.**
 Your host machine stays clean. The only intentional side effect is that
-`./compose-dev up` makes `eskew` and `egskew` available in your shell.
+`./basilisk up` makes `eskew` and `egskew` available in your shell.
 
 ### Requirements
 
  - Git
  - Docker — see [macOS-Specific Section](#macos-specific-section) if on a Mac
 
-### Quickest Start (no clone needed)
+### Quickest Start — clone Basilisk and bring the stack up
 
-`compose-dev` is self-contained: run standalone, it extracts the few
-runtime files it needs (`docker-compose.yml`, `generate-env.sh`,
-`mcp/`) from the skewed-emacs container image itself.
+**The stack lives in its own repo now.** Running a skewed-emacs container
+— even a single-container one with nothing but the Captain aboard — goes
+through **Basilisk**, and that is the only supported way. This repo no
+longer carries compose files or startup scripts.
 
 ```bash
-mkdir -p ~/skewed-emacs && cd ~/skewed-emacs
-curl -fsSLO https://raw.githubusercontent.com/gornskew/skewed-emacs/devo/compose-dev
-chmod +x compose-dev
-./compose-dev up
+git clone <basilisk>          # gitlab.genworks.com:gornskew/basilisk
+cd basilisk
+./basilisk up
 ```
 
-(Git is not required for this path.) Your `~/projects/` directory is
-mounted at `/projects` in the container and created if missing. To
-refresh the extracted files after pulling a newer image, delete them
-and rerun `./compose-dev up`.
+Your `~/projects/` directory is mounted at `/projects` in the container
+and created if missing.
+
+There used to be a no-clone path here: `basilisk` downloaded on its
+own would create a container from the skewed-emacs image and extract
+`docker-compose.yml`, `generate-env.sh` and `mcp/` out of the repo
+snapshot baked inside it. That is **gone** (2026-08-15). It only ever
+existed because the stack machinery lived in this repo and therefore in
+this image; now that the shipyard is its own repo, cloning it is both
+simpler and honest. An image is a crew member's quarters, not a delivery
+vehicle for the shipyard.
 
 Once an AI client is connected, paste
 [`docs/PROJECT_INSTRUCTIONS.md`](docs/PROJECT_INSTRUCTIONS.md) into a
@@ -206,7 +218,7 @@ message.
 2. Start the default container orchestra:
 
 ```
-   ./compose-dev up
+   ./basilisk up
    
 ```
 
@@ -214,13 +226,14 @@ By default this pulls missing images only (no overwrites of local builds).
 To force pulling the latest images, use:
 
 ```
-   ./compose-dev up --pull
+   ./basilisk up --pull
 ```
 
-Services are defined in `docker-compose.yml` and any other `.yml`
-files in this directory (docker-compose.yml is generated from
-`services.sexp`, while additional .yml files may be brought into your
-local working clone).
+Services are defined in `docker-compose.yml` and any other `.yml` files
+**in the Basilisk clone** — `docker-compose.yml` is generated there from
+`services.sexp`, Basilisk's single source of truth, while additional
+`.yml` overlays are installed alongside it by each host stack's
+`./install`.
 
 After the stack starts, `eskew` and `egskew` should be available
 immediately and henceforth in any new bash shells on your host — these
@@ -230,7 +243,7 @@ containerized Emacs:
 - `eskew` — terminal emacsclient (attaches in your current terminal)
 - `egskew` — graphical emacsclient (opens a new window)
 
-`./compose-dev up` writes these to
+`./basilisk up` writes these to
 `~/.config/skewed-emacs/shell-functions.sh` and adds a single source
 line to your shell's RC file (`~/.bashrc`, `~/.zshrc`, `~/.kshrc`, or
 `~/.profile`, depending on your login shell). This is the **only
@@ -246,7 +259,7 @@ the default landing dashboard.
 If you want to activate Claude Desktop and let it talk to your
 skewed-emacs and friends via MCP, see [Claude Desktop
 Integration](docs/CLAUDE_DESKTOP.md) for setup instructions. The MCP
-configuration is automatically generated when you run `./compose-dev
+configuration is automatically generated when you run `./basilisk
 up`.
 
 ### Pulling Updates
@@ -256,8 +269,8 @@ skewed-emacs containers fresh, by pulling frequently.
 
 #### Pulling newest skewed-emacs docker image from Dockerhub
 
-`./compose-dev up` pulls missing images only by default. If you want
-fresh images, use `./compose-dev up --pull` (or set `PULL_ALWAYS=1`).
+`./basilisk up` pulls missing images only by default. If you want
+fresh images, use `./basilisk up --pull` (or set `PULL_ALWAYS=1`).
 
 
 #### Pulling this Git Repo from Upstream
@@ -267,9 +280,9 @@ related images with `--pull`:
 
 ```
 cd ~/projects/skewed-emacs
-./compose-dev down
+./basilisk down
 git pull
-./compose-dev up --pull
+./basilisk up --pull
 ```
 
 As you can see, we bring down the docker composition before doing the
@@ -306,7 +319,7 @@ grokly     # Follow the login prompt (stores ~/.grok/auth.json)
 
 **MCP wiring (automatic):**
 
-`./compose-dev up` merges service MCP configs and installs them for
+`./basilisk up` merges service MCP configs and installs them for
 each agent:
 
 - Claude / Gemini: `/tmp/merged-mcp-config.json` (JSON `mcpServers`)
@@ -327,14 +340,14 @@ your host, so they survive container restarts:
 - Grok: `~/.grok/auth.json` (only auth is mounted — not the whole
   `~/.grok` tree, so the image-baked CLI binary stays intact)
 
-The `compose-dev` script should automatically create these as empty
+The `basilisk` script should automatically create these as empty
 placeholder files on your host if they don't exist yet.
 
 **Using the `lite` image:**
 
 If you use `EMACS_IMAGE_VARIANT=lite`, these agents are not installed.
 An external host MCP consumer such as Claude Desktop can still be
-used, via the MCP config generated at `./compose-dev up` time and
+used, via the MCP config generated at `./basilisk up` time and
 written to `skewed-emacs/mcp/`.
 
 
@@ -350,7 +363,7 @@ Python-free by design.
 
 Need Python, Ruby, or any other runtime? Bring it in as a sidecar
 container via a Docker Compose overlay: drop an additional `.yml` file
-beside `docker-compose.yml` defining your service, and `./compose-dev
+beside `docker-compose.yml` defining your service, and `./basilisk
 up` merges it into the stack automatically, on the shared network,
 visible to Emacs and the other containers. For example:
 
@@ -391,22 +404,22 @@ git clone <overlay-repo-url>    # e.g. genworks-gdl-betatest
 cd <overlay-repo>/
 ./install                       # copies configs into ../skewed-emacs/
 cd ../skewed-emacs/
-./compose-dev up                # picks up overlay automatically
+./basilisk up                # picks up overlay automatically
 ```
 
 The `./install` script copies Docker Compose overlays (`.yml` files)
-and MCP config overlays into skewed-emacs. Docker Compose
-automatically merges all `.yml` files in the directory, and
-`compose-dev up` merges MCP configs for all services.
+and MCP config overlays into the Basilisk clone. Docker Compose
+automatically merges all `.yml` files in that directory, and
+`./basilisk up` merges MCP configs for all services.
 
 ### Custom Projects Directory
 
-`./compose-dev` generates `.env` via `./generate-env.sh`. Do not edit
-`.env` directly. To use a non-default projects directory, set
+`./basilisk` generates `.env` via `./generate-env.sh` (both in the
+Basilisk clone). Do not edit `.env` directly. To use a non-default projects directory, set
 `PROJECTS_DIR` before running:
 
 ```
-PROJECTS_DIR=/path/to/projects ./compose-dev up
+PROJECTS_DIR=/path/to/projects ./basilisk up
 ```
 
 ### Troubleshooting
@@ -429,14 +442,14 @@ docker rm -f <container-name>
 - *Dangling Network*
 
 Sometimes a docker network "skewed-network" or "skewed-emacs-network"
-can be left dangling, preventing a clean `./compose-dev up`. Such
+can be left dangling, preventing a clean `./basilisk up`. Such
 cases can be cleaned up with e.g.
 
 ```
 cd ~/projects/skewed-emacs/
-./compose-dev down 
+./basilisk down 
 docker network rm skewed-emacs # if for some reason necessary
-./compose-dev up 
+./basilisk up 
 ```
 
 ## Windows-Specific Section
@@ -461,7 +474,7 @@ described in the [instructions](windows-keybindings/README.md).
 
 ### macOS Prerequisites
 
-`compose-dev` is pure POSIX sh — no special shell is required on macOS.
+`basilisk` is pure POSIX sh — no special shell is required on macOS.
 The only requirement is **Docker Desktop**.
 
 #### Install Docker Desktop
@@ -473,7 +486,7 @@ if you haven't already, then confirm:
 docker info   # should print engine info without errors
 ```
 
-Once Docker is running, `./compose-dev up` will work normally.
+Once Docker is running, `./basilisk up` will work normally.
 
 ---
 
