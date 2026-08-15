@@ -199,9 +199,10 @@ RUN set -euxo pipefail; \
    ln -sfn ~/.grok/bin/agent ~/.local/bin/agent; \
    ~/.local/bin/grok --version
 
-# Copy the remainder of the repo (README, docs/, mcp/, docker/,
-# generate-configs.el, services.sexp, ...). Kept late deliberately:
-# changes to these files are cheap and rebuild in seconds.
+# Copy the remainder of the repo (README, docs/, mcp/, docker/, ...).
+# Kept late deliberately: changes to these files are cheap and rebuild in
+# seconds.  No longer carries generate-configs.el or services.sexp -- the
+# stack machinery moved to the Basilisk repo (2026-08-15).
 COPY --chown=emacs-user:emacs-user . /home/emacs-user/skewed-emacs/
 
 USER root
@@ -343,11 +344,11 @@ RUN set -euxo pipefail; \
 
 USER emacs-user
 
-# Regenerate configs
-RUN set -euxo pipefail; \
-   cd ~/skewed-emacs; \
-   emacs --batch -l generate-configs.el -f skewed-generate-all-configs
-
+# NO config regeneration here.  Generating stack configs is yard work and
+# belongs to the Basilisk repo; this image is one crew member's quarters.
+# Removed 2026-08-15 with the rip -- there were TWO of these, one per image
+# variant stage, and fixing only the third call site in the search-index
+# step left both of these to fail the next build.
 RUN set -euxo pipefail; \
     /home/emacs-user/skewed-emacs/setup --force
 
@@ -439,11 +440,11 @@ RUN fc-cache -fv
 
 USER emacs-user
 
-# Regenerate configs
-RUN set -euxo pipefail; \
-   cd ~/skewed-emacs; \
-   emacs --batch -l generate-configs.el -f skewed-generate-all-configs
-
+# NO config regeneration here.  Generating stack configs is yard work and
+# belongs to the Basilisk repo; this image is one crew member's quarters.
+# Removed 2026-08-15 with the rip -- there were TWO of these, one per image
+# variant stage, and fixing only the third call site in the search-index
+# step left both of these to fail the next build.
 RUN set -euxo pipefail; \
     /home/emacs-user/skewed-emacs/setup --force
 

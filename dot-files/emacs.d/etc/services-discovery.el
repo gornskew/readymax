@@ -18,8 +18,11 @@
 ;;   2. services.json (legacy, runtime parsing)
 ;;   3. services.sexp (SSoT, runtime parsing - for development)
 ;;
-;; The SSoT (services.sexp) generates all config files including docker-compose.yml
-;; and MCP configs. Run (skewed-generate-all-configs) after editing services.sexp.
+;; The SSoT (services.sexp) generates all config files including
+;; docker-compose.yml and MCP configs -- but it lives in the BASILISK repo,
+;; not here.  This file is the consumer: it reads the generated elisp that
+;; compose-dev copies into the container.  Regenerate from a Basilisk
+;; checkout, not from this one (2026-08-15).
 
 ;;; Code:
 

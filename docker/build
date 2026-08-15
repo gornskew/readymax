@@ -443,7 +443,10 @@ extract_generated_configs() {
   docker cp "${temp_container}:/home/emacs-user/skewed-emacs/mcp/mcp-windows.json" "${PROJECT_ROOT}/mcp/mcp-windows.json" 2>/dev/null || true
   docker cp "${temp_container}:/home/emacs-user/skewed-emacs/mcp/mcp-container.json" "${PROJECT_ROOT}/mcp/mcp-container.json" 2>/dev/null || true
   docker cp "${temp_container}:/home/emacs-user/skewed-emacs/mcp/mcp.toml" "${PROJECT_ROOT}/mcp/mcp.toml" 2>/dev/null || true
-  docker cp "${temp_container}:/home/emacs-user/skewed-emacs/docker-compose.yml" "${PROJECT_ROOT}/docker-compose.yml" 2>/dev/null || true
+  # docker-compose.yml is NOT extracted any more.  It is yard output and
+  # lives in the Basilisk repo; copying it back here would resurrect a
+  # stale compose file into a repo that deliberately no longer has one.
+  # The || true would have hidden that happening (2026-08-15).
   docker rm "${temp_container}" >/dev/null
 
   echo "✓ Generated configs extracted (if present)"
