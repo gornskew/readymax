@@ -700,12 +700,16 @@ webshot "http://genworks.localhost/demo/staircase" /tmp/s.png 1440x2200 \
 Host-side agents export binaries without `docker cp` via:
 `docker exec skewed-emacs base64 /tmp/s.png | base64 -d > local.png`.
 
-`webshot-clip URL SELECTOR [out.png] [WxH] [pad] [extra chromium flags]`
-(source: `docker/webshot-clip`; node + Chrome DevTools Protocol, no
+`webshot-clip URL SELECTOR [out.png] [WxH] [pad] [--mobile]
+[--settle=MS] [--scale=N] [extra chromium flags]` (source:
+`docker/webshot-clip`; node + Chrome DevTools Protocol, no
 puppeteer) captures just the first element matching a CSS selector --
 hero images, a single card, a viewport region -- using
 captureBeyondViewport so below-the-fold elements render fully.  PAD
-(px) expands the clip on all sides.  Same `--host-resolver-rules`
+(px) expands the clip on all sides.  WxH is a REAL viewport, same as
+webshot (fixed 2026-08-15; see the addendum below).  Exit codes: 1
+usage/bad args, 2 selector not found or zero-area, 3 capture failure,
+4 no browser.  Same `--host-resolver-rules`
 vhost flag as webshot.  Example (2026-08-09, used for the tw-site-2025
 demo hero images):
 ```bash
@@ -785,11 +789,32 @@ webshot file:///projects/skewed-emacs/docker/webshot-viewport-probe.html \
 The probe prints innerWidth/innerHeight/touch points/matchMedia and colors
 a band for the phone (<=480), tablet (481-760) and desktop (>=761) ranges.
 
-Still open (see the org item): `webshot-clip` has the same untouched
-`--window-size` geometry and wants the same override; and
-`/projects/tmp/split-drag-test.js` is the companion trick worth folding in
--- CDP `Input` events to drive a real pointer/touch drag and assert the
-resulting geometry, i.e. proving a page RESPONDS rather than only renders.
+**`webshot-clip` caught up the same day.**  It now takes the same
+`Emulation.setDeviceMetricsOverride` before navigation and the same
+`--mobile` / `--settle=` / `--scale=` / `--no-viewport` flags, verified
+with the probe below: `--no-viewport` reproduces 500x701 / touch 0 /
+`matchMedia(<=480)` false, the default gives 390x844 / touch 1 / true,
+and the clipped `#band` element flips from TABLET (481-760) to PHONE.
+The element's own geometry changes with it, which is why this mattered
+more for clips than for full pages -- a hero image cropped from a
+mis-laid-out page looks perfectly plausible on its own.
+
+Two other things came across from `webshot` in the same pass, both
+previously bugs here and not there:
+- **DevTools port 0 + `DevToolsActivePort`**, replacing a randomly
+  guessed port that could collide with a concurrent run and silently
+  attach to the WRONG browser -- screenshotting another job's page.
+- **Throwaway profile + `--disk-cache-dir=/dev/null`**, so a CSS/JS file
+  you are actively editing is never served stale.
+Plus one bug of its own: `process.exit()` inside the CDP body skipped the
+cleanup handler, so the selector-not-found path orphaned a whole headless
+chromium process tree and its profile directory in the container.  Error
+exits now throw with a code so the `finally` still runs.
+
+Still open (see the org item): `/projects/tmp/split-drag-test.js` is the
+companion trick worth folding in -- CDP `Input` events to drive a real
+pointer/touch drag and assert the resulting geometry, i.e. proving a page
+RESPONDS rather than only renders.
 
 ### Long-Running Dev Processes as Emacs-Managed Processes
 Watchers (e.g. the tailwind CSS watcher) run as async emacs processes —

@@ -2,37 +2,82 @@
 // webshot-clip -- headless-browser screenshot of a CSS-selected element,
 // for agent styling loops and hero-image capture.  Companion to webshot.
 //
-// usage: webshot-clip URL SELECTOR [OUTPUT.png] [WIDTHxHEIGHT] [PAD] [extra chromium flags...]
+// usage: webshot-clip URL SELECTOR [OUTPUT.png] [WIDTHxHEIGHT] [PAD]
+//                     [--mobile] [--settle=MS] [--scale=N] [extra browser flags...]
 //   webshot-clip http://gendl-ccl:9080/demo/staircase '#viewport' /tmp/hero.png 1440x900 12
+//   webshot-clip http://sally/eyes-only '.tile-grid' /tmp/tiles.png 390x844 0 --mobile
 //
 // Captures the bounding box of the first element matching SELECTOR after
 // page JS settles.  PAD (px, default 0) expands the clip on all sides.
 // Extra args are passed to chromium (e.g. --host-resolver-rules=...).
+//
+// WIDTHxHEIGHT is a REAL viewport.  It is applied over CDP via
+// Emulation.setDeviceMetricsOverride BEFORE navigation, so page JS and
+// CSS media queries both see exactly the width asked for.
+//
+// Until 2026-08-15 this script only passed --window-size to chromium,
+// which hands the page back something else entirely (~500x700 for a
+// requested 390x844).  webshot was fixed that morning; this one inherited
+// the bug and kept it, so element captures stayed quietly wrong for a
+// further stretch -- and an element capture is exactly where it hurts,
+// since a hero image cropped from a mis-laid-out page looks perfectly
+// plausible on its own.  Pass --no-viewport for the old behavior.
+//
+// --mobile additionally reports the viewport as mobile and enables touch
+// emulation, for a real mobile pass rather than just a narrow desktop.
+//
+// Browser resolution: $WEBSHOT_BROWSER if set, else chromium (gui
+// images), else chrome-headless-shell (default images, or installed via
+// `skewed-install headless-shell`).  headless-shell needs
+// --enable-unsafe-swiftshader for software WebGL (x3dom viewports),
+// which this script adds itself.
+//
+// Cache: every run gets a throwaway profile and no disk cache, so a
+// CSS/JS file you are actively editing is never served stale (the
+// 2026-08-14 gotcha).
 
 const { spawn, execSync } = require('node:child_process');
+const fs = require('node:fs');
+
+// --- argument parsing -------------------------------------------------
+// Our own flags come out of the stream first so the documented contract
+// -- URL, SELECTOR, out, size, pad, then arbitrary chromium flags --
+// keeps working, notably the --host-resolver-rules vhost recipe.
+let mobile = false, settle = 3000, scale = 1, viewport = true;
+const rest = [];
+for (const arg of process.argv.slice(2)) {
+  if (arg === '--mobile') mobile = true;
+  else if (arg === '--no-viewport') viewport = false;
+  else if (arg.startsWith('--settle=')) settle = Number(arg.slice('--settle='.length));
+  else if (arg.startsWith('--scale=')) scale = Number(arg.slice('--scale='.length));
+  else rest.push(arg);
+}
 
 const [url, selector, out = '/tmp/webshot-clip.png',
-       size = '1440x900', pad = '0', ...extra] = process.argv.slice(2);
-if (!url || !selector) {
-  console.error('usage: webshot-clip URL SELECTOR [out.png] [WxH] [pad] [browser flags...]');
-  process.exit(1);
-}
+       size = '1440x900', pad = '0', ...extra] = rest;
+const usage = 'usage: webshot-clip URL SELECTOR [out.png] [WxH] [pad] '
+            + '[--mobile] [--settle=MS] [--scale=N] [browser flags...]';
+if (!url || !selector) { console.error(usage); process.exit(1); }
+
 const [width, height] = size.split('x').map(Number);
 const padding = Number(pad);
-const port = 9222 + Math.floor(Math.random() * 500);
+for (const [name, val] of [['size width', width], ['size height', height],
+                           ['pad', padding], ['--settle', settle], ['--scale', scale]]) {
+  if (!Number.isFinite(val) || val < 0 || (val === 0 && name !== 'pad')) {
+    console.error(`webshot-clip: bad ${name} value; size must be WxH, pad/settle/scale numeric`);
+    process.exit(1);
+  }
+}
 
-// Browser resolution mirrors webshot: $WEBSHOT_BROWSER, else chromium
-// (gui images), else chrome-headless-shell (default images /
-// `skewed-install headless-shell`).  headless-shell needs
-// --enable-unsafe-swiftshader for software WebGL (x3dom viewports).
+// --- browser resolution (mirrors webshot) -----------------------------
 function resolveBrowser() {
   const which = (bin) => {
     try { execSync(`command -v ${bin}`, { shell: '/bin/bash', stdio: 'pipe' }); return true; }
     catch { return false; }
   };
-  const env = process.env.WEBSHOT_BROWSER;
-  const bin = env || (which('chromium') ? 'chromium'
-              : which('chrome-headless-shell') ? 'chrome-headless-shell' : null);
+  const bin = process.env.WEBSHOT_BROWSER
+    || (which('chromium') ? 'chromium'
+        : which('chrome-headless-shell') ? 'chrome-headless-shell' : null);
   if (!bin) {
     console.error('webshot-clip: no browser found; run: skewed-install headless-shell');
     process.exit(4);
@@ -44,25 +89,63 @@ function resolveBrowser() {
 }
 
 const { bin: browserBin, flags: browserFlags } = resolveBrowser();
+const profile = `/tmp/chrome-webshot-clip-${process.pid}`;
+
+// Port 0 lets chromium pick a free port and report it in
+// DevToolsActivePort.  The old randomly-guessed port could collide with a
+// concurrent run and silently attach to the WRONG browser -- screenshotting
+// another job's page, which is the same class of quietly-wrong output the
+// viewport fix above is about.
 const chrome = spawn(browserBin, [
   ...browserFlags, '--no-sandbox', '--hide-scrollbars',
-  `--remote-debugging-port=${port}`, `--window-size=${width},${height}`,
+  '--remote-debugging-port=0',
+  `--window-size=${width},${height}`,
+  '--disk-cache-dir=/dev/null', `--user-data-dir=${profile}`,
   ...extra, 'about:blank',
 ], { stdio: 'ignore' });
 
+chrome.on('error', (e) => {
+  console.error(`webshot-clip: failed to launch ${browserBin}: ${e.message}`);
+  process.exit(4);
+});
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function cdp() {
+// Carries a specific exit code out through the normal throw path, so the
+// finally block still kills chromium and removes the profile.
+const exitWith = (code, message) => Object.assign(new Error(message), { code });
+
+async function devtoolsPort() {
+  const portFile = `${profile}/DevToolsActivePort`;
+  for (let i = 0; i < 100; i++) {
+    try {
+      const [port] = fs.readFileSync(portFile, 'utf8').split('\n');
+      if (port && Number(port) > 0) return Number(port);
+    } catch { /* not written yet */ }
+    await sleep(100);
+  }
+  throw new Error('browser never reported a DevTools port (did chromium fail to start?)');
+}
+
+async function main() {
+  const port = await devtoolsPort();
+
   let targets;
   for (let i = 0; i < 50; i++) {
     try {
       targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
       if (targets.length) break;
-    } catch { /* chromium not up yet */ }
+    } catch { /* not accepting connections yet */ }
     await sleep(200);
   }
+  if (!targets || !targets.length) throw new Error('browser exposed no DevTools targets');
+
   const ws = new WebSocket(targets[0].webSocketDebuggerUrl);
-  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  await new Promise((res, rej) => {
+    ws.onopen = res;
+    ws.onerror = () => rej(new Error('DevTools websocket failed'));
+  });
+
   let id = 0;
   const pending = new Map();
   const events = [];
@@ -77,27 +160,53 @@ async function cdp() {
   });
 
   await send('Page.enable');
+
+  // Before navigate: the first layout must already see the real width, or
+  // media queries resolve against the default and never re-evaluate for
+  // rules that only run at load time.
+  if (viewport) {
+    await send('Emulation.setDeviceMetricsOverride',
+               { width, height, deviceScaleFactor: scale, mobile });
+    if (mobile) {
+      await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+    }
+  }
+
   await send('Page.navigate', { url });
   for (let i = 0; i < 100 && !events.includes('Page.loadEventFired'); i++) await sleep(200);
-  await sleep(3000); // let x3dom / ajax settle
+  await sleep(settle); // let x3dom / ajax settle
 
+  // getBoundingClientRect is viewport-relative; captureBeyondViewport
+  // clips in document coordinates.  Adding the scroll offset makes the
+  // two agree even if the page scrolled itself during settle.
   const { result: { result: box } } = await send('Runtime.evaluate', {
     expression: `(() => { const el = document.querySelector(${JSON.stringify(selector)});
                           if (!el) return null;
                           const r = el.getBoundingClientRect();
-                          return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`,
+                          return { x: r.x + window.scrollX, y: r.y + window.scrollY,
+                                   w: r.width, h: r.height }; })()`,
     returnByValue: true,
   });
-  if (!box.value) { console.error(`selector not found: ${selector}`); process.exit(2); }
+  // Throw rather than process.exit: an exit here would skip the finally
+  // block below, orphaning the chromium child and its profile directory.
+  if (!box || !box.value) throw exitWith(2, `selector not found: ${selector}`);
   const { x, y, w, h } = box.value;
+  if (!(w > 0 && h > 0)) {
+    throw exitWith(2, `selector matched a zero-area element: ${selector}`);
+  }
   const clip = { x: Math.max(0, x - padding), y: Math.max(0, y - padding),
                  width: w + 2 * padding, height: h + 2 * padding, scale: 1 };
   const shot = await send('Page.captureScreenshot',
                           { format: 'png', clip, captureBeyondViewport: true });
-  require('node:fs').writeFileSync(out, Buffer.from(shot.result.data, 'base64'));
+  if (!shot.result || !shot.result.data) throw new Error('capture returned no image data');
+  fs.writeFileSync(out, Buffer.from(shot.result.data, 'base64'));
   console.log(out);
   ws.close();
 }
 
-cdp().catch((e) => { console.error(e.message); process.exit(3); })
-     .finally(() => { try { chrome.kill(); } catch {} });
+main()
+  .catch((e) => { console.error(`webshot-clip: ${e.message}`); process.exitCode = e.code || 3; })
+  .finally(() => {
+    try { chrome.kill(); } catch { /* already gone */ }
+    try { fs.rmSync(profile, { recursive: true, force: true }); } catch { /* best effort */ }
+  });
