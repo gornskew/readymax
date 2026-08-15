@@ -7,6 +7,11 @@
 ;;; services.sexp can name posts symbolically instead of restating service
 ;;; definitions.  See skewed-emacs/BASILISK.md and apps/eyes-only/THEMES.md.
 ;;;
+;;; A post may also carry a :probe, which says what that post looks like to
+;;; the Eyes Only board.  Because the probe list is then derived from each
+;;; ship's ROSTER, a crew member who is not aboard cannot be probed for, and
+;;; so cannot present as a permanently red tile (shelly, 2026-08-14).
+;;;
 ;;; A host declares EITHER a :crew-level (coarse) or a :roster (specific)
 ;;; in its services.sexp :meta.  Level expands to roster; roster infers
 ;;; level.  Its own :services then carries only genuine deviation, merged
@@ -30,12 +35,31 @@
   (:post :captain
    :in-base t
    :description "The ship's console, and the longest-lived process aboard."
-   :services ((:name "skewed-emacs")))
+   :services ((:name "skewed-emacs"))
+   ;; :in-stack is the ONLY sanctioned routing for the :emacs kind --
+   ;; emacs lisply has no token gate, so it never rides a public path.
+   ;; Off-ship, the Cap'n is sampled through that stack's own gendl-ccl
+   ;; proxy (publish-emacs-metrics!), which is gated.
+   :probe (:tile "heap skewed-emacs"
+           :in-stack (:kind :emacs
+                      :url "http://skewed-emacs:7080/lisply/lisp-eval"
+                      :alert-mb 2000)
+           :remote (:kind :metrics
+                    :path "/eyes-only-metrics/skewed-emacs"
+                    :alert-mb 2000)))
 
   (:post :ship-engineers
    :in-base t
    :description "Two small, competent, collegial engineering departments."
-   :services ((:name "gendl-ccl") (:name "gendl-sbcl")))
+   :services ((:name "gendl-ccl") (:name "gendl-sbcl"))
+   ;; One probe, not two: gendl-ccl carries the metrics publisher;
+   ;; gendl-sbcl publishes nothing, so there is no tile to ask for.
+   ;; No :in-stack form either -- a board self-samples its own image
+   ;; (the heap gendl-ccl tile) without a probe entry.
+   :probe (:tile "heap gendl-ccl"
+           :remote (:kind :metrics
+                    :path "/eyes-only-metrics/gendl-ccl"
+                    :alert-mb 1200)))
 
   (:post :medic
    :in-base t
@@ -63,6 +87,10 @@
   ;; to standards imposed by central Guild authorities.
   (:post :guild
    :description "A Guild engineering detachment: two commissioned GDL units."
+   :probe (:tile "heap gdl-enterprise"
+           :remote (:kind :metrics
+                    :path "/eyes-only-metrics/gdl-enterprise"
+                    :alert-mb 512))
    :services
    ((:name "genworks-gdl-enterprise-smp"
      :type "common-lisp"

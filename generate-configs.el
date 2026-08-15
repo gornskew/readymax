@@ -638,6 +638,109 @@ fully explicit :services keep working untouched."
           (let ((out (copy-sequence config)))
             (plist-put out :services expanded)))))))
 
+;;; EYES ONLY HEAP PROBES FROM THE ROSTER (2026-08-15)
+;;;
+;;; The roster is the SSoT for who is aboard, so it is also the authority on
+;;; what can be PROBED.  eyes-only's *heap-probes* was hand-maintained per
+;;; board, which meant a probe could name a crew member who was never aboard
+;;; the ship it points at -- and an absent optional post then presents as a
+;;; permanently red tile rather than as nothing at all.  That is exactly
+;;; shelly's 2026-08-14 symptom.  Deriving the list from each ship's roster
+;;; makes the failure impossible: no post, no probe, no tile.
+
+(defvar skewed-gen-probe-posts '(:captain :ship-engineers :guild)
+  "Posts that can yield an eyes-only heap probe, in emission order.")
+
+(defun skewed--stack-roster (stack-dir catalogue)
+  "The roster of the ship whose services.sexp lives in STACK-DIR.
+Expands a declared :crew-level against CATALOGUE.  NIL when that stack
+does not use symbolic rosters."
+  (let* ((f (expand-file-name "services.sexp" stack-dir))
+         (config (and (file-exists-p f) (skewed--read-sexp-file f)))
+         (meta (and config (skewed--get-prop config :meta))))
+    (when meta
+      (or (plist-get meta :roster)
+          (let ((level (plist-get meta :crew-level)))
+            (and level (skewed--level-roster catalogue level)))))))
+
+(defun skewed--heap-probe-entries (config dir)
+  "Build the eyes-only *heap-probes* list for the board declared in CONFIG.
+Returns nil unless CONFIG's :meta carries an :eyes-only-board.
+
+Each watch entry names a :stack and either :in-stack t (this board's own
+ship, sampled over the docker bridge) or an :edge URL prefix reaching that
+ship's token-gated metrics.  An optional :watch narrows which posts this
+board cares about; it can never widen past what the target's roster
+actually carries, which is the guarantee that kills phantom tiles."
+  (let* ((meta (skewed--get-prop config :meta))
+         (board (plist-get meta :eyes-only-board)))
+    (when board
+      (let ((catalogue (skewed--read-sexp-file skewed-gen-fittings-file))
+            (root (file-name-directory (directory-file-name dir)))
+            (out '()))
+        (dolist (w board)
+          (let* ((stack (plist-get w :stack))
+                 (in-stack (plist-get w :in-stack))
+                 (edge (plist-get w :edge))
+                 (watch (plist-get w :watch))
+                 (sdir (expand-file-name (concat stack "-stack/") root))
+                 (roster (skewed--stack-roster sdir catalogue)))
+            (unless roster
+              (error "Board watches %s, whose services.sexp declares no roster"
+                     stack))
+            (dolist (post skewed-gen-probe-posts)
+              (when (and (memq post roster)
+                         (or (null watch) (memq post watch)))
+                (let* ((entry (skewed--catalogue-post catalogue post))
+                       (probe (plist-get entry :probe))
+                       ;; A post with no :in-stack form contributes nothing
+                       ;; to its own board -- the board self-samples its own
+                       ;; image for the heap gendl-ccl tile.
+                       (spec (and probe (if in-stack
+                                            (plist-get probe :in-stack)
+                                          (plist-get probe :remote)))))
+                  (when spec
+                    (unless (or in-stack edge)
+                      (error "Board watch for %s is off-ship but declares no :edge"
+                             stack))
+                    (push (list (format "%s %s" (plist-get probe :tile) stack)
+                                (plist-get spec :kind)
+                                (or (plist-get spec :url)
+                                    (concat edge (plist-get spec :path)))
+                                (plist-get spec :alert-mb))
+                          out)))))
+            (dolist (post skewed-gen-probe-posts)
+              (when (and watch (memq post watch) (not (memq post roster)))
+                (message "  Note (%s): board asks for %s, which is not aboard -- no probe emitted"
+                         stack post)))))
+        (nreverse out)))))
+
+(defun skewed--generate-heap-probes-file (config dir)
+  "Write eyes-only-probes-generated.lisp for a board stack, if it is one."
+  (let ((probes (skewed--heap-probe-entries config dir)))
+    (when probes
+      (let ((file (expand-file-name "eyes-only-probes-generated.lisp" dir)))
+        (with-temp-file file
+          (insert ";;; eyes-only-probes-generated.lisp -*- mode: lisp -*-\n")
+          (insert ";;; DO NOT EDIT -- generated from the fleet's Basilisk rosters by\n")
+          (insert ";;; skewed-emacs/generate-configs.el.  Regenerate with:\n")
+          (insert (format ";;;   (skewed-generate-configs \"%s\")\n" dir))
+          (insert ";;;\n")
+          (insert ";;; Every entry here corresponds to a post actually on the target\n")
+          (insert ";;; ship's roster, so a crew member who is not aboard cannot show up\n")
+          (insert ";;; as a permanently red tile.  Change the fleet by editing the\n")
+          (insert ";;; rosters, or this board's :eyes-only-board, in services.sexp.\n\n")
+          (insert "(in-package :gdl-user)\n\n")
+          (insert "(setq eyes-only::*heap-probes*\n      '(")
+          (let ((first t))
+            (dolist (p probes)
+              (if first (setq first nil) (insert "\n        "))
+              (insert (format "(%S %s %S %d)"
+                              (nth 0 p) (nth 1 p) (nth 2 p) (nth 3 p)))))
+          (insert "))\n"))
+        (message "Generated: %s (%d probe(s))" file (length probes))
+        probes))))
+
 ;;; ============================================================================
 
 (defun skewed-generate-configs (&optional dir services-file prefix)
@@ -731,7 +834,11 @@ Examples:
           (insert (skewed--generate-install-script skewed-gen-output-prefix (skewed--has-mcp-services-p config))))
         (set-file-modes install-file #o755)
         (message "Generated: %s" install-file)))
-    
+
+    ;; Eyes Only heap probes, for a stack that declares itself a board.
+    ;; Reads the OTHER ships' rosters, so it runs last.
+    (skewed--generate-heap-probes-file config skewed-gen-output-dir)
+
     (message "=== Generation complete ===")))
 
 (defun skewed-generate-all-configs ()
