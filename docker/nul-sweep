@@ -1,0 +1,118 @@
+#!/bin/sh
+# nul-sweep -- find files that are entirely NUL bytes.
+#
+# usage: nul-sweep [PATH]... [--all] [--quiet]
+#   nul-sweep                     # git-tracked files under cwd
+#   nul-sweep /projects/licensing # git-tracked files under that repo
+#   nul-sweep /some/dir --all     # every file, tracked or not
+#
+# Exit: 0 clean, 1 damage found, 2 usage error.  Suitable for cron.
+#
+# WHY THIS EXISTS (2026-08-15)
+# ============================
+# /projects/licensing was found with 98 of 282 tracked files zero-filled
+# to their original byte length -- the whole agreements/ template set and
+# the US pricing documents.  It had been that way since at least
+# 2022-09-03, and nothing had ever noticed, because nothing about it
+# looks wrong:
+#
+#   - `git status` is CLEAN.  The zeros are the committed content, so
+#     there is no diff to see.
+#   - `git fsck` exits 0.  The objects are internally consistent; git is
+#     faithfully storing the damage.
+#   - The files have their ORIGINAL SIZES.  `ls -l` looks completely
+#     normal, which is what defeats a human skim.
+#   - `git checkout` cannot help, and neither can any amount of history
+#     archaeology, because no good version was ever committed.
+#
+# That combination is the point: every routine integrity signal reports
+# healthy.  The only thing that distinguishes a zero-filled file from a
+# real one is reading it, which is exactly what nobody does to a PDF of a
+# contract from 2011 until the day they need it.
+#
+# The likely causes are mundane -- an interrupted copy, a sparse-file
+# restore, a bad SVN->git conversion, a Dropbox/Mac sync that wrote the
+# inode before the data.  Any of them can hit any repo here, which is why
+# this tool takes a path rather than being hardcoded to the one that got
+# bitten.
+#
+# Run it over anything holding records you would not notice losing.
+
+set -eu
+
+paths=""
+all=0
+quiet=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --all)   all=1 ;;
+        --quiet) quiet=1 ;;
+        -h|--help)
+            sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0 ;;
+        -*)
+            printf 'nul-sweep: unknown option %s\n' "$arg" >&2
+            exit 2 ;;
+        *) paths="$paths $arg" ;;
+    esac
+done
+[ -n "$paths" ] || paths="."
+
+status=0
+
+for p in $paths; do
+    if [ ! -d "$p" ]; then
+        printf 'nul-sweep: not a directory: %s\n' "$p" >&2
+        status=2
+        continue
+    fi
+
+    # Prefer the git index: it names exactly the files someone believes
+    # are under version control, which is the population that matters.
+    if [ "$all" -eq 0 ] && git -C "$p" rev-parse --git-dir >/dev/null 2>&1; then
+        listing=$(git -C "$p" ls-files)
+        source_desc="git-tracked"
+    else
+        listing=$(cd "$p" && find . -type f | sed 's|^\./||')
+        source_desc="all files"
+    fi
+
+    total=0
+    bad=0
+    badlist=""
+
+    # NB: read from a here-doc rather than a pipe, so the counters below
+    # survive -- a piped while-loop runs in a subshell and its variables
+    # are discarded, which would silently report zero damage forever.
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        [ -f "$p/$f" ] || continue          # submodules, deleted entries
+        [ -L "$p/$f" ] && continue          # don't chase symlinks
+        total=$((total + 1))
+
+        sz=$(wc -c < "$p/$f")
+        [ "$sz" -gt 0 ] || continue         # genuinely empty is not damage
+
+        # cmp against /dev/zero stops at the first non-zero byte, so this
+        # is cheap on healthy files and only reads in full on damaged ones.
+        if cmp -s -n "$sz" "$p/$f" /dev/zero; then
+            bad=$((bad + 1))
+            badlist="$badlist$f
+"
+        fi
+    done <<EOF
+$listing
+EOF
+
+    if [ "$bad" -gt 0 ]; then
+        status=1
+        printf '%s: %d of %d %s files are entirely NUL\n' \
+               "$p" "$bad" "$total" "$source_desc"
+        [ "$quiet" -eq 1 ] || printf '%s' "$badlist" | sed 's/^/    /'
+    elif [ "$quiet" -eq 0 ]; then
+        printf '%s: clean (%d %s files)\n' "$p" "$total" "$source_desc"
+    fi
+done
+
+exit $status
