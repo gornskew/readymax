@@ -254,7 +254,14 @@ ensure_env() {
 # =============================================================================
 show_help() {
     cat << EOF
-Docker Compose Management for Skewed Emacs + Gendl Development Environment
+Basilisk — brings up the skewed-emacs stack: Emacs, the Gendl and GDL
+engines, Cyclops and autoheal, crewed onto one network and validated.
+
+'Basilisk' names the STACK.  'skewed-emacs' keeps meaning the Emacs
+configuration and the image carrying it, which is one container in here.
+This script answers to both names: ./basilisk and ./compose-dev are the
+same file, so nothing that already says compose-dev breaks.  See
+BASILISK.md.
 
 USAGE:
     $0 <command> [options]
@@ -387,7 +394,7 @@ restart_services() {
 }
 
 # =============================================================================
-# CREW IDENTITY MINTING (the eyes-only 'Starfleet' conceit, framework-level)
+# CREW IDENTITY MINTING (the Basilisk ship-and-crew conceit, framework-level)
 #
 # Mints a per-container identity -- NAME (random, species-flavored),
 # SPECIES, ROLE -- and writes it into /tmp/skewed-crew-identity inside
@@ -417,9 +424,13 @@ restart_services() {
 # Config.Image (docker inspect), so this needs nothing from
 # services.sexp and works for a service this script has never named.
 # The genworks/gdl vs gornskew/gendl ORG NAMESPACE is the real signal
-# behind gendl vs genworks-gdl -- community shop vs commissioned
-# Starfleet engineering IS the licensing-tier distinction (Cluster
-# commercial-tiering thread, org).
+# behind gendl vs genworks-gdl -- community shop vs commissioned fleet
+# engineering IS the licensing-tier distinction (Cluster commercial-
+# tiering thread, org).  (Said "Starfleet" until 2026-08-15; the ship
+# skin was walked back off recognizable Star Trek dress precisely to
+# reduce cease-and-desist exposure -- see eyes-only/THEMES.md -- and
+# leaving the word in a shipped open-source file gave that back for
+# nothing.  The fleet is ours; it does not need anyone else's navy.)
 _crew_species_from_image() {
     case "$1" in
         */skewed-emacs:*|skewed-emacs:*) echo "skewed-emacs" ;;
@@ -1038,14 +1049,15 @@ refresh_emacs_runtime_config() {
 
 show_skew_welcome() {
     echo ""
-    echo "Services are Up."
+    echo "Services are Up.  The complement is aboard."
     echo ""
-    echo "Shell Commands for the Skewed Emacs Stack"
+    echo "Shell Commands for the Basilisk Stack"
     echo ""
     printf "%b\n" "  \`eskew\`  ${BLUE}-- terminal emacsclient (attach in current terminal)${NC}"
     printf "%b\n" "  \`egskew\` ${BLUE}-- graphical emacsclient (opens new window)${NC}"
     echo ""
-    echo "NOTE: Please exit this shell with Ctrl-D before doing './compose-dev down'."
+    echo "NOTE: Please exit this shell with Ctrl-D before doing './basilisk down'."
+    echo "      (A down + up is a relief in place: same ship, all-new crew.)"
     echo ""
 }
 

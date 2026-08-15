@@ -61,13 +61,26 @@ This Skewed Emacs repository houses essentially three assets:
     skewed-emacs configuration (as per (1) above) preïnstalled for the
     built-in `emacs-user` user account.
 
-3.  a container composition overlay framework (based on docker
-    compose) that makes it easy to spin up a skewed-emacs container
-    (as per (2) above) side-by-side with any number of "helper"
-    containers, with immediate connectivity for http, Slime/Swank (for
-    Common Lisp development), and MCP consumers including three
-    built-in terminal-based ones that ship with the full variants of
-    the skewed-emacs container images.
+3.  **Basilisk** — a container composition overlay framework (based on
+    docker compose) that makes it easy to spin up a skewed-emacs
+    container (as per (2) above) side-by-side with any number of
+    "helper" containers, with immediate connectivity for http,
+    Slime/Swank (for Common Lisp development), and MCP consumers
+    including three built-in terminal-based ones that ship with the
+    full variants of the skewed-emacs container images.
+
+Asset (3) has its own name because one name for three things was one
+name too few: "restart skewed-emacs" is genuinely ambiguous between *the
+editor* and *the whole fleet on this box*, and those are very different
+requests. **Basilisk** is the stack — `./basilisk up` — while
+`skewed-emacs` keeps meaning the configuration and the image that
+carries it. `./compose-dev` remains as the original name of the same
+script, so nothing that already says `compose-dev` breaks.
+
+The name is not decoration: the stack is what turns a bare box into a
+crewed vessel, and the fleet's ships each run one. See
+[BASILISK.md](BASILISK.md) for the naming, the crew, and where this sits
+in the Gornskew Enterprises lineup.
 
 
 ## Two Ways to Use This
