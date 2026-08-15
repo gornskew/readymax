@@ -716,6 +716,27 @@ Channels" in gendl/CLAUDE.md (gendl-ccl doc id `claude-gendl-md`).
 Keep both channels in mind: chromium for web-app UI iteration, native
 emitters for model iteration and runtime file deliverables.
 
+#### Addendum (2026-08-14): output path + cache gotcha
+Missed `webshot`/`webshot-clip` entirely this session and hand-rolled
+raw `chromium --headless --screenshot=...` calls instead -- future
+sessions should reach for the wrapper first, it already solves the
+binary-resolution and vhost problems above.  Two things worth folding
+back in from the raw-chromium detour:
+- **Skip the base64 round-trip**: writing the screenshot straight to
+  a path under the /projects bind mount (e.g. `/projects/tmp-shots/`,
+  the existing convention) and then reading it via the equivalent
+  HOST path (found by checking what the container's /projects bind-
+  mounts FROM, e.g. `/home/<user>/projects/tmp-shots/...`) needs no
+  `docker cp` and no base64 step at all -- one write, one direct read.
+- **Cache gotcha, iterating on the SAME evolving page**: repeated
+  headless chromium invocations against a URL you're actively editing
+  CSS/JS for can silently serve a stale cached response even though
+  the server-side file (and its cache-busting `?v=` mtime) genuinely
+  changed -- confirmed by diffing the served CSS text directly against
+  what a screenshot rendered.  Force a truly clean fetch every time:
+  `--disk-cache-dir=/dev/null --user-data-dir=/tmp/chrome-fresh-$$`
+  (a fresh, unique profile dir per invocation).
+
 ### Long-Running Dev Processes as Emacs-Managed Processes
 Watchers (e.g. the tailwind CSS watcher) run as async emacs processes —
 visible to the user, no event-loop blocking:
