@@ -121,7 +121,7 @@ it lives in THEMES.md and one copy is enough.
 |---|---|---|
 | **Basilisk** (with `skewed-emacs` and `lisply-mcp`) | open source, AGPL | the stack, the editor config, and the MCP middleware — the whole crewed vessel |
 | **Cyclops** | $99, binary, closed source | the reverse proxy, on an Allegro CL runtime |
-| **Eyes Only** | open core under the **Eyes Only License**; $69 for the binary + the extra skins | the board that watches the fleet |
+| **Eyes Only** | $69, binary + base skins, closed source | the board that watches the fleet, plus a skins marketplace |
 
 The seam between the last two is one the code already has rather than
 one the marketing invented: Cyclops exposes `/_cyclops/vitals` and
@@ -132,40 +132,34 @@ uncluttered by it (Dave, 2026-08-14).
 Basilisk being the free tier is the point of the shape: the fleet is
 what you give away, and what you sell is the eyes.
 
-### The Eyes Only License (not yet written)
+### Eyes Only ships closed, like Cyclops
 
-Eyes Only's open core is to ship under a license of its own, named for
-the product, and it **must be GPL-compatible** (Dave, 2026-08-15).  The
-name appears to be free: no such identifier exists on the SPDX license
-list, and no software license by that name turns up in general use.
+Decided 2026-08-15: Eyes Only stays **closed source for now**, sold the
+same way Cyclops is — a $69 binary the customer plugs in, carrying the
+base skins — with a **skins marketplace** alongside it that Gornskew
+seeds.  An earlier plan for an open core under a bespoke "Eyes Only
+License" is dropped; the source headers already say proprietary, and now
+the packaging agrees with them.
 
-Two things to settle before anyone drafts prose, because they decide how
-much prose there is to draft:
+Two consequences worth carrying, because they are structural rather than
+marketing:
 
-- **Compatible how.**  The cheap and safe construction is not a new
-  license at all but **GPLv3 with additional terms under its §7**, badged
-  as the Eyes Only License.  That is compatible by construction, and §7
-  is the clause written for exactly this purpose.  The catch worth
-  knowing up front: §7 lets you add *permissions* freely but only an
-  enumerated set of *requirements* — attribution, marking modified
-  versions, trademark limits and a few others.  Anything outside that
-  list is not a GPL-compatible term no matter what the document is
-  called.  A genuinely bespoke license is the expensive path: it needs a
-  lawyer, it earns a `LicenseRef-` in every corporate scanner until SPDX
-  accepts it, and license proliferation is a real cost to adopters.
-- **Which copyleft.**  The rest of the free tier is AGPL, and Eyes Only
-  is a *network-served board* — the precise case AGPL's §13 exists for.
-  Basing it on AGPLv3 rather than GPLv3 keeps the family consistent and
-  closes the hosted-dashboard hole; AGPLv3 and GPLv3 are written to
-  interoperate.  If "GPL-compatible" was meant strictly as *GPLv3*, say
-  so, because it changes the base document.
-
-Not legal advice, in the same spirit as THEMES.md's note on the ship
-silhouettes.  What is being flagged is that "GPL-compatible" is a
-technical property that a name cannot confer — the base license does.
-
-The paid split stays mechanical, as THEMES.md already describes: the
-free build simply ships fewer `eyes-only-*.css` files and the THEME menu
-shortens by itself.  Which means the licensing decision above and the
-build split are independent — the skins are a packaging boundary, not a
-licensing one, and they will need their own answer.
+- **A binary means a Lisp image, and Eyes Only is a GWL application.**
+  It is built from `define-object` and talks to `gwl:with-all-servers`,
+  so the artifact shipped to a customer is a Gendl/GDL image with Eyes
+  Only inside it.  That makes the licensing question about the *engine*,
+  not the app: stock Gendl is AGPL, and an AGPL engine in the same image
+  as a closed product is a combined work.  Shipping closed therefore
+  requires the engine under commercial terms — which Genworks, as the
+  copyright holder, is entitled to grant.  The runtime choice follows
+  from that grant, not the other way round; see the org item.
+- **The marketplace needs skins to live outside the image.**  A skin is
+  one client-side `eyes-only-<name>.css` (THEMES.md, *Mechanics*), and
+  the theme *discovery* change already means the menu is built from what
+  is present rather than a hardcoded list — so a marketplace is closer
+  than it looks.  What a sealed binary breaks is the assumption that
+  skins arrive by rebuilding: a customer cannot rebuild, so the image
+  must read skins from a customer-writable directory, and the CSS custom
+  properties skins target (`--rank-*`, `--ink`, `THEME_BASE`,
+  `DARK_ONLY`/`LIGHT_ONLY`, the `CONCEITS` table) stop being internal
+  details and become a **public contract with a version**.
