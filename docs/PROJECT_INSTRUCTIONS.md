@@ -1,7 +1,7 @@
 # Standing Project Instructions for AI Clients
 
 Durable instructions for an AI agent (Claude Desktop, Claude Code, Codex,
-or any MCP-capable client) connected to a running skewed-emacs stack.
+or any MCP-capable client) connected to a running Basilisk stack.
 
 Where to put them:
 

@@ -388,7 +388,7 @@ just as the commercial GDL overlays below do.
 
 ### Supplemental Service Overlays (Commercial GDL)
 
-The base skewed-emacs stack includes three Lisp environments:
+A base Basilisk stack includes three Lisp environments:
 
 - **skewed-emacs** — Emacs Lisp (via MCP)
 - **gendl-ccl** — Free Gendl kernel on Clozure CL
