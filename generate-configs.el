@@ -370,6 +370,19 @@ filters those out and keeps only top-level [mcp_servers.NAME] tables."
          (lines '()))
     
     (push ";;; services-generated.el --- Generated from services.sexp -*- lexical-binding: t; -*-" lines)
+    ;; The header is EMITTED, not hand-added.  It was hand-added before
+    ;; 2026-08-15 and every regeneration silently stripped it again --
+    ;; harmless while regenerating was rare, not harmless now that symbolic
+    ;; rosters make it routine, in a repo whose sibling products ship closed.
+    (push "" lines)
+    (push ";; Copyright © 2026 Gornskew Enterprises" lines)
+    (push ";;" lines)
+    (push ";; The software, data and information contained herein are proprietary" lines)
+    (push ";; to, and comprise valuable trade secrets of, Gornskew Enterprises." lines)
+    (push ";; They may be stored and used only in accordance with a written" lines)
+    (push ";; license agreement from Gornskew Enterprises, and may not be" lines)
+    (push ";; redistributed." lines)
+    (push "" lines)
     (push ";;; DO NOT EDIT - Regenerate with: (skewed-generate-all-configs)" lines)
     (push "" lines)
     (push "(defvar skewed-generated-services nil)" lines)
@@ -499,6 +512,133 @@ Returns the install script content as a string."
     (string-join (nreverse lines) "\n")))
 
 ;;; ============================================================================
+;;; SYMBOLIC ROSTERS (Basilisk fittings, 2026-08-15)
+;;;
+;;; A host's services.sexp may name who is aboard SYMBOLICALLY in :meta --
+;;; either a coarse :crew-level or a specific :roster -- instead of restating
+;;; service definitions that are identical across five stacks.  Expansion
+;;; happens on the CONFIG PLIST immediately after reading, so every
+;;; downstream generator (compose yaml, MCP json, elisp discovery, install
+;;; script) sees ordinary :services and needs no changes at all.
+;;;
+;;; Level expands to roster; roster infers level.  See fittings.sexp for the
+;;; catalogue and BASILISK.md for the conceit.
+
+(defvar skewed-gen-fittings-file "/projects/skewed-emacs/fittings.sexp"
+  "The Basilisk fitting catalogue: posts -> container services.")
+
+(defun skewed--stack-short-name (dir)
+  "Short stack name from DIR: /projects/narad-stack/ -> \"narad\"."
+  (let ((base (file-name-nondirectory (directory-file-name dir))))
+    (if (string-suffix-p "-stack" base)
+        (substring base 0 (- (length base) (length "-stack")))
+      base)))
+
+(defun skewed--subst-stack (form stack)
+  "Recursively replace {{STACK}} with STACK in every string in FORM.
+Substitution is done at GENERATION time deliberately, so one catalogue
+serves every ship without anything having to exist in .env."
+  (cond ((stringp form) (replace-regexp-in-string "{{STACK}}" stack form t t))
+        ((consp form) (cons (skewed--subst-stack (car form) stack)
+                            (skewed--subst-stack (cdr form) stack)))
+        (t form)))
+
+(defun skewed--catalogue-post (catalogue post)
+  "The catalogue entry for POST, or nil."
+  (seq-find (lambda (e) (eq (plist-get e :post) post))
+            (skewed--get-prop catalogue :posts)))
+
+(defun skewed--level-roster (catalogue level)
+  "The roster named by LEVEL, or nil if LEVEL is unknown."
+  (let ((e (seq-find (lambda (x) (eq (plist-get x :level) level))
+                     (skewed--get-prop catalogue :crew-levels))))
+    (and e (plist-get e :roster))))
+
+(defun skewed--infer-crew-level (catalogue roster)
+  "Infer a crew-level from ROSTER: the highest level wholly contained in it.
+Returns `:custom' when no named level fits, which is a first-class
+outcome -- the scheme must keep describing ships we actually build."
+  (let ((best :custom) (best-n -1))
+    (dolist (e (skewed--get-prop catalogue :crew-levels))
+      (let* ((lr (plist-get e :roster)) (n (length lr)))
+        (when (and (> n best-n)
+                   (seq-every-p (lambda (p) (memq p roster)) lr))
+          (setq best (plist-get e :level) best-n n))))
+    best))
+
+(defun skewed--merge-service (base over)
+  "Merge service plist OVER onto BASE; OVER's keys win."
+  (let ((out (copy-sequence base)))
+    (cl-loop for (k v) on over by #'cddr do (setq out (plist-put out k v)))
+    out))
+
+(defun skewed--expand-roster (config dir prefix)
+  "Expand a symbolic :crew-level/:roster in CONFIG into concrete :services.
+Returns CONFIG unchanged when neither is declared, so hosts still using
+fully explicit :services keep working untouched."
+  (let* ((meta (skewed--get-prop config :meta))
+         (level (plist-get meta :crew-level))
+         (declared (plist-get meta :roster)))
+    (if (not (or level declared))
+        config
+      (let* ((catalogue (skewed--read-sexp-file skewed-gen-fittings-file))
+             (stack (skewed--stack-short-name dir))
+             (overlay-p (not (string-empty-p (or prefix ""))))
+             (roster (or declared (skewed--level-roster catalogue level))))
+        (unless catalogue
+          (error "Cannot read fitting catalogue: %s" skewed-gen-fittings-file))
+        (unless roster
+          (error "Unknown :crew-level %s (see fittings.sexp :crew-levels)" level))
+        ;; Declaring both is allowed only if they agree.  Refuse rather than
+        ;; silently pick a winner: a config that lies about its own crew is
+        ;; worse than one that will not build.
+        (when (and level declared
+                   (not (equal (sort (copy-sequence declared) #'string<)
+                               (sort (copy-sequence
+                                      (skewed--level-roster catalogue level))
+                                     #'string<))))
+          (error ":crew-level %s and :roster disagree; declare one or make them match"
+                 level))
+        ;; A Basilisk-class ship carries a Cap'n (Dave, 2026-08-15).  This is
+        ;; the class definition, so it is an ERROR -- every other omission is
+        ;; a warning.  It does not stop the containers running; it stops the
+        ;; result being called a Basilisk.
+        (unless (memq :captain roster)
+          (error "A Basilisk-class ship carries a Cap'n: :roster has no :captain"))
+        (let ((expanded '()))
+          (dolist (post roster)
+            (let ((entry (skewed--catalogue-post catalogue post)))
+              (unless entry
+                (error "Unknown post %s (see fittings.sexp :posts)" post))
+              ;; An overlay emits only the delta from the vanilla base: the
+              ;; roster still names in-base posts, because it describes the
+              ;; whole ship, but restating them here would fight the base.
+              (unless (and overlay-p (plist-get entry :in-base))
+                (dolist (svc (plist-get entry :services))
+                  (push (skewed--subst-stack svc stack) expanded)))))
+          (setq expanded (nreverse expanded))
+          ;; The host's own :services are now deviation only, merged key-wise
+          ;; over what expansion produced -- the same sparse-overlay
+          ;; discipline already used against the base services.sexp.
+          (dolist (hsvc (skewed--get-prop config :services))
+            (let* ((name (plist-get hsvc :name))
+                   (pos (seq-position expanded name
+                                      (lambda (s n) (equal (plist-get s :name) n)))))
+              (if pos
+                  (setf (nth pos expanded)
+                        (skewed--merge-service (nth pos expanded) hsvc))
+                (setq expanded (append expanded (list hsvc))))))
+          ;; Say out loud, once, what is not aboard.
+          (dolist (w (skewed--get-prop catalogue :warnings))
+            (unless (memq (plist-get w :post) roster)
+              (message "  Note (%s): %s" stack (plist-get w :when-absent))))
+          (message "  %s: crew-level %s, roster %s -> %d service(s)"
+                   stack (or level (skewed--infer-crew-level catalogue roster))
+                   roster (length expanded))
+          (let ((out (copy-sequence config)))
+            (plist-put out :services expanded)))))))
+
+;;; ============================================================================
 
 (defun skewed-generate-configs (&optional dir services-file prefix)
   "Generate all configs for directory DIR using SERVICES-FILE.
@@ -526,7 +666,10 @@ Examples:
                             ""
                           (concat basename "-"))))
          (skewed-gen-output-prefix (if prefix prefix auto-prefix))
-         (config (skewed--read-sexp-file skewed-gen-input-file))
+         (config (skewed--expand-roster
+                  (skewed--read-sexp-file skewed-gen-input-file)
+                  skewed-gen-output-dir
+                  skewed-gen-output-prefix))
          (mcp-dir (expand-file-name "mcp/" skewed-gen-output-dir))
          (elisp-dir (expand-file-name "dot-files/emacs.d/etc/" skewed-gen-output-dir)))
     
