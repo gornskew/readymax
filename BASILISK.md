@@ -96,15 +96,41 @@ what the stack actually starts, and who that makes them:
 | `skewed-emacs` | **Captain** | the ship's console, and the one process that outlives the others' restarts |
 | `cyclops` | **Pilot** | at the conn: every packet enters through it |
 | `gendl-ccl`, `gendl-sbcl`, `genworks-gdl-*` | **Engineers** | the KBE engines — designing ships from aboard one |
+| `eyes-only` | **Comm** | the Communications Officer: runs the board any ship can project on its bridge viewscreen or other display |
 | `autoheal` | **Medic** | rated `:doctor`; watches for the wedged and revives them |
 | anything else an overlay adds | **Crew** | unknown species still muster in, by design |
 
-One post is not a container of its own.  **Eyes Only** is the
-**Communications Officer** — "Comm" — whose duties include running the
-board any ship can project on its bridge viewscreen or other display.
-It rides an Engineer's container (a GWL application on `gendl-ccl`)
-rather than mustering as its own service, which is why it has no row
-above; the post is real even though the fitting is a passenger.
+### Runtimes are not Engineers
+
+Pilot and Comm are both Lisp applications shipped as **runtime** images.
+The Engineers carry compilers, and that is precisely what makes them
+Engineers: they can design a ship from inside one.  A runtime stands a
+watch and runs the system it was built for, competently and
+indefinitely, but it does not fabricate anything new — a few yards short
+of a full-blown Engineer.  The distinction is the licensing story as
+much as the fiction: a compiler is a development seat, a runtime is a
+deployment.
+
+Today that means an Allegro runtime, where "no compiler aboard" is
+literally what the license and the image give you.  We may deliver
+binaries on other CLs some day, and on some of those the compiler is
+physically present because it cannot be removed — CCL's
+`save-application` carries one whether or not you want it.  That does
+not promote anything to Engineer.  The invariant is the ROLE, not the
+vendor and not the byte count: Pilot and Comm are shipped to run one
+system, not to develop new ones.
+
+So Comm is not a passenger on an Engineer.  Cyclops already ships this
+way (`:lisp-impl "AllegroCL-Runtime"`), and Eyes Only is headed there as
+the $69 binary.  That it currently arrives on sally by `ql:quickload`
+into `gendl-ccl` is a convenience of the pre-binary era, not what the
+post is: it is the one crew member still billeted in someone else's
+quarters because its own have not been built yet.
+
+Neither Comm nor any future runtime post appears in `fittings.sexp` yet
+— a `:post` needs an image to name, and Eyes Only does not have one
+until the binary exists.  Cyclops is the worked example of what Comm's
+entry will look like when it does.
 
 Identity is minted per **container**, not per process: `compose-dev`'s
 `mint_crew_identities()` writes NAME / SPECIES / ROLE into
