@@ -678,13 +678,20 @@ Full-stack restarts go through `./compose-dev down && ./compose-dev up`
 (use `up --daemon` from scripts to skip the interactive shell exec).
 
 ### webshot: Headless-Browser Page Captures (2026-08-07+, all images 2026-08-11+)
-`webshot URL [out.png] [WxH] [extra browser flags]` is baked into all
-images (source: `docker/webshot`).  It resolves a browser at runtime:
-Debian chromium in the gui/full images, chrome-headless-shell in the
-default images (in -lite, `skewed-install headless-shell` provides it).
-8-second virtual-time budget lets x3dom/ajax settle; WebGL renders via
-SwiftShader (headless-shell needs --enable-unsafe-swiftshader, which
-webshot adds itself), so 3D viewports appear in captures.  For vhost-scoped pages, resolve the
+`webshot URL [out.png] [WxH] [--mobile] [--settle=MS] [--scale=N] [extra
+browser flags]` is baked into all images (source: `docker/webshot`; node
++ CDP since 2026-08-15 -- see the addendum below).  It resolves a browser
+at runtime: Debian chromium in the gui/full images, chrome-headless-shell
+in the default images (in -lite, `skewed-install headless-shell` provides
+it).  **WxH is a REAL viewport**: it is applied via
+`Emulation.setDeviceMetricsOverride` before navigation, so page JS and
+CSS both see exactly the width you asked for.  `--mobile` additionally
+flags the viewport mobile and enables touch emulation.  Captures wait for
+the load event and then settle (3.5s default, `--settle=MS`) so x3dom/ajax
+finish; WebGL renders via SwiftShader (headless-shell needs
+--enable-unsafe-swiftshader, which webshot adds itself), so 3D viewports
+appear in captures.  Cache-busting is now built in -- every run gets a
+throwaway profile and no disk cache.  For vhost-scoped pages, resolve the
 virtual host inside chromium:
 ```bash
 webshot "http://genworks.localhost/demo/staircase" /tmp/s.png 1440x2200 \
@@ -736,6 +743,53 @@ back in from the raw-chromium detour:
   what a screenshot rendered.  Force a truly clean fetch every time:
   `--disk-cache-dir=/dev/null --user-data-dir=/tmp/chrome-fresh-$$`
   (a fresh, unique profile dir per invocation).
+
+#### Addendum (2026-08-15): WxH is a real viewport now (webshot is node + CDP)
+`webshot` was a bash wrapper around `chromium --headless
+--screenshot=... --window-size=W,H`.  Headless chromium does not honor
+`--window-size` below roughly 500px: **asking for 390x844 gave the page a
+500x701 viewport.**  Measured with `docker/webshot-viewport-probe.html`
+(kept in-repo precisely so this stays verifiable):
+
+| | innerWidth | innerHeight | maxTouchPoints | matchMedia(max-width:480px) |
+|---|---|---|---|---|
+| old, requested 390x844 | 500 | 757 | 0 | **false** |
+| new, `390x844 --mobile` | **390** | **844** | **1** | **true** |
+
+Rewritten as node + CDP (the transport `webshot-clip` already used) so
+`Emulation.setDeviceMetricsOverride` sets the viewport *before*
+navigation.  The CLI contract is unchanged -- new options are FLAGS, not
+positionals, specifically so the `--host-resolver-rules` recipe above
+keeps working.  `--no-viewport` restores the old geometry for comparison.
+
+**Correct the folklore while you are here.**  The original bug report said
+"the CSS media queries never see 390px."  That is not quite what happened,
+and the difference decides what to re-check:
+- The old `--screenshot=` flag *did* resize the window for the capture, so
+  the PNG came out 390x844 and **pure-CSS media queries mostly resolved at
+  the right width in the final paint**.  That is exactly why the bug
+  survived so long -- the shots were dimensionally plausible and the CSS
+  looked right.
+- What never ran at 390px is **the page itself**.  All load-time JS
+  measured a 500px viewport, so anything JS-driven -- and any layout
+  derived from a load-time measurement -- was computed for the wrong
+  width, and touch was never emulated at all.  eyes-only, which does JS
+  layout, is the prime victim; a pure-CSS page was mostly fine.
+
+So: re-verify JS-driven responsive behavior at phone sizes, not every
+stylesheet ever written.  Verification recipe:
+```bash
+webshot file:///projects/skewed-emacs/docker/webshot-viewport-probe.html \
+  /projects/tmp-shots/vp.png 390x844 --mobile
+```
+The probe prints innerWidth/innerHeight/touch points/matchMedia and colors
+a band for the phone (<=480), tablet (481-760) and desktop (>=761) ranges.
+
+Still open (see the org item): `webshot-clip` has the same untouched
+`--window-size` geometry and wants the same override; and
+`/projects/tmp/split-drag-test.js` is the companion trick worth folding in
+-- CDP `Input` events to drive a real pointer/touch drag and assert the
+resulting geometry, i.e. proving a page RESPONDS rather than only renders.
 
 ### Long-Running Dev Processes as Emacs-Managed Processes
 Watchers (e.g. the tailwind CSS watcher) run as async emacs processes —

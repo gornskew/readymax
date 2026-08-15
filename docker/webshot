@@ -1,37 +1,180 @@
-#!/bin/bash
-# webshot -- headless-browser page screenshot, for agent styling loops.
-# usage: webshot URL [OUTPUT.png] [WIDTHxHEIGHT] [extra browser flags...]
-#   webshot http://gendl-ccl:9080/demo/staircase /tmp/stair.png 1440x900
-# --virtual-time-budget lets page JS (x3dom, ajax) settle before capture.
-#
-# Browser resolution: $WEBSHOT_BROWSER if set, else chromium (gui
-# images), else chrome-headless-shell (default images, or installed via
-# `skewed-install headless-shell`).  headless-shell needs
-# --enable-unsafe-swiftshader for software WebGL (x3dom viewports).
-set -euo pipefail
-url="${1:?usage: webshot URL [out.png] [WxH] [extra browser flags...]}"
-out="${2:-/tmp/webshot.png}"
-size="${3:-1440x900}"
-shift $(( $# > 3 ? 3 : $# ))
+#!/usr/bin/env node
+// webshot -- headless-browser page screenshot, for agent styling loops.
+//
+// usage: webshot URL [OUTPUT.png] [WIDTHxHEIGHT]
+//                    [--mobile] [--settle=MS] [--scale=N] [extra browser flags...]
+//   webshot http://gendl-ccl:9080/demo/staircase /tmp/stair.png 1440x900
+//   webshot http://sally/eyes-only /projects/tmp-shots/phone.png 390x844 --mobile
+//
+// WIDTHxHEIGHT is a REAL viewport.  It is applied over CDP via
+// Emulation.setDeviceMetricsOverride BEFORE navigation, so CSS media
+// queries evaluate against exactly the width asked for.
+//
+// Until 2026-08-15 this script only passed --window-size to chromium,
+// which hands the page back something else entirely (~500x700 for a
+// requested 390x844) -- so every "phone" capture this fleet ever took
+// was really testing the ~500px tablet layout.  That is how a broken
+// 481-760px band survived several styling sessions unseen.  If you need
+// the old behavior for comparison, pass --no-viewport.
+//
+// --mobile additionally reports the viewport as mobile and enables touch
+// emulation, for a real mobile pass rather than just a narrow desktop.
+//
+// Browser resolution: $WEBSHOT_BROWSER if set, else chromium (gui
+// images), else chrome-headless-shell (default images, or installed via
+// `skewed-install headless-shell`).  headless-shell needs
+// --enable-unsafe-swiftshader for software WebGL (x3dom viewports),
+// which this script adds itself.
+//
+// Cache: every run gets a throwaway profile and no disk cache, so a
+// CSS/JS file you are actively editing is never served stale (the
+// 2026-08-14 gotcha -- these flags used to have to be passed by hand).
+//
+// Companion: webshot-clip, for capturing one CSS-selected element.
 
-flags=()
-if [[ -n "${WEBSHOT_BROWSER:-}" ]]; then
-  browser="$WEBSHOT_BROWSER"
-  [[ "$browser" == *headless-shell* || "$browser" == *headless_shell* ]] \
-    && flags=(--headless --disable-gpu --enable-unsafe-swiftshader) \
-    || flags=(--headless=new)
-elif command -v chromium >/dev/null 2>&1; then
-  browser=chromium
-  flags=(--headless=new)
-elif command -v chrome-headless-shell >/dev/null 2>&1; then
-  browser=chrome-headless-shell
-  flags=(--headless --disable-gpu --enable-unsafe-swiftshader)
-else
-  echo "webshot: no browser found; run: skewed-install headless-shell" >&2
-  exit 4
-fi
+const { spawn, execSync } = require('node:child_process');
+const fs = require('node:fs');
 
-"$browser" "${flags[@]}" --no-sandbox --hide-scrollbars \
-  --window-size="${size/x/,}" --screenshot="$out" \
-  --virtual-time-budget=8000 "$@" "$url" >/dev/null 2>&1
-echo "$out"
+// --- argument parsing -------------------------------------------------
+// Our own flags are pulled out of the stream first so the documented
+// contract -- URL, out, size, then arbitrary chromium flags -- keeps
+// working, notably the --host-resolver-rules vhost recipe.  They are
+// flags rather than positionals for exactly that reason.
+let mobile = false, settle = 3500, scale = 1, viewport = true;
+const rest = [];
+for (const arg of process.argv.slice(2)) {
+  if (arg === '--mobile') mobile = true;
+  else if (arg === '--no-viewport') viewport = false;
+  else if (arg.startsWith('--settle=')) settle = Number(arg.slice('--settle='.length));
+  else if (arg.startsWith('--scale=')) scale = Number(arg.slice('--scale='.length));
+  else rest.push(arg);
+}
+
+const [url, out = '/tmp/webshot.png', size = '1440x900', ...extra] = rest;
+const usage = 'usage: webshot URL [out.png] [WxH] [--mobile] [--settle=MS] [--scale=N] [browser flags...]';
+if (!url) { console.error(usage); process.exit(1); }
+
+const [width, height] = size.split('x').map(Number);
+for (const [name, val] of [['size', width], ['size', height], ['--settle', settle], ['--scale', scale]]) {
+  if (!Number.isFinite(val) || val <= 0) {
+    console.error(`webshot: bad ${name} value in "${size}"/${settle}/${scale}; size must be WxH`);
+    process.exit(1);
+  }
+}
+
+// --- browser resolution (mirrors webshot-clip) ------------------------
+function resolveBrowser() {
+  const which = (bin) => {
+    try { execSync(`command -v ${bin}`, { shell: '/bin/bash', stdio: 'pipe' }); return true; }
+    catch { return false; }
+  };
+  const bin = process.env.WEBSHOT_BROWSER
+    || (which('chromium') ? 'chromium'
+        : which('chrome-headless-shell') ? 'chrome-headless-shell' : null);
+  if (!bin) {
+    console.error('webshot: no browser found; run: skewed-install headless-shell');
+    process.exit(4);
+  }
+  const headlessShell = /headless[-_]shell/.test(bin);
+  return { bin, flags: headlessShell
+           ? ['--headless', '--disable-gpu', '--enable-unsafe-swiftshader']
+           : ['--headless=new'] };
+}
+
+const { bin: browserBin, flags: browserFlags } = resolveBrowser();
+const profile = `/tmp/chrome-webshot-${process.pid}`;
+
+// Port 0 lets chromium pick a free port and report it in
+// DevToolsActivePort.  A fixed or randomly-guessed port can collide with
+// a concurrent run and silently attach to the WRONG browser -- which
+// would screenshot another job's page, the same class of quietly-wrong
+// output this script exists to stop producing.
+const chrome = spawn(browserBin, [
+  ...browserFlags, '--no-sandbox', '--hide-scrollbars',
+  '--remote-debugging-port=0',
+  `--window-size=${width},${height}`,
+  '--disk-cache-dir=/dev/null', `--user-data-dir=${profile}`,
+  ...extra, 'about:blank',
+], { stdio: 'ignore' });
+
+// $WEBSHOT_BROWSER is trusted as given (it may name a binary outside
+// PATH), so a bad value only surfaces here.  Report it the same way a
+// failed resolution does instead of dumping a node stack trace.
+chrome.on('error', (e) => {
+  console.error(`webshot: failed to launch ${browserBin}: ${e.message}`);
+  process.exit(4);
+});
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function devtoolsPort() {
+  const portFile = `${profile}/DevToolsActivePort`;
+  for (let i = 0; i < 100; i++) {
+    try {
+      const [port] = fs.readFileSync(portFile, 'utf8').split('\n');
+      if (port && Number(port) > 0) return Number(port);
+    } catch { /* not written yet */ }
+    await sleep(100);
+  }
+  throw new Error('browser never reported a DevTools port (did chromium fail to start?)');
+}
+
+async function main() {
+  const port = await devtoolsPort();
+
+  let targets;
+  for (let i = 0; i < 50; i++) {
+    try {
+      targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
+      if (targets.length) break;
+    } catch { /* not accepting connections yet */ }
+    await sleep(200);
+  }
+  if (!targets || !targets.length) throw new Error('browser exposed no DevTools targets');
+
+  const ws = new WebSocket(targets[0].webSocketDebuggerUrl);
+  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('DevTools websocket failed')); });
+
+  let id = 0;
+  const pending = new Map();
+  const events = [];
+  ws.onmessage = (m) => {
+    const msg = JSON.parse(m.data);
+    if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
+    else if (msg.method) events.push(msg.method);
+  };
+  const send = (method, params = {}) => new Promise((res) => {
+    pending.set(++id, res);
+    ws.send(JSON.stringify({ id, method, params }));
+  });
+
+  await send('Page.enable');
+
+  // Before navigate: the first layout must already see the real width,
+  // or media queries resolve against the default and never re-evaluate
+  // for rules that only run at load time.
+  if (viewport) {
+    await send('Emulation.setDeviceMetricsOverride',
+               { width, height, deviceScaleFactor: scale, mobile });
+    if (mobile) {
+      await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+    }
+  }
+
+  await send('Page.navigate', { url });
+  for (let i = 0; i < 100 && !events.includes('Page.loadEventFired'); i++) await sleep(200);
+  await sleep(settle); // let x3dom / ajax settle, as the old virtual-time budget did
+
+  const shot = await send('Page.captureScreenshot', { format: 'png' });
+  if (!shot.result || !shot.result.data) throw new Error('capture returned no image data');
+  fs.writeFileSync(out, Buffer.from(shot.result.data, 'base64'));
+  console.log(out);
+  ws.close();
+}
+
+main()
+  .catch((e) => { console.error(`webshot: ${e.message}`); process.exitCode = 3; })
+  .finally(() => {
+    try { chrome.kill(); } catch { /* already gone */ }
+    try { fs.rmSync(profile, { recursive: true, force: true }); } catch { /* best effort */ }
+  });

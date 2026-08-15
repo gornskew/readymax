@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>viewport probe</title>
+<style>
+  body { font: 16px/1.4 system-ui, sans-serif; margin: 0; padding: 12px;
+         background: #111; color: #eee; }
+  h1 { font-size: 20px; margin: 0 0 10px; }
+  dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 10px; }
+  dt { color: #7cf; }
+  dd { margin: 0; font-variant-numeric: tabular-nums; }
+  #band { margin-top: 12px; padding: 10px; border-radius: 6px;
+          font-weight: 700; font-size: 18px; background: #333; }
+  /* The bands that matter for eyes-only: the phone rule, and the
+     481-760px tablet band where the breakage hid. */
+  @media (max-width: 480px)                        { #band { background: #093; } #band::after { content: " PHONE (<=480)"; } }
+  @media (min-width: 481px) and (max-width: 760px) { #band { background: #a60; } #band::after { content: " TABLET BAND (481-760)"; } }
+  @media (min-width: 761px)                        { #band { background: #036; } #band::after { content: " DESKTOP (>=761)"; } }
+</style>
+<h1>viewport probe</h1>
+<dl>
+  <dt>window.innerWidth</dt>  <dd id="iw"></dd>
+  <dt>window.innerHeight</dt> <dd id="ih"></dd>
+  <dt>devicePixelRatio</dt>   <dd id="dpr"></dd>
+  <dt>navigator.maxTouchPoints</dt><dd id="touch"></dd>
+  <dt>matchMedia &lt;=480</dt><dd id="mm480"></dd>
+</dl>
+<div id="band">ACTIVE BAND:</div>
+<script>
+  iw.textContent    = window.innerWidth;
+  ih.textContent    = window.innerHeight;
+  dpr.textContent   = window.devicePixelRatio;
+  touch.textContent = navigator.maxTouchPoints;
+  mm480.textContent = window.matchMedia('(max-width: 480px)').matches;
+</script>
