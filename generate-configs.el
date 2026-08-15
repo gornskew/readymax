@@ -599,12 +599,15 @@ fully explicit :services keep working untouched."
                                      #'string<))))
           (error ":crew-level %s and :roster disagree; declare one or make them match"
                  level))
-        ;; A Basilisk-class ship carries a Cap'n (Dave, 2026-08-15).  This is
-        ;; the class definition, so it is an ERROR -- every other omission is
-        ;; a warning.  It does not stop the containers running; it stops the
-        ;; result being called a Basilisk.
-        (unless (memq :captain roster)
-          (error "A Basilisk-class ship carries a Cap'n: :roster has no :captain"))
+        ;; A Basilisk-class ship carries a Captain BY DEFAULT, and having
+        ;; that Captain be skewed-emacs or a derived species is recommended
+        ;; -- but it is a recommendation, not a class invariant (Dave,
+        ;; 2026-08-15, revising the same morning's stricter reading).  A
+        ;; roster of just a Pilot is a standalone Cyclops deployment; just a
+        ;; ship's engineer is a standalone monolithic KBE server.  Those are
+        ;; real shapes we ship, so the generator WARNS and proceeds -- the
+        ;; :captain entry in the catalogue's :warnings table carries the
+        ;; message, exactly like every other omission.
         (let ((expanded '()))
           (dolist (post roster)
             (let ((entry (skewed--catalogue-post catalogue post)))

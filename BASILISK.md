@@ -99,6 +99,13 @@ what the stack actually starts, and who that makes them:
 | `autoheal` | **Medic** | rated `:doctor`; watches for the wedged and revives them |
 | anything else an overlay adds | **Crew** | unknown species still muster in, by design |
 
+One post is not a container of its own.  **Eyes Only** is the
+**Communications Officer** — "Comm" — whose duties include running the
+board any ship can project on its bridge viewscreen or other display.
+It rides an Engineer's container (a GWL application on `gendl-ccl`)
+rather than mustering as its own service, which is why it has no row
+above; the post is real even though the fitting is a passenger.
+
 Identity is minted per **container**, not per process: `compose-dev`'s
 `mint_crew_identities()` writes NAME / SPECIES / ROLE into
 `/tmp/skewed-crew-identity` inside each one, and `metrics.lisp` reads

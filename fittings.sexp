@@ -30,15 +30,17 @@
 (
  :posts
  (
-  ;; ---- Always aboard.  A Basilisk without a Cap'n is not a Basilisk
-  ;; (Dave, 2026-08-15); the generator refuses a roster lacking :captain.
+  ;; ---- Recommended aboard.  A Basilisk-class ship carries a Captain by
+  ;; default, and having that Captain be skewed-emacs or a derived species
+  ;; is recommended -- but it is a recommendation, not a class invariant
+  ;; (Dave, 2026-08-15).  The generator warns and proceeds.
   (:post :captain
    :in-base t
    :description "The ship's console, and the longest-lived process aboard."
    :services ((:name "skewed-emacs"))
    ;; :in-stack is the ONLY sanctioned routing for the :emacs kind --
    ;; emacs lisply has no token gate, so it never rides a public path.
-   ;; Off-ship, the Cap'n is sampled through that stack's own gendl-ccl
+   ;; Off-ship, the Captain is sampled through that stack's own gendl-ccl
    ;; proxy (publish-emacs-metrics!), which is gated.
    :probe (:tile "heap skewed-emacs"
            :in-stack (:kind :emacs
@@ -122,9 +124,11 @@
   (:level :piloted  :roster (:captain :ship-engineers :medic :pilot))
   (:level :guild    :roster (:captain :ship-engineers :medic :pilot :guild)))
 
- ;; Omissions that are legal but worth saying out loud once.  :captain is
- ;; absent from this table deliberately: it is an error, not a warning.
+ ;; Omissions that are legal but worth saying out loud once.  Every post
+ ;; here is optional, :captain included -- warn, name the consequence,
+ ;; proceed.  Only skewed-network is structurally required.
  :warnings
- ((:post :pilot  :when-absent "no Pilot: nothing fronts HTTP; publish ports directly")
+ ((:post :captain :when-absent "no Captain: no MCP tooling and no eskew/egskew -- a standalone deployment rather than a crewed ship (recommended, not required)")
+  (:post :pilot  :when-absent "no Pilot: nothing fronts HTTP; publish ports directly")
   (:post :medic  :when-absent "no Medic: no steady-state autoheal")
   (:post :guild  :when-absent "no Guild detachment: community engines only")))
