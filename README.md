@@ -68,18 +68,13 @@ This Skewed Emacs repository houses two assets:
     skewed-emacs configuration (as per (1) above) preïnstalled for the
     built-in `emacs-user` user account.
 
-There used to be a third: the container composition framework that
-spins this image up alongside Gendl backends and other helper
-containers. It is now **Basilisk**, in [its own
-repository](https://github.com/gornskew/basilisk).
-
-It got its own name because one name for three things was one name too
-few: "restart skewed-emacs" is genuinely ambiguous between *the editor*
-and *the whole fleet on this box*, and those are very different
-requests. As of 2026-08-15 it has its own repo to match, which is what
-the naming was always pointing at. **Basilisk** is the stack —
-`./basilisk up`, from a Basilisk clone — while `skewed-emacs` keeps
-meaning the Emacs configuration and the image that carries it.
+Running that image alongside Gendl backends and other helper containers
+is a third thing, and it has a name and a repo of its own:
+**[Basilisk](https://github.com/gornskew/basilisk)**. One name for three
+jobs was one name too few — "restart skewed-emacs" is ambiguous between
+*the editor* and *the whole fleet on this box*. So Basilisk is the stack
+(`./basilisk up`, from a Basilisk clone), and `skewed-emacs` means the
+Emacs configuration and the image that carries it.
 
 In Basilisk's terms this repo is the **Captain**: one fitting among
 several, referenced by image name exactly as `cyclops` is. A Basilisk
@@ -169,13 +164,13 @@ Your host machine stays clean. The only intentional side effect is that
 
 ### Quickest Start — clone Basilisk and bring the stack up
 
-**The stack lives in its own repo now.** Running a skewed-emacs container
-— even a single-container one with nothing but the Captain aboard — goes
-through **Basilisk**, and that is the only supported way. This repo no
-longer carries compose files or startup scripts.
+**The stack lives in its own repo.** Running a skewed-emacs container —
+even a single-container one with nothing but the Captain aboard — goes
+through **Basilisk**, and that is the only supported way. This repo
+carries no compose files or startup scripts.
 
 ```bash
-git clone <basilisk>          # gitlab.genworks.com:gornskew/basilisk
+git clone https://github.com/gornskew/basilisk
 cd basilisk
 ./basilisk up
 ```
@@ -183,26 +178,12 @@ cd basilisk
 Your `~/projects/` directory is mounted at `/projects` in the container
 and created if missing.
 
-There used to be a no-clone path here: `basilisk` downloaded on its
-own would create a container from the skewed-emacs image and extract
-`docker-compose.yml`, `generate-env.sh` and `mcp/` out of the repo
-snapshot baked inside it. That is **gone** (2026-08-15). It only ever
-existed because the stack machinery lived in this repo and therefore in
-this image; now that the shipyard is its own repo, cloning it is both
-simpler and honest. An image is a crew member's quarters, not a delivery
-vehicle for the shipyard.
-
 Once an AI client is connected, paste
 [`docs/PROJECT_INSTRUCTIONS.md`](docs/PROJECT_INSTRUCTIONS.md) into a
 Claude Desktop Project's custom instructions (or your `CLAUDE.md` /
 `AGENTS.md`) as standing session instructions, and/or use
 [`mcp/opening-prompt.md`](https://github.com/gornskew/basilisk/blob/devo/mcp/opening-prompt.md)
 from the Basilisk clone as a ready-made first message.
-
-(That link goes to Basilisk deliberately. An `mcp/` still exists in this
-repo, left behind by the split and slated for removal — it is a stale
-copy, and its `claude_desktop_config.json` already points at a
-`mcp-exec` path that no longer exists. The live one is Basilisk's.)
 
 
 
@@ -269,13 +250,9 @@ the default landing dashboard.
 registers *every* server on the roster — `skewed-emacs`, `gendl-ccl`,
 `gendl-sbcl`, and whatever the overlays add — and this repo knows about
 exactly one of those. `./basilisk up` writes the configs into the
-Basilisk clone's `mcp/`; see **docs/CLAUDE_DESKTOP.md in the Basilisk
-repo** for the walkthrough on Linux, macOS and Windows.
-
-If MCP went quiet on you around the 2026-08-15 repo split, the usual
-cause is a config generated before it, still pointing at
-`…/skewed-emacs/mcp/mcp-exec` — a path that no longer exists.
-Regenerate from a Basilisk clone and re-copy.
+Basilisk clone's `mcp/`; see
+[docs/CLAUDE_DESKTOP.md](https://github.com/gornskew/basilisk/blob/devo/docs/CLAUDE_DESKTOP.md)
+in the Basilisk repo for the walkthrough on Linux, macOS and Windows.
 
 The MCP story that *does* belong to this repo is the host one: running
 the lisply backend in your own Emacs, no containers involved. See
@@ -402,10 +379,8 @@ README](https://github.com/gornskew/basilisk), under **Running it**:
 - **Pulling updates**, and **troubleshooting** dangling containers and
   networks
 
-It is documented there rather than duplicated here on purpose: the
-instructions that used to live in this section told you to `cd
-~/projects/skewed-emacs` and run `./basilisk`, which has not been
-possible since the split.
+It is documented there rather than duplicated here on purpose: two
+copies of stack instructions is how they drift apart.
 
 ## Windows-Specific Section
 
