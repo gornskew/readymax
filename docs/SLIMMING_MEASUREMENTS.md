@@ -1,7 +1,7 @@
 # Image Slimming: Measurements (2026-08-11)
 
-Data behind the slimming initiative (projects.org :must:).  All numbers
-measured on narad against `gornskew/skewed-emacs:devo-full`
+Data behind the slimming initiative.  All numbers
+measured on a WSL2 dev host against `gornskew/skewed-emacs:devo-full`
 (977MB compressed download / 3.72GB on disk) plus fresh-closure
 experiments on `debian:latest` containers.
 
@@ -51,7 +51,7 @@ flag).  Verified against the real workload: screenshotted
 Interactive mode -- the x3dom airfoil renders.  Probe:
 `canvas.getContext("webgl")` -> "WebKit WebGL" renderer.
 
-## Implications for the variant tree (per Dave 2026-08-11 direction)
+## Implications for the variant tree
 
 - Primary split: GUI vs non-GUI.  GUI branch (emacs-gtk = full X
   workstation) stays as a first-class, ready-to-spin-up graphical
@@ -66,8 +66,8 @@ Interactive mode -- the x3dom airfoil renders.  Probe:
   (M-x skewed-install RET claude-code RET style; shell scripts baked
   into the image underneath).  Note: installs land in the container
   home, which is ephemeral BY DESIGN: the persistence story for
-  someone who wants AUIs sticky is "switch to the -full image"
-  (Dave, 2026-08-11).  No installer persistence machinery needed.
+  someone who wants AUIs sticky is "switch to the -full image".
+  No installer persistence machinery needed.
 - copilot-language-server: also a candidate for on-demand (67MB), and
   fix the docker/ duplication regardless.
 - Ballpark new default (non-GUI + emacs-nox + headless-shell + fonts):
@@ -100,5 +100,5 @@ pipeline 2026-08-11):
 
 Both headline numbers halved: 3.72GB → 1.87GB on disk, 977MB → 482MB
 download.
-- zstd layer compression (separate projects.org item) folds into the
+- zstd layer compression (a separate work item) folds into the
   same build pass: pull time on small nodes is unpack-bound.

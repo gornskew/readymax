@@ -1,7 +1,7 @@
 # Terminal Colors Across the Stack (WT / WSL / bash / Emacs)
 
 Last updated: 2026-08-09. Applies to: Windows + Windows Terminal +
-WSL2 Ubuntu-24.04 (narad) + bash + skewed-emacs.
+WSL2 Ubuntu-24.04 + bash + skewed-emacs.
 
 ## The four layers and who owns what
 

@@ -491,8 +491,8 @@ run child processes with an explicit bound:
 or `(lisply-shell-async CMD)` + `(lisply-shell-async-result TOKEN)`
 for long-running work.
 
-**Host-side line tools are out of bounds for /projects files** (Dave,
-2026-08-07): even when an agent runs on the elsie host with ~/projects
+**Host-side line tools are out of bounds for /projects files**: even
+when an agent runs on the host with ~/projects
 mounted, sed/awk/grep-style edits and filters on project files go
 through the skewed-emacs container -- either elisp temp-buffer edits
 (insert-file-contents + write-region, never find-file-noselect from
@@ -813,7 +813,7 @@ cleanup handler, so the selector-not-found path orphaned a whole headless
 chromium process tree and its profile directory in the container.  Error
 exits now throw with a code so the `finally` still runs.
 
-Still open (see the org item): `/projects/tmp/split-drag-test.js` is the
+Still open: `/projects/tmp/split-drag-test.js` is the
 companion trick worth folding in -- CDP `Input` events to drive a real
 pointer/touch drag and assert the resulting geometry, i.e. proving a page
 RESPONDS rather than only renders.
