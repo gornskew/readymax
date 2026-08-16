@@ -95,7 +95,7 @@ RUN set -euxo pipefail; \
 
 # Copy only what package install + native compilation need (dot-files,
 # setup). The rest of the repo is copied later, so edits to README,
-# docs/, mcp/, etc. do NOT invalidate the expensive compile layers below.
+# docs/, etc. do NOT invalidate the expensive compile layers below.
 COPY --chown=emacs-user:emacs-user dot-files/ /home/emacs-user/skewed-emacs/dot-files/
 COPY --chown=emacs-user:emacs-user setup /home/emacs-user/skewed-emacs/setup
 
@@ -199,7 +199,7 @@ RUN set -euxo pipefail; \
    ln -sfn ~/.grok/bin/agent ~/.local/bin/agent; \
    ~/.local/bin/grok --version
 
-# Copy the remainder of the repo (README, docs/, mcp/, docker/, ...).
+# Copy the remainder of the repo (README, docs/, docker/, ...).
 # Kept late deliberately: changes to these files are cheap and rebuild in
 # seconds.  No longer carries generate-configs.el or services.sexp -- the
 # stack machinery moved to the Basilisk repo (2026-08-15).
@@ -305,7 +305,7 @@ COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/lisply-mcp /h
 # Common tooling: entrypoint, repl helper, page-snapshot helpers (webshot
 # resolves chromium OR chrome-headless-shell at runtime), on-demand
 # module installer (elisp-first UI: M-x skewed-install).
-COPY mcp/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY --chown=emacs-user:emacs-user docker/emacs-repl.sh /home/emacs-user/emacs-repl.sh
 COPY docker/webshot /usr/local/bin/webshot
 COPY docker/webshot-clip /usr/local/bin/webshot-clip

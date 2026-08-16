@@ -412,47 +412,6 @@ update_multi_arch_manifests() {
 }
 
 # -----------------------------
-# Config extraction (from best local image)
-# -----------------------------
-extract_generated_configs() {
-  echo ""
-  echo "=== Extracting generated configs from image (if available) ==="
-
-  local preferred=""
-  if [[ " $TARGETS " =~ " gui-aituis " ]]; then
-    preferred="gui-aituis"
-  elif [[ " $TARGETS " =~ " gui " ]]; then
-    preferred="gui"
-  elif [[ " $TARGETS " =~ " aituis " ]]; then
-    preferred="aituis"
-  elif [[ " $TARGETS " =~ " default " ]]; then
-    preferred="default"
-  else
-    preferred="lite"
-  fi
-
-  local tag_candidate="${FINAL_IMAGE}:${branch}-${preferred}-${ARCH_SUFFIX}"
-
-  if ! docker image inspect "${tag_candidate}" >/dev/null 2>&1; then
-    echo "No local image ${tag_candidate} found; skipping config extraction."
-    return
-  fi
-
-  local temp_container
-  temp_container=$(docker create "${tag_candidate}")
-  docker cp "${temp_container}:/home/emacs-user/skewed-emacs/mcp/mcp-windows.json" "${PROJECT_ROOT}/mcp/mcp-windows.json" 2>/dev/null || true
-  docker cp "${temp_container}:/home/emacs-user/skewed-emacs/mcp/mcp-container.json" "${PROJECT_ROOT}/mcp/mcp-container.json" 2>/dev/null || true
-  docker cp "${temp_container}:/home/emacs-user/skewed-emacs/mcp/mcp.toml" "${PROJECT_ROOT}/mcp/mcp.toml" 2>/dev/null || true
-  # docker-compose.yml is NOT extracted any more.  It is yard output and
-  # lives in the Basilisk repo; copying it back here would resurrect a
-  # stale compose file into a repo that deliberately no longer has one.
-  # The || true would have hidden that happening (2026-08-15).
-  docker rm "${temp_container}" >/dev/null
-
-  echo "✓ Generated configs extracted (if present)"
-}
-
-# -----------------------------
 # Main
 # -----------------------------
 echo "═══════════════════════════════════════════════════════════════"
@@ -503,7 +462,6 @@ if [[ "$USE_BUILDX" == "single" ]]; then
   push_arch_aliases
 fi
 
-extract_generated_configs
 if [[ "$SKIP_MANIFESTS" == "true" ]]; then
   echo "Skipping multi-arch manifest update (--skip-manifests)"
 else
