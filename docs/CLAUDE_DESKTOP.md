@@ -1,142 +1,21 @@
-# Claude Desktop Integration (Linux, macOS, Windows)
+# Claude Desktop Integration — moved to Basilisk
 
-If you want to use Claude Desktop with the Skewed Emacs MCP servers,
-this guide walks you through the setup. This assumes you have already
-completed the basic [Containerized Runnings](../README.md#containerized-runnings-recommended)
-setup.
+This guide now lives in the Basilisk repo, at
+[`docs/CLAUDE_DESKTOP.md`](https://github.com/gornskew/basilisk/blob/devo/docs/CLAUDE_DESKTOP.md)
+(origin of record: `gitlab.genworks.com:gornskew/basilisk`, mirrored to
+[github.com/gornskew/basilisk](https://github.com/gornskew/basilisk)).
 
-## Prerequisites
+Wiring an MCP client is a **fleet-level** concern, not a Captain-level
+one: the config being generated registers every server on the roster —
+`skewed-emacs`, `gendl-ccl`, `gendl-sbcl`, and whatever the overlays add.
+This repo knows about exactly one of those, so it cannot own the
+document.
 
-- Docker running (Docker Desktop on macOS/Windows, Docker Engine on Linux)
-- [Claude Desktop](https://claude.ai/download) installed
-- skewed-emacs cloned and stack started at least once (see main README)
-- Windows only: [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install)
-  with Docker Desktop using the WSL2 backend
+A stub is left here rather than a deletion because the old path was
+linked from the README, from `lisply-mcp`, and from anywhere else people
+bookmarked it.
 
-## Setup
-
-1. **Start the stack** (if not already running):
-
-   ```bash
-   cd ~/projects/skewed-emacs
-   ./basilisk up
-   ```
-
-   Wait for the `[SUCCESS] Claude Desktop config ready` message.
-   `basilisk` detects your platform and writes the appropriate
-   config to `mcp/claude_desktop_config.json` — on Linux and macOS it
-   invokes `mcp/mcp-exec` directly; on Windows it goes through `wsl`.
-
-2. **Copy the generated config to Claude Desktop's config location:**
-
-   **Linux:**
-   ```bash
-   cp mcp/claude_desktop_config.json ~/.config/Claude/claude_desktop_config.json
-   ```
-
-   **macOS:**
-   ```bash
-   cp mcp/claude_desktop_config.json ~/Library/Application\ Support/Claude/claude_desktop_config.json
-   ```
-
-   **Windows (from inside WSL):**
-   ```bash
-   cp mcp/claude_desktop_config.json /mnt/c/Users/YOUR_USERNAME/AppData/Roaming/Claude/claude_desktop_config.json
-   ```
-
-   Replace `YOUR_USERNAME` with your Windows username. Alternatively,
-   from Windows Explorer:
-   - Source: `\\wsl$\Ubuntu\home\YOUR_WSL_USER\projects\skewed-emacs\mcp\claude_desktop_config.json`
-   - Destination: `%APPDATA%\Claude\claude_desktop_config.json`
-
-3. **Restart Claude Desktop** — you should see three MCP servers connect:
-   - `skewed-emacs` — Emacs Lisp evaluation
-   - `gendl-sbcl` — Common Lisp (SBCL) with Gendl
-   - `gendl-ccl` — Common Lisp (CCL) with Gendl
-
-   (Plus any additional backends from overlay repos you have installed.)
-
-4. **Optional — prime your first session**: paste the contents of
-   [`mcp/opening-prompt.md`](../mcp/opening-prompt.md) as your first
-   message so the agent bootstraps itself with the Emacs environment.
-
-## Daily Usage
-
-The Docker stack must be running for Claude Desktop to use the MCP servers:
-
-```bash
-cd ~/projects/skewed-emacs
-./basilisk up -d   # -d for daemon mode (no interactive shell)
-```
-
-To stop the stack:
-
-```bash
-cd ~/projects/skewed-emacs
-./basilisk down
-```
-
-## What You Can Do
-
-With these MCP servers, Claude Desktop can:
-
-- Evaluate Emacs Lisp code and interact with the Emacs environment
-- Evaluate Common Lisp code in SBCL or CCL
-- Work with the Gendl geometry kernel for CAD/knowledge-based engineering
-- Access documentation and run HTTP requests against the backend services
-
-## Bootstrapping a Session
-
-Optional but recommended: create a Claude Desktop Project and paste
-[`PROJECT_INSTRUCTIONS.md`](PROJECT_INSTRUCTIONS.md) into its custom
-instructions, so every session starts with the dashboard/daily-focus
-routine and safe editing conventions. The same text works in a Claude
-Code `CLAUDE.md` or Codex `AGENTS.md`. For a one-shot alternative,
-paste [`../mcp/opening-prompt.md`](../mcp/opening-prompt.md) as your
-first message.
-
-## Other MCP Clients
-
-Claude Desktop is just one consumer. The same generated configs work for:
-
-- **Claude Code**: from the repo root, `claude mcp add` each server from
-  `mcp/claude_desktop_config.json`, or copy its `mcpServers` block into
-  a `.mcp.json` in your project
-- **Codex CLI**: `./basilisk up` maintains `~/.codex/config.toml`
-  inside the container automatically; for a host-side Codex, adapt
-  `mcp/mcp.toml`
-- **Grok Build CLI**: same merged TOML is written into
-  `~/.grok/config.toml` (`[mcp_servers.*]`); launch with `grokly`
-  from a shell inside the full/aituis image
-- **Any MCP-capable client**: point it at `mcp/mcp-exec` with the args
-  shown in `mcp/claude_desktop_config.json`
-
-## Merging with Existing MCP Configuration
-
-If you already have other MCP servers configured in Claude Desktop, you will
-need to manually merge the `mcpServers` entries from the generated
-`claude_desktop_config.json` into your existing configuration file.
-
-## Cloning to a Different Location
-
-The generated `claude_desktop_config.json` contains the absolute path to
-your skewed-emacs clone. It is determined at `./basilisk up` time
-based on where you run the command, so a non-default clone location
-works automatically.
-
-## Troubleshooting
-
-**MCP servers not connecting:**
-- Ensure the Docker stack is running (`docker ps` should show the containers)
-- Check that the paths in `claude_desktop_config.json` match your clone location
-- Restart Claude Desktop after copying the config
-
-**`mcp/claude_desktop_config.json` missing or stale:**
-- It is generated (not committed); run `./basilisk up` and wait for
-  the `[SUCCESS] Claude Desktop config ready` message
-- If the message doesn't appear, the Emacs daemon may still be starting —
-  run `./basilisk up` again
-
-**"emacsclient not ready" warning on first start:**
-- This is normal — the Emacs daemon takes a few seconds to initialize
-- Run `./basilisk up` again and the MCP config will generate successfully
+**If you are looking for the MCP story that does still belong to this
+repo**, it is host Emacs: running the lisply backend in your own Emacs
+on the host, with no containers at all. See
+[HOST_EMACS_MCP.md](HOST_EMACS_MCP.md).

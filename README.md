@@ -20,9 +20,15 @@ and an LLM is wired into a buffer. Skewed Emacs inverts that: it puts
 **Emacs inside the agent** — Emacs (and any other Lisply-compliant
 Lisp environment, such as Gendl/Common Lisp) becomes a set of MCP
 tools that *any* agent can drive: Claude Desktop, Claude Code, Cursor,
-Grok Build, Gemini CLI, Codex, LM Studio, or your own MCP client. And
-it ships the whole thing: containerized Emacs + Common Lisp backends +
-generated client configs, one `./basilisk up` away.
+Grok Build, Gemini CLI, Codex, LM Studio, or your own MCP client.
+
+This repo is the Emacs half of that: the configuration, and the lisply
+backend, that make Emacs answerable as a tool in the first place. The
+delivery vehicle — containerized Emacs and Lisp backends, a fleet, and
+generated client configs, one command — is **Basilisk**, and the same
+inversion argued as a *systems* claim rather than an Emacs one lives in
+[the Basilisk README](https://github.com/gornskew/basilisk). The table
+below is the Emacs-side comparison; neither page restates the other.
 
 | | Where the agent lives | Emacs's role | MCP role | What ships in the box |
 |---|---|---|---|---|
@@ -52,26 +58,24 @@ where a fresh agent builds a parametric staircase in Gendl through MCP.
 
 ## What Will I Find Here?
 
-This Skewed Emacs repository houses essentially three assets:
+This Skewed Emacs repository houses two assets:
 
-1.  a ready-to-setup local Emacs configuration. This can be used on
-    its own without (2) or (3) if desired.
-   
+1.  a ready-to-setup local Emacs configuration, including the lisply
+    backend that makes Emacs answerable over MCP. This can be used on
+    its own, on your host, without (2) if desired.
+
 2.  a Dockerfile for building a containerized emacs server with the
     skewed-emacs configuration (as per (1) above) preïnstalled for the
     built-in `emacs-user` user account.
 
-3.  **Basilisk** — a container composition overlay framework (based on
-    docker compose) that spins up a skewed-emacs container (as per (2)
-    above) side-by-side with any number of "helper" containers, with
-    immediate connectivity for http, Slime/Swank (for Common Lisp
-    development), and MCP consumers.
-    **Basilisk is a separate repository.** This one carries only (1) and
-    (2).
+There used to be a third: the container composition framework that
+spins this image up alongside Gendl backends and other helper
+containers. It is now **Basilisk**, in [its own
+repository](https://github.com/gornskew/basilisk).
 
-Asset (3) got its own name because one name for three things was one
-name too few: "restart skewed-emacs" is genuinely ambiguous between *the
-editor* and *the whole fleet on this box*, and those are very different
+It got its own name because one name for three things was one name too
+few: "restart skewed-emacs" is genuinely ambiguous between *the editor*
+and *the whole fleet on this box*, and those are very different
 requests. As of 2026-08-15 it has its own repo to match, which is what
 the naming was always pointing at. **Basilisk** is the stack —
 `./basilisk up`, from a Basilisk clone — while `skewed-emacs` keeps
@@ -143,9 +147,9 @@ other.
 - **Additional Container-defined Infrastructure** (see Containerized Runnings below)
   - Local container image defined in `docker/Dockerfile` and `docker/build`.
     Images built by Gornskew HQ are pushed to tagged `gornskew/skewed-emacs` versions at Dockerhub.
-  - Includes a Docker Compose orchestration for running a skewed-emacs
-    with other helpful containers such as Common Lisp based
-    ones.
+  - Running that image alongside Common Lisp backends and other helper
+    containers is Basilisk's job, not this repo's — see
+    [Basilisk](https://github.com/gornskew/basilisk).
   - Docker Compose orchestration includes built-in lisply-mcp
     middleware to provide consumer-facing MCP services for
     skewed-emacs itself plus any other lisply-compliant backends.
@@ -192,8 +196,13 @@ Once an AI client is connected, paste
 [`docs/PROJECT_INSTRUCTIONS.md`](docs/PROJECT_INSTRUCTIONS.md) into a
 Claude Desktop Project's custom instructions (or your `CLAUDE.md` /
 `AGENTS.md`) as standing session instructions, and/or use
-[`mcp/opening-prompt.md`](mcp/opening-prompt.md) as a ready-made first
-message.
+[`mcp/opening-prompt.md`](https://github.com/gornskew/basilisk/blob/devo/mcp/opening-prompt.md)
+from the Basilisk clone as a ready-made first message.
+
+(That link goes to Basilisk deliberately. An `mcp/` still exists in this
+repo, left behind by the split and slated for removal — it is a stale
+copy, and its `claude_desktop_config.json` already points at a
+`mcp-exec` path that no longer exists. The live one is Basilisk's.)
 
 
 
@@ -254,40 +263,33 @@ source that RC file) to activate them.
 After you are in, see the "Getting Started" section near the top of
 the default landing dashboard.
 
-### Claude Desktop Integration
+### Connecting an MCP client (Claude Desktop and friends)
 
-If you want to activate Claude Desktop and let it talk to your
-skewed-emacs and friends via MCP, see [Claude Desktop
-Integration](docs/CLAUDE_DESKTOP.md) for setup instructions. The MCP
-configuration is automatically generated when you run `./basilisk
-up`.
+**This belongs to Basilisk, not here.** The generated client config
+registers *every* server on the roster — `skewed-emacs`, `gendl-ccl`,
+`gendl-sbcl`, and whatever the overlays add — and this repo knows about
+exactly one of those. `./basilisk up` writes the configs into the
+Basilisk clone's `mcp/`; see **docs/CLAUDE_DESKTOP.md in the Basilisk
+repo** for the walkthrough on Linux, macOS and Windows.
+
+If MCP went quiet on you around the 2026-08-15 repo split, the usual
+cause is a config generated before it, still pointing at
+`…/skewed-emacs/mcp/mcp-exec` — a path that no longer exists.
+Regenerate from a Basilisk clone and re-copy.
+
+The MCP story that *does* belong to this repo is the host one: running
+the lisply backend in your own Emacs, no containers involved. See
+[docs/HOST_EMACS_MCP.md](docs/HOST_EMACS_MCP.md), and read it before
+enabling — on the host this grants arbitrary code execution and is not
+sandboxed the way the container path is.
 
 ### Pulling Updates
 
-Please keep both your cloned skewed-emacs repository and any
-skewed-emacs containers fresh, by pulling frequently.
-
-#### Pulling newest skewed-emacs docker image from Dockerhub
-
-`./basilisk up` pulls missing images only by default. If you want
-fresh images, use `./basilisk up --pull` (or set `PULL_ALWAYS=1`).
-
-
-#### Pulling this Git Repo from Upstream
-
-The best way is to pull skewed-emacs container image and all other
-related images with `--pull`:
-
-```
-cd ~/projects/skewed-emacs
-./basilisk down
-git pull
-./basilisk up --pull
-```
-
-As you can see, we bring down the docker composition before doing the
-git pull, just in case there is a change in docker compose
-configuration that might affect a shutdown.
+Keep the image fresh with `./basilisk up --pull` (or `PULL_ALWAYS=1`)
+from your **Basilisk** clone; plain `./basilisk up` pulls missing images
+only. Bring the composition down before pulling either repo, in case the
+pull changes compose config that a running stack would shut down
+against. The full recipe is in the Basilisk README.
 
 
 
@@ -348,7 +350,7 @@ placeholder files on your host if they don't exist yet.
 If you use `EMACS_IMAGE_VARIANT=lite`, these agents are not installed.
 An external host MCP consumer such as Claude Desktop can still be
 used, via the MCP config generated at `./basilisk up` time and
-written to `skewed-emacs/mcp/`.
+written to the Basilisk clone's `mcp/`.
 
 
 ### Language Stack Policy (Bring Your Own Runtimes)
@@ -386,71 +388,24 @@ additional Lisply backends — alternative Lisp or Scheme
 implementations speaking the lisply protocol plug in as peer services,
 just as the commercial GDL overlays below do.
 
-### Supplemental Service Overlays (Commercial GDL)
+### Stack operation lives in Basilisk
 
-A base Basilisk stack includes three Lisp environments:
+Everything about running, extending and unwedging a stack is documented
+where the stack now lives — the [Basilisk
+README](https://github.com/gornskew/basilisk), under **Running it**:
 
-- **skewed-emacs** — Emacs Lisp (via MCP)
-- **gendl-ccl** — Free Gendl kernel on Clozure CL
-- **gendl-sbcl** — Free Gendl kernel on SBCL
+- **Supplemental service overlays** — commercial Genworks GDL (NURBS, on
+  Allegro CL) for licensed users; clone the overlay repo, `./install`
+  into the Basilisk clone, `./basilisk up`
+- **Custom projects directory** — `PROJECTS_DIR=/path ./basilisk up`
+- **Several instances on one box** — `BASILISK_INSTANCE` / `BASILISK_PORT_OFFSET`
+- **Pulling updates**, and **troubleshooting** dangling containers and
+  networks
 
-For commercial Genworks GDL (with NURBS modeling primitives and
-Allegro CL), licensed users receive a supplemental overlay repository.
-To install an overlay:
-
-```bash
-cd ~/projects/
-git clone <overlay-repo-url>    # e.g. genworks-gdl-betatest
-cd <overlay-repo>/
-./install                       # copies configs into ../skewed-emacs/
-cd ../skewed-emacs/
-./basilisk up                # picks up overlay automatically
-```
-
-The `./install` script copies Docker Compose overlays (`.yml` files)
-and MCP config overlays into the Basilisk clone. Docker Compose
-automatically merges all `.yml` files in that directory, and
-`./basilisk up` merges MCP configs for all services.
-
-### Custom Projects Directory
-
-`./basilisk` generates `.env` via `./generate-env.sh` (both in the
-Basilisk clone). Do not edit `.env` directly. To use a non-default projects directory, set
-`PROJECTS_DIR` before running:
-
-```
-PROJECTS_DIR=/path/to/projects ./basilisk up
-```
-
-### Troubleshooting
-
-- *Dangling Containers*
-
-If all containers do not shut down cleanly for some reason, you can
-list them with
-
-```
-docker ps 
-```
-
-then forcibly remove one with
-
-```
-docker rm -f <container-name>
-```
-
-- *Dangling Network*
-
-Sometimes a docker network "skewed-network" or "skewed-emacs-network"
-can be left dangling, preventing a clean `./basilisk up`. Such
-cases can be cleaned up with e.g.
-
-```
-cd ~/projects/skewed-emacs/
-./basilisk down 
-docker network rm skewed-emacs # if for some reason necessary
-./basilisk up 
-```
+It is documented there rather than duplicated here on purpose: the
+instructions that used to live in this section told you to `cd
+~/projects/skewed-emacs` and run `./basilisk`, which has not been
+possible since the split.
 
 ## Windows-Specific Section
 
