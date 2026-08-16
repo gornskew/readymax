@@ -272,62 +272,33 @@ against. The full recipe is in the Basilisk README.
 
 ### AI Terminal Agents (Claude Code, Gemini CLI, Codex, Grok)
 
-The `full` image variant includes four AI terminal agents, accessible
-from any shell inside the container (e.g. via `M-x vterm`):
+The `-aituis` image variants (including `-full`, which is an alias for
+`gui-aituis`) carry four AI terminal agents, launched from any shell
+inside the container — `M-x vterm`, or an `eskew` session:
 
-| Agent | Launch Command | Auth Method |
-|-------|---------------|-------------|
-| Claude Code | `claudly` | Interactive OAuth (opens URL to paste in browser) |
-| Gemini CLI | `geminly` | Interactive OAuth (opens URL to paste in browser) |
-| OpenAI Codex | `codexly` | Interactive login or `OPENAI_API_KEY` env var |
-| Grok Build (xAI) | `grokly` | Interactive login (`grok login`) or `GROK_DEPLOYMENT_KEY` |
+| Agent | Launcher | First login |
+|-------|----------|-------------|
+| Claude Code | `claudly` | OAuth URL to open in a browser |
+| Gemini CLI | `geminly` | Google OAuth prompt |
+| OpenAI Codex | `codexly` | Interactive login, or `OPENAI_API_KEY` |
+| Grok Build (xAI) | `grokly` | `grok login`, or `GROK_DEPLOYMENT_KEY` |
 
-**First-time authentication:**
+They come up already wired to every MCP server on the stack:
+`./basilisk up` merges the service configs and installs them in
+whatever format each agent expects, so an agent you talk to in a
+terminal here reaches the same services an external Claude Desktop
+would. Credentials are volume-mounted from your host and survive
+restarts and recreates.
 
-Each agent requires a one-time login. Launch the agent from a
-terminal inside the container and follow the prompts — typically
-you'll be given a URL to open in your browser.
+A variant without them is not a dead end — `M-x skewed-install` adds
+the AI TUIs on demand, though those installs are ephemeral. And an
+external MCP client works identically against any variant, `lite`
+included.
 
-```bash
-# In an eat or vterm shell inside skewed-emacs:
-claudly    # Follow the OAuth URL prompt
-geminly    # Follow the Google OAuth prompt
-codexly    # Follow the login prompt, or set OPENAI_API_KEY
-grokly     # Follow the login prompt (stores ~/.grok/auth.json)
-```
-
-**MCP wiring (automatic):**
-
-`./basilisk up` merges service MCP configs and installs them for
-each agent:
-
-- Claude / Gemini: `/tmp/merged-mcp-config.json` (JSON `mcpServers`)
-- Codex: managed block in `~/.codex/config.toml`
-- Grok: managed block in `~/.grok/config.toml` (`[mcp_servers.*]`)
-
-In-container servers use `node …/mcp-wrapper.js` against the compose
-network hostnames (e.g. `skewed-emacs:7080`, `gendl-ccl:9080`).
-
-**Credential persistence:**
-
-Your credentials are stored in dotfiles that are volume-mounted from
-your host, so they survive container restarts:
-
-- Claude Code: `~/.claude/.credentials.json`
-- Gemini CLI: `~/.gemini/oauth_creds.json`, `~/.gemini/google_accounts.json`
-- Codex: `~/.codex/auth.json`
-- Grok: `~/.grok/auth.json` (only auth is mounted — not the whole
-  `~/.grok` tree, so the image-baked CLI binary stays intact)
-
-The `basilisk` script should automatically create these as empty
-placeholder files on your host if they don't exist yet.
-
-**Using the `lite` image:**
-
-If you use `EMACS_IMAGE_VARIANT=lite`, these agents are not installed.
-An external host MCP consumer such as Claude Desktop can still be
-used, via the MCP config generated at `./basilisk up` time and
-written to the Basilisk clone's `mcp/`.
+**Details** — which config lands where, why the launchers are shell
+functions rather than binaries, the Grok credential-mount asymmetry,
+and the build-stage layout — are in
+[docker/README.md](docker/README.md).
 
 
 ### Language Stack Policy (Bring Your Own Runtimes)

@@ -1,6 +1,17 @@
 # ==============================================================================
-# .dockerignore - Controls what gets sent to Docker build context
-# NOTE: Intentionally mirrors .gitignore for consistency
+# ONE list serving as .gitignore AND .dockerignore.
+#
+# .dockerignore is a tracked SYMLINK to this file (git mode 120000), not
+# a copy -- so the two can never drift, and there is nothing to keep in
+# sync when you edit here.  Do not "fix" it into a real file.
+#
+# That is why a few rules below look pointless to git: `.git/' can never
+# do anything in a .gitignore (git does not track its own directory) but
+# it is one of the most important lines in a .dockerignore.  Judge every
+# rule here against BOTH jobs before removing it.
+#
+# The counterpart in basilisk is NOT mirrored: that repo has no image and
+# no .dockerignore, so its copy of this header was removed 2026-08-16.
 # ==============================================================================
 
 # ==============================================================================
@@ -75,41 +86,30 @@ private-mcp-config.json
 overlays/local.sexp
 
 # ==============================================================================
-# Generated compose files (from services.sexp)
+# Gone with the Basilisk split (2026-08-15), removed here 2026-08-16
 # ==============================================================================
-genworks-gdl*.yml
-betatest*.yml
-enterprise*.yml
-*-stack-compose.yml
-
-# Development overlay files (local, not committed)
-*-overlay.yml
-
-*-dev-overlay.yml
-
-# ==============================================================================
-# Generated MCP configs
-# ==============================================================================
-
-mcp/*mcp*
-!mcp/merge-mcp-configs.el
-!mcp/mcp-*
-mcp/claude_desktop_config.json
-mcp/opening-prompt-local.md
-
-# ==============================================================================
-# Generated service description .el files
-# ==============================================================================
-
-dot-files/emacs.d/etc/*-services-generated.el
-
-
-
+# Eleven rules used to live at this point, covering generated compose
+# files (genworks-gdl*.yml, betatest*.yml, enterprise*.yml,
+# *-stack-compose.yml, *-overlay.yml, *-dev-overlay.yml), the mcp/
+# directory (mcp/*mcp* plus its two negations and two named files), and
+# dot-files/emacs.d/etc/*-services-generated.el.
+#
+# None of those paths exist in this repo any more.  skewed-emacs is the
+# Captain -- an Emacs config and the image carrying it -- and there is
+# deliberately no supported way to start anything from this clone.  The
+# stack, its SSoT and its generated output all live in basilisk, whose
+# .gitignore carries the live versions of these rules.
+#
+# Generated services elisp goes in <repo>/generated/, never in
+# dot-files/; dot-files/ is Emacs configuration only.
 
 # ==============================================================================
 # Build artifacts & caches
 # ==============================================================================
 .cache/
+# For the .dockerignore half of this file's job -- see the header.  It is
+# inert as a git rule and that is fine; it is not noise, it is the line
+# that keeps the whole history out of the build context.
 .git/
 .idea/
 .npm/
@@ -124,6 +124,6 @@ tmp/
 # ==============================================================================
 .bash_history
 history.*
-.#*
-*cyclops*.yml
-*cyclops*.el
+# Also removed 2026-08-16: a second `.#*' (already covered at the top of
+# the file) and *cyclops*.yml / *cyclops*.el, which matched nothing here
+# -- cyclops has its own repo and its config is generated into basilisk.
