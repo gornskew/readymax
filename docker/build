@@ -324,10 +324,39 @@ create_arch_aliases_local() {
 }
 
 # -----------------------------
+# Registry login refresh
+#
+# The alias pass runs last, minutes after the job's own `docker login'.
+# On 2026-08-16 the arm64 build pushed five images and twelve aliases on
+# one login and then took `unauthorized: authentication required' on the
+# thirteenth, six and a half minutes in, while the identical amd64 job --
+# shorter by 50s -- pushed the same tag fine.  A registry token that has
+# aged out mid-job looks exactly like that, so refresh it here rather than
+# hope the run stays under whatever the TTL turns out to be.
+#
+# Credentials come from the CI job's environment.  Absent (a developer
+# running docker/build by hand against an already-logged-in daemon), this
+# is a no-op: re-authenticating is not this script's job, and failing here
+# would break local pushes that work.  When they ARE set, a failure is
+# loud -- set -e takes the job down rather than letting the push report
+# the credential problem as something else.
+# -----------------------------
+refresh_registry_login() {
+  if [[ -z "${DOCKERHUB_USER:-}" || -z "${DOCKERHUB_TOKEN:-}" ]]; then
+    echo "→ No DOCKERHUB_USER/DOCKERHUB_TOKEN in the environment; using the daemon's existing login"
+    return
+  fi
+  echo "→ Refreshing registry login before the alias pass"
+  echo "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USER}" --password-stdin
+}
+
+# -----------------------------
 # Push arch-suffixed aliases
 # -----------------------------
 push_arch_aliases() {
   [[ "$PUSH_IMAGE" != "true" ]] && return
+
+  refresh_registry_login
 
   echo ""
   echo "=== Pushing arch-suffixed aliases for branch ${branch} (${ARCH_SUFFIX}) ==="
