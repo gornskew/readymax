@@ -114,7 +114,7 @@ ones.
     project files, services stati, links to org-mode daily-focus,
     launch slime against available CL backends etc.
 
-- **Preïnstalled, third-party packages:** (examples):
+- **Preïnstalled, pre-native-compiled third-party packages** (examples):
   - [Slime](https://en.wikipedia.org/wiki/SLIME) for Common Lisp / Swank
   - Paredit-mode, Flycheck-mode, Company-mode
   - Magit, Org-mode
@@ -475,6 +475,13 @@ repository, add them to a `~/.emacs-local` file, which will be loaded
 at the end of the Emacs initialization process.
 
 
+
+## License
+
+AGPL-3.0-or-later, © 2026 Gornskew Enterprises — see [LICENSE](LICENSE).
+The vendored SLIME under `dot-files/emacs.d/sideloaded/slime-v2.28/` is
+third-party and keeps its own terms; see [its
+LOCAL-CHANGES.md](dot-files/emacs.d/sideloaded/slime-v2.28/LOCAL-CHANGES.md).
 
 ## MCP Server Registries
 
