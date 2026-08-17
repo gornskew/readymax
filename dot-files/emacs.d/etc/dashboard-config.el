@@ -253,14 +253,29 @@ LIST-SIZE used as boolean"
       (list (format "    --- No %s directory exists ---\n" projects-dir))))))
 
 
-(defconst skewed-crew-identity-elisp-code
+(defconst skewed-crew-identity-cl-code
   "(with-open-file (in \"/tmp/skewed-crew-identity\" :if-does-not-exist nil) (when in (let ((line (read-line in nil))) (when (and line (>= (length line) 5) (string= (subseq line 0 5) \"NAME=\")) (subseq line 5)))))"
-  "CL snippet: this backend's own crew NAME from its own in-container
-/tmp/skewed-crew-identity (compose-dev's mint_crew_identities), or
-NIL.  Deliberately raw file I/O, not eyes-only-metrics -- the
-dashboard cannot have a hard dependency on eyes-only being up
-(Dave, 2026-08-14); every CL backend answers the generic lisply eval
-channel regardless of whether any app-level package is loaded.")
+  "COMMON LISP snippet: this backend's own crew NAME from its own
+in-container /tmp/skewed-crew-identity (compose-dev's
+mint_crew_identities), or NIL.  Deliberately raw file I/O, not
+eyes-only-metrics -- the dashboard cannot have a hard dependency on
+eyes-only being up (Dave, 2026-08-14); every CL backend answers the
+generic lisply eval channel regardless of whether any app-level
+package is loaded.
+
+Was named ...-elisp-code until 2026-08-17, which was simply wrong --
+WITH-OPEN-FILE and SUBSEQ are not Emacs Lisp -- and the misnomer hid
+a live bug: sent to an Emacs backend it errors, and the dashboard's
+silent-NIL-on-failure contract turns that into a Captain with no
+name.  See `skewed-crew-identity-el-code'.")
+
+(defconst skewed-crew-identity-el-code
+  "(when (file-readable-p \"/tmp/skewed-crew-identity\") (with-temp-buffer (insert-file-contents \"/tmp/skewed-crew-identity\") (goto-char (point-min)) (when (re-search-forward \"^NAME=\\\\(.*\\\\)$\" nil t) (match-string 1))))"
+  "The same question in EMACS LISP, for a backend whose lisply gate
+evaluates elisp rather than Common Lisp -- any Captain but this one.
+The local Captain never needs it (see
+`skewed-dashboard-local-crew-name', which reads the file directly);
+this covers a second stack's Captain appearing in the backend list.")
 
 (defun skewed-crew-strip-cl-quoting (s)
   "lisply-eval prin1's string results, so a real name arrives as
@@ -282,18 +297,26 @@ dashboard, so this never goes over the network at all."
       (when (re-search-forward "^NAME=\\(.*\\)$" nil t)
         (match-string 1)))))
 
-(defun skewed-dashboard-remote-crew-name (host port &optional timeout)
-  "HOST:PORT's own crew name via a raw lisply eval of
-`skewed-crew-identity-elisp-code' -- NOT eyes-only-metrics, so this
-works whether or not eyes-only is loaded there at all.  Silent NIL on
-any failure (unreachable, gate closed, no identity minted yet): a
-dashboard render must never hang or error on this."
+(defun skewed-dashboard-remote-crew-name (host port code &optional timeout)
+  "HOST:PORT's own crew name via a raw lisply eval of CODE -- NOT
+eyes-only-metrics, so this works whether or not eyes-only is loaded
+there at all.  Silent NIL on any failure (unreachable, gate closed, no
+identity minted yet): a dashboard render must never hang or error on
+this.
+
+CODE became a parameter on 2026-08-17.  It was hardwired to the
+Common Lisp snippet, which is correct for every CL backend and wrong
+for an Emacs one -- and because failure here is deliberately silent,
+sending the wrong dialect does not look like an error, it looks like a
+backend with no crew name.  Callers pass
+`skewed-crew-identity-cl-code' or `skewed-crew-identity-el-code'; the
+choice is made in `skewed-dashboard-backend-kind'."
   (let* ((url (format "http://%s:%d/lisply/lisp-eval" host port))
          (url-request-method "POST")
          (url-request-extra-headers '(("Content-Type" . "application/json")))
          (url-request-data
           (encode-coding-string
-           (json-encode (list (cons 'code skewed-crew-identity-elisp-code)))
+           (json-encode (list (cons 'code code)))
            'utf-8))
          (url-request-timeout (or timeout 1))
          (inhibit-message t) (message-log-max nil) (url-show-status nil)
@@ -367,10 +390,46 @@ section) or on any failure."
                           (and crew (plist-get crew :name)))))
                   (kill-buffer buffer))))
           (error nil))))))
-(defun skewed-dashboard-crew-name (backend-name host port)
+(defun skewed-dashboard-self-p (host)
+  "Is HOST this very container, rather than a peer over the network?"
+  (or (null host)
+      (member host (list "localhost" "127.0.0.1" (system-name)))))
+
+(defun skewed-dashboard-backend-kind (backend-name backend-type)
+  "Which identity channel a backend needs: `proxy', `emacs' or `lisp'.
+
+BACKEND-TYPE IS THE ANCHOR AND BACKEND-NAME IS ONLY THE FALLBACK, and
+that ordering is the whole point of this function (2026-08-17).  Both
+special cases below used to be keyed on the SOFTWARE names
+\"skewed-emacs\" and \"cyclops\".  When the containers were renamed by
+CREW POST -- captain, pilot -- both comparisons silently stopped
+matching and every backend fell through to the generic Common Lisp
+channel, with two visible consequences:
+
+  - the Captain was sent Common Lisp over an Emacs Lisp gate, errored,
+    and returned the silent NIL this code deliberately returns on any
+    failure -- so the one crew member the dashboard could read for
+    free was the one it never named;
+  - the Pilot's query went down the generic lisply channel, which is
+    exactly what the cyclops branch existed to prevent, and came back
+    with jr-eng-human's name.
+
+:type comes from services.sexp through the generated configs and says
+what a backend IS, so it survives renaming -- including a fork that
+renames every post.  Name matching stays only for a config old or
+hand-written enough to carry no :type, and answers to both the old and
+the current names."
+  (cond ((equal backend-type "reverse-proxy") 'proxy)
+        ((equal backend-type "emacs-lisp") 'emacs)
+        (backend-type 'lisp)
+        ((member backend-name '("pilot" "cyclops")) 'proxy)
+        ((member backend-name '("captain" "skewed-emacs")) 'emacs)
+        (t 'lisp)))
+
+(defun skewed-dashboard-crew-name (backend-name host port &optional backend-type)
   "Crew name for a lisply-backends dashboard entry, or NIL.  Local
-read for skewed-emacs (never a network round trip to itself);
-CYCLOPS goes through its own admin API (see
+read for this container's own Emacs (never a network round trip to
+itself); CYCLOPS goes through its own admin API (see
 `skewed-dashboard-cyclops-crew-name') rather than the generic lisply
 channel the other backends use -- a closed lisply gate transparently
 PROXIES /lisply/lisp-eval to cyclops's own default backend instead
@@ -379,17 +438,32 @@ of refusing (verified 2026-08-14: asking cyclops's endpoint for
 cyclops's own Allegro), so reading identity through that channel
 would silently attribute another container's name to the Pilot; the
 admin API is secret-gated instead, correctly answering for cyclops
-itself (cyclops source/utility.lisp CREW-IDENTITY-ALIST)."
-  (cond ((string= backend-name "skewed-emacs") (skewed-dashboard-local-crew-name))
-        ((string= backend-name "cyclops") (skewed-dashboard-cyclops-crew-name host port 0.5))
-        (t (skewed-dashboard-remote-crew-name host port 0.5))))
+itself (cyclops source/utility.lisp CREW-IDENTITY-ALIST).
+
+Which of the three applies is decided by
+`skewed-dashboard-backend-kind', on :type rather than on the name."
+  (pcase (skewed-dashboard-backend-kind backend-name backend-type)
+    ('proxy (skewed-dashboard-cyclops-crew-name host port 0.5))
+    ('emacs (if (skewed-dashboard-self-p host)
+                (skewed-dashboard-local-crew-name)
+              (skewed-dashboard-remote-crew-name
+               host port skewed-crew-identity-el-code 0.5)))
+    (_      (skewed-dashboard-remote-crew-name
+             host port skewed-crew-identity-cl-code 0.5))))
 
 (defun lisply-backends-strings (list-size)
   "Return a list of propertized strings for lisply backends dashboard item."
   (if list-size
       (let ((backends (or (discover-network-lisply-backends)
-                          '((:host "localhost" :port 7080 :name "skewed-emacs")
-                            (:host "localhost" :port 9081 :name "gendl")))))
+                          ;; :type carried here too -- this list is the
+                          ;; one path that reaches the crew-name
+                          ;; dispatch without an SSoT behind it, and
+                          ;; without :type it would name the Captain
+                          ;; by falling back to a string comparison
+                          '((:host "localhost" :port 7080 :name "captain"
+                                   :type "emacs-lisp")
+                            (:host "localhost" :port 9081 :name "jr-eng-human"
+                                   :type "common-lisp")))))
         (if backends
             (mapcar (lambda (backend)
                       (let* ((host (plist-get backend :host))
@@ -403,7 +477,9 @@ itself (cyclops source/utility.lisp CREW-IDENTITY-ALIST)."
                              ;; point risking a second round trip to
                              ;; something already down
                              (crew-name (and is-ok
-                                             (skewed-dashboard-crew-name name host port))))
+                                             (skewed-dashboard-crew-name
+                                              name host port
+                                              (plist-get backend :type)))))
                         (format "    %s\n"
                                (propertize
                                 (format "%s%s (%s:%s)%s%s"
