@@ -577,8 +577,20 @@ at the end of the Emacs initialization process.
 
 ## License
 
-This package is licensed under the GNU Affero General Public License
-v3.0 (AGPL-3.0) which presumably is compatible with Gnu Emacs's GPL.
+Copyright © 2026 Gornskew Enterprises.
+
+This package is free software under the **GNU Affero General Public
+License, version 3 or later** — full text in [LICENSE](LICENSE). AGPL-3.0
+is one-way compatible with GNU Emacs's GPL-3.0: GPL-3.0 code may be
+combined into this AGPL-3.0 work, and §13 lets the combined work be
+conveyed under either license's terms.
+
+Two directories are third-party and keep their own terms, not ours:
+`dot-files/emacs.d/sideloaded/slime-v2.28/` (SLIME, public domain plus
+GPL-licensed contributions) and
+`windows-keybindings/Keyswap-.../` (the KeySwap tool). The prebuilt
+`docker/copilot-language-server` binary is Microsoft's, under its own
+license.
 
 ## MCP Server Registries
 
