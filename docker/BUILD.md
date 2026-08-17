@@ -64,7 +64,8 @@ Adds (all also installable on demand via `skewed-install`):
 - **Gemini CLI**: @google/gemini-cli
 - **Grok Build CLI**: binary from https://x.ai/cli/install.sh
   (optional pin: build-arg `GROK_VERSION=X.Y.Z`)
-- **copilot-language-server**
+
+**Not** copilot-language-server — it is in no image, on demand only.
 
 ## Image Variants (per branch)
 

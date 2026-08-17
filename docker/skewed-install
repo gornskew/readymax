@@ -32,7 +32,7 @@ modules:
   codex                    OpenAI Codex TUI (npm, ~300MB)
   gemini-cli               Google Gemini CLI (npm, ~130MB)
   grok                     xAI Grok CLI (binary installer, ~160MB)
-  copilot-language-server  GitHub Copilot LSP server (npm, ~70MB)
+  copilot-language-server  GitHub Copilot LSP server (npm, ~260MB)
   headless-shell           chrome-headless-shell + libs for webshot (~610MB)
 EOF
 }
@@ -68,6 +68,19 @@ install_module() {
       ;;
     copilot-language-server)
       npm_module copilot @github/copilot-language-server copilot-language-server
+      # The package declares the Copilot CLI (@github/copilot-<platform>)
+      # among its optionalDependencies, so npm drags in ~377MB of a
+      # DIFFERENT product that the language server never calls.  Measured
+      # 2026-08-16: 638MB installed, 262MB after this prune, and
+      # `language-server.js --version` is happy either way.  Not
+      # --omit=optional, which would also drop the per-platform language
+      # server binary this thing does need.
+      rm -rf "$HOME"/.copilot/local/node_modules/@github/copilot-linux-* \
+             "$HOME"/.copilot/local/node_modules/@github/copilot-darwin-* \
+             "$HOME"/.copilot/local/node_modules/@github/copilot-win32-*
+      rm -f "$HOME"/.copilot/local/node_modules/.bin/copilot-linux-* \
+            "$HOME"/.copilot/local/node_modules/.bin/copilot-darwin-* \
+            "$HOME"/.copilot/local/node_modules/.bin/copilot-win32-*
       ;;
     headless-shell)
       if command -v chrome-headless-shell >/dev/null 2>&1; then

@@ -12,10 +12,10 @@
 #   ├── runtime-base (+ emacs-nox)                    → Tag: -lite
 #   │   └── runtime-default (+ chrome-headless-shell + fonts)
 #   │       │                     → Tags: -default, {branch}, latest (devo)
-#   │       └── runtime-aituis (+ AI CLIs + copilot-ls) → Tags: -aituis, -tui
+#   │       └── runtime-aituis (+ AI CLIs)             → Tags: -aituis, -tui
 #   └── runtime-gui-base (+ emacs-gtk + fonts + chromium: full X workstation)
 #       └── runtime-gui                               → Tag: -gui
-#           └── runtime-gui-aituis (+ AI CLIs + copilot-ls)
+#           └── runtime-gui-aituis (+ AI CLIs)
 #                                     → Tags: -gui-aituis, -full
 #
 # The general-distribution default ({branch}/latest) is the non-GUI image
@@ -213,14 +213,13 @@ RUN set -euxo pipefail; \
 # stack machinery moved to the Basilisk repo (2026-08-15).
 COPY --chown=emacs-user:emacs-user . /home/emacs-user/skewed-emacs/
 
-USER root
-# Real copy, not a symlink: runtime stages COPY this path from the
-# builder, and the repo copy drops its duplicate below (Cleanup) so the
-# ~65MB binary ships at most once per image.
-RUN set -euxo pipefail; \
-   cp /home/emacs-user/skewed-emacs/docker/copilot-language-server /usr/local/bin/copilot-language-server; \
-   chmod +x /usr/local/bin/copilot-language-server
-USER emacs-user
+# copilot-language-server is NOT baked into any image (2026-08-16).  It
+# used to be a 65MB pkg-built binary committed at docker/copilot-language-
+# server and copied here.  Two reasons it went away: it is GitHub's to
+# distribute, not ours to commit; and that binary was x86-64 ELF, copied
+# unchanged into the arm64 images, where it could never have run.
+# Install it on demand instead -- `skewed-install copilot-language-server`
+# -- which resolves the right per-platform package from npm.
 
 # Start daemon to settle async init
 RUN set -euxo pipefail; \
@@ -243,12 +242,9 @@ RUN set -euxo pipefail; \
        --eval "(lisply-search-build-index-with-clone \"${GIT_BRANCH}\")"; \
    fi
 
-# Cleanup builder caches; drop the repo copy's duplicate of
-# copilot-language-server (already at /usr/local/bin) so runtime images
-# don't ship it twice.
+# Cleanup builder caches.
 RUN set -euxo pipefail; \
    rm -rf ~/.cache /tmp/*; \
-   rm -f ~/skewed-emacs/docker/copilot-language-server; \
    rm -rf ~/.emacs.d/elpa/*/.git 2>/dev/null || true
 
 
@@ -305,8 +301,8 @@ RUN set -euxo pipefail; \
    ln -s /projects /home/emacs-user/projects
 
 # Copy common artifacts from builder (Emacs config, lisply-mcp, vterm).
-# copilot-language-server is NOT here: it ships in the -aituis variants
-# and installs on demand elsewhere (skewed-install copilot-language-server).
+# copilot-language-server is in no image at all: install it on demand
+# with `skewed-install copilot-language-server`.
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/skewed-emacs /home/emacs-user/skewed-emacs
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/lisply-mcp /home/emacs-user/lisply-mcp
 
@@ -405,7 +401,7 @@ USER emacs-user
 
 
 # ============================================================
-# Runtime AI TUIs: Default + AI CLIs + copilot-language-server
+# Runtime AI TUIs: Default + AI CLIs
 # Tagged as: {branch}-aituis, {branch}-tui
 # ============================================================
 FROM runtime-default AS runtime-aituis
@@ -416,7 +412,6 @@ COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.codex /home/
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.gemini /home/emacs-user/.gemini
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.grok /home/emacs-user/.grok
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.local/bin /home/emacs-user/.local/bin
-COPY --from=builder /usr/local/bin/copilot-language-server /usr/local/bin/copilot-language-server
 
 
 # ============================================================
@@ -476,4 +471,3 @@ COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.codex /home/
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.gemini /home/emacs-user/.gemini
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.grok /home/emacs-user/.grok
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.local/bin /home/emacs-user/.local/bin
-COPY --from=builder /usr/local/bin/copilot-language-server /usr/local/bin/copilot-language-server

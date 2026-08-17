@@ -1,11 +1,11 @@
-# Skewed Emacs: Ready-to-go, Opinionated Emacs Environment that supports MCP for elisp and Common Lisp
+# Skewed Emacs: A packaged Emacs Environment that can make your
+  Emacs a Model Context Protocol (MCP) Server
 
-Skewed Emacs is a containerized Emacs development environment with a
-package-rich, native-compiled emacs elisp user configuration, that
-comes preconfigured and ready to use with the lisply-mcp Model Context
-Protocol (MCP) middleware, enabling AI agents to interact directly
-with Emacs and other compliant Lisp REPLs for automated development
-workflows.
+Skewed Emacs is a containerized software development environment with
+a package-rich user configuration, that comes preconfigured with MCP
+support for enabling AI agents to interact directly with your
+container-sandboxed Emacs instance. 
+
 
 The Emacs configuration part could arguably be decomposed into a
 separate repository, but on the other hand, in the interest of
@@ -585,12 +585,15 @@ is one-way compatible with GNU Emacs's GPL-3.0: GPL-3.0 code may be
 combined into this AGPL-3.0 work, and §13 lets the combined work be
 conveyed under either license's terms.
 
-Two directories are third-party and keep their own terms, not ours:
-`dot-files/emacs.d/sideloaded/slime-v2.28/` (SLIME, public domain plus
-GPL-licensed contributions) and
-`windows-keybindings/Keyswap-.../` (the KeySwap tool). The prebuilt
-`docker/copilot-language-server` binary is Microsoft's, under its own
-license.
+One directory is third-party and keeps its own terms, not ours:
+`dot-files/emacs.d/sideloaded/slime-v2.28/` — a vendored snapshot of
+SLIME 2.28, public domain except for seven GPL-2-**or-later** files.
+"Or later" is what makes it combinable with AGPL-3.0. What it is, what
+we changed, and the check to re-run when bumping it are recorded in
+[that directory's LOCAL-CHANGES.md](dot-files/emacs.d/sideloaded/slime-v2.28/LOCAL-CHANGES.md).
+
+`copilot-language-server` is GitHub's, MIT-licensed, and is installed
+from npm rather than committed here — see `docker/skewed-install`.
 
 ## MCP Server Registries
 

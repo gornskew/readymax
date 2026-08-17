@@ -25,7 +25,7 @@
     ("codex"                   . "OpenAI Codex TUI (npm, ~300MB)")
     ("gemini-cli"              . "Google Gemini CLI (npm, ~130MB)")
     ("grok"                    . "xAI Grok CLI (binary installer, ~160MB)")
-    ("copilot-language-server" . "GitHub Copilot LSP server (npm, ~70MB)")
+    ("copilot-language-server" . "GitHub Copilot LSP server (npm, ~260MB)")
     ("headless-shell"          . "chrome-headless-shell + libs for webshot (~610MB)"))
   "Modules skewed-install knows, with size/description annotations.")
 

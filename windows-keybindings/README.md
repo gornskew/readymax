@@ -8,6 +8,30 @@ This directory contains configuration files to make Windows more Emacs-friendly 
 
 - **sharpkeys-capslock-to-control.skl**: SharpKeys configuration to remap CapsLock to Control
 - **autohotkey-config-for-emacs-like-bindings.ahk**: AutoHotkey script for Emacs-style navigation keys
+- **autohotkey-config-for-emacs-in-ttyd.ahk**: the same idea for Emacs running in a ttyd browser terminal
+
+Each of these is a small text configuration you feed to a tool you
+install yourself. This directory deliberately ships no third-party
+executables — see below.
+
+## Sanskrit / IAST transliteration (KeySwap)
+
+For typing IAST diacritics (ā ī ū ṛ ṝ ḷ ṭ ḍ ṇ ś ṣ ṃ ḥ …) on Windows,
+**KeySwap** works well: hold a base letter's key and cycle through its
+diacritic variants.
+
+Get it from the author: <https://www.YesVedanta.com/keyswap>.
+
+`keyswap.exe` used to be committed here. It was removed 2026-08-16: it
+is someone else's compiled Windows binary, redistributed with no license
+grant of any kind — no LICENSE file, no terms in its ReadMe, nothing
+that says we may pass it on. A repo that ships its own license carefully
+should not casually redistribute a binary it has no right to. Install it
+from the source above instead.
+
+Its `config.txt` maps each base letter to the variants it cycles
+through; the shipped default already covers IAST, so there is usually
+nothing to configure.
 
 ## Setup Instructions
 

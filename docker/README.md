@@ -33,6 +33,11 @@ installs are **ephemeral**: they live in the container's writable layer
 and are gone on a recreate. Pull `-aituis` or `-full` for the baked-in
 version.
 
+`copilot-language-server` is the exception: it is baked into **no**
+image and is only ever installed on demand (2026-08-16). It is GitHub's
+to distribute, and its npm package now weighs ~260MB rather than the
+65MB single binary it used to be.
+
 ## The launchers are shell functions, not binaries
 
 `claudly`, `geminly`, `codexly` and `grokly` are bash functions defined
