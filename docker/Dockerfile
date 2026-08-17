@@ -254,6 +254,21 @@ RUN set -euxo pipefail; \
 # ============================================================
 FROM debian:stable-slim AS common-runtime-base
 
+# What this species can DO, readable off the image manifest -- the SSoT
+# for image capabilities.  The basilisk :captain posting requires
+# "skewed-emacs"; the crew muster verifies the match at up-time,
+# warning and proceeding, which is exactly the canon's posture that a
+# skewed-emacs Captain is recommended, not a class invariant.
+#
+# ONE LABEL DOES NOT COVER ALL STRAINS: the strains genuinely differ
+# in what they can do (lite has no glass; only gui strains have a
+# workstation; only -aituis strains bake the TUIs), so this is only
+# the FLOOR -- console + lisply MCP -- and each strain's final stage
+# overrides it with that strain's true list.  What skewed-install adds
+# later (e.g. headless-shell onto lite) is ability arranged aboard,
+# not innate, and deliberately stays out of the manifest.
+LABEL basilisk.capabilities="skewed-emacs"
+
 ARG DEBIAN_FRONTEND=noninteractive
 
 SHELL ["/bin/bash", "-lc"]
@@ -364,6 +379,9 @@ RUN set -euxo pipefail; \
 # ============================================================
 FROM runtime-base AS runtime-default
 
+# This strain carries the glass (chrome-headless-shell).
+LABEL basilisk.capabilities="skewed-emacs,the glass"
+
 USER root
 
 # chrome-headless-shell's shared-library closure plus fonts for decent
@@ -406,6 +424,9 @@ USER emacs-user
 # ============================================================
 FROM runtime-default AS runtime-aituis
 
+# Glass plus the baked AI TUIs.
+LABEL basilisk.capabilities="skewed-emacs,the glass,ai-tuis"
+
 # Copy AI CLI installations from builder
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.claude /home/emacs-user/.claude
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.codex /home/emacs-user/.codex
@@ -419,6 +440,9 @@ COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.local/bin /h
 # This is the GUI equivalent of runtime-base
 # ============================================================
 FROM common-runtime-base AS runtime-gui-base
+
+# Workstation strains: full chromium serves as the glass, plus a GUI.
+LABEL basilisk.capabilities="skewed-emacs,the glass,gui"
 
 USER root
 
@@ -464,6 +488,9 @@ FROM runtime-gui-base AS runtime-gui
 # Tagged as: {branch}-gui-aituis, {branch}-full
 # ============================================================
 FROM runtime-gui-base AS runtime-gui-aituis
+
+# The kitchen sink: glass, GUI, and the baked AI TUIs.
+LABEL basilisk.capabilities="skewed-emacs,the glass,gui,ai-tuis"
 
 # Copy AI CLI installations from builder
 COPY --from=builder --chown=emacs-user:emacs-user /home/emacs-user/.claude /home/emacs-user/.claude
