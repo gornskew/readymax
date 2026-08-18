@@ -869,3 +869,37 @@ re-request `get_docs` with a narrower id, or fetch/search the text in an
 elisp temp-buffer.  General rule: once content originated in the
 container's world, keep working it there rather than shelling out on the
 host (same principle as the file-ops and syntax-check guidance above).
+
+## Raising a buffer in the user's live eskew session (2026-08-17)
+
+When a piece deserves reading in Emacs rather than chat scroll — a
+draft document, a review skeleton, a diff — put it in a buffer and
+raise it in the user's attached client frame.  An eskew session is an
+emacsclient frame on the shared captain daemon, so anything done to a
+buffer via `lisp_eval` is already in the user's Emacs; the only trick
+is selecting THEIR frame, not the daemon's initial one:
+
+```elisp
+(let ((buf (get-buffer-create "*name the user will recognize*")))
+  (with-current-buffer buf
+    (erase-buffer)
+    (org-mode)                          ; org outlines fold nicely
+    (insert "..."))
+  (with-selected-frame
+      (seq-find (lambda (f) (frame-parameter f 'client)) (frame-list))
+    (switch-to-buffer buf)
+    (goto-char (point-min))))
+```
+
+- The daemon's own frame has `client` nil (`F1`, no tty); an attached
+  emacsclient frame has `client` set and a `tty` parameter.  Check
+  with `(frame-list)` + `frame-parameter` first; if no client frame
+  exists, just create the buffer and say so — the user can `C-x b` to
+  it after attaching.
+- With several client frames, `seq-find` takes the first; prefer the
+  one whose `tty` matches where the user says they are, or fall back
+  to telling them the buffer name.
+- Give buffers stable, greppable names (`*canon rebuild: ...*`) so a
+  later `C-x b` completes them easily.
+- First live use: a document-skeleton review during a 2026-08-17
+  session — worked on the first try.
