@@ -343,6 +343,27 @@ result = mcp__gendl_ccl__gendl_ccl__lisp_eval(code='(ql:quickload :my-project)')
 
 ## Lessons Learned (March 2026 Session)
 
+### Minibuffer Prompts Can Hang the Daemon (August 2026)
+Commands that are prompt-capable will raise a minibuffer query when
+called programmatically, and the eval blocks until a human answers —
+with nobody at the keyboard this wedges the daemon and the MCP
+transport with it (same failure family as the org-clock
+dangling-clock prompt in org/CLAUDE.md). Observed live with
+`revert-buffer-with-coding-system`, which asked "Revert buffer from
+file...?" in the user's frame. Suppress the query explicitly:
+```elisp
+;; reverts
+(let ((revert-without-query '(".")))
+  (revert-buffer-with-coding-system 'utf-8-dos))
+;; or
+(revert-buffer :ignore-auto :noconfirm)
+```
+General rule: before driving any interactive-capable command from
+`lisp_eval`, find its prompt paths (`yes-or-no-p`, `y-or-n-p`,
+`map-y-or-n-p` in its source) and bind the documented suppressor, or
+call the non-interactive variant. If there is no suppressor, don't
+call it programmatically.
+
 ### Reading SLIME REPL Buffers via MCP
 When reading `*slime-repl allegro<N>*` buffers from MCP:
 - **Use `(buffer-string)`** — this works reliably
