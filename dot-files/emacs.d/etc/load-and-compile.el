@@ -21,7 +21,21 @@
 (require 'comp)
 (require 'comp-run)
 
-(setq use-package-always-ensure t) ; Ensure packages are installed
+;; A built container image is SEALED: it already carries every package
+;; it will ever have, so nothing in the startup path may reach the
+;; network.  Package installation happens at docker-build time (or on a
+;; bare host's first run) and nowhere else.  Missing packages in a
+;; sealed image are an image-build bug to be reported loudly, never
+;; papered over with a download -- the stack must boot airgapped.
+(defvar skewed-emacs-sealed?
+  (and skewed-emacs-container? (not skewed-emacs-docker-build?)))
+
+(setq use-package-always-ensure (not skewed-emacs-sealed?))
+
+(when skewed-emacs-sealed?
+  ;; With no archives configured, package-refresh-contents is a no-op
+  ;; and any stray install attempt fails locally instead of dialing out.
+  (setq package-archives nil))
 
 (setq ;; native-comp-deferred-compilation nil ;; obsolete
       native-comp-jit-compilation nil)
@@ -34,7 +48,7 @@
   "Check if URL is reachable by attempting an HTTP request."
   (condition-case nil
       (let ((url-request-method "HEAD"))
-        (url-retrieve-synchronously url t t)
+        (url-retrieve-synchronously url t t 5)
         t)
     (error nil)))
 
@@ -152,20 +166,29 @@ container? %s"
 	     elapsed)
 							       
     (unless (all-packages-installed-p)
-      (message "Installing missing packages...")
-      (configure-package-archives)
-      (when
-	  (or (not package-archive-contents)
-              (not
-	       (file-exists-p
-		(concat package-user-dir "/archives/gnu/archive-contents")))
-              (not
-	       (file-exists-p
-		(concat package-user-dir "/archives/nongnu/archive-contents")))
-              (not
-	       (file-exists-p
-		(concat package-user-dir "/archives/melpa/archive-contents"))))
-        (package-refresh-contents)))
+      (if skewed-emacs-sealed?
+	  ;; Sealed image: a missing package is an image-build bug.
+	  ;; Name the culprits and boot with what we have -- the stack
+	  ;; must come up airgapped, so never touch the network here.
+	  (message "WARNING: sealed image is missing packages: %S -- image-build bug; continuing offline"
+		   (cl-remove-if #'package-installed-p
+				 (mapcar (lambda (pkg-entry)
+					   (if (symbolp pkg-entry) pkg-entry (car pkg-entry)))
+					 third-party-packages)))
+	(message "Installing missing packages...")
+	(configure-package-archives)
+	(when
+	    (or (not package-archive-contents)
+		(not
+		 (file-exists-p
+		  (concat package-user-dir "/archives/gnu/archive-contents")))
+		(not
+		 (file-exists-p
+		  (concat package-user-dir "/archives/nongnu/archive-contents")))
+		(not
+		 (file-exists-p
+		  (concat package-user-dir "/archives/melpa/archive-contents"))))
+	  (package-refresh-contents))))
     
 
     (let ((float-time (float-time)))
@@ -177,7 +200,14 @@ container? %s"
     ;; Third-party packages
     (dolist (pkg (append third-party-packages second-party-packages))
       (message "Processing use-package for %S" pkg)
-      (eval `(use-package ,@pkg))
+      ;; Sealed: one broken/missing package must not take the daemon
+      ;; (and the MCP transport with it) down -- degrade loudly instead.
+      (if skewed-emacs-sealed?
+	  (condition-case err
+	      (eval `(use-package ,@pkg))
+	    (error (message "WARNING: use-package %s failed in sealed image: %s"
+			    (cl-first pkg) (error-message-string err))))
+	(eval `(use-package ,@pkg)))
       (let ((float-time (float-time)))
 	(setq elapsed (- float-time curr-time))
 	(setq curr-time float-time))

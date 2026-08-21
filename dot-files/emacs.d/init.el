@@ -101,7 +101,10 @@
 
     (nerd-icons
      :demand t
+     ;; Fonts are baked at image-build time; a container must never
+     ;; download them at startup (airgap guarantee).
      :config (when (and (display-graphic-p)
+			(not skewed-emacs-container?)
 			(not (find-font
 			      (font-spec :name "Symbols Nerd Font Mono"))))
 	       (nerd-icons-install-fonts :quiet)))

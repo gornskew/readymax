@@ -63,6 +63,11 @@ to.
 (defun lisply--load-backend ()
   "Ensure `simple-httpd' is available and load the lisply-backend sources."
   (unless (require 'simple-httpd nil t)
+    ;; In a sealed container image this package is baked in; if it is
+    ;; missing that is an image-build bug and fetching it at runtime
+    ;; would violate the airgap guarantee -- fail loudly instead.
+    (when (bound-and-true-p skewed-emacs-sealed?)
+      (error "simple-httpd missing from sealed image -- image-build bug; refusing to fetch at runtime"))
     (when (and (fboundp 'package-installed-p)
                (not (package-installed-p 'simple-httpd)))
       (package-refresh-contents)
