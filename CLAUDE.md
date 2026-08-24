@@ -124,11 +124,14 @@ run `./install` (which copies the overlay into the Basilisk checkout —
 override with `BASILISK_DIR=` if it lives elsewhere), then `./basilisk up`
 picks up the overlay automatically.
 
-All containers mount `~/projects` → `/projects` and join `skewed-network`.
+All containers mount `~/projects` → `/projects` and join the ship's
+network, which wears the ship's minted name (kept in `basilisk/.ship`,
+surfaced as `DOCKER_NETWORK_NAME` in `basilisk/.env`).
 Check the Dashboard (`*dashboard*` buffer) for current service health.
 
 ### Docker Network
-- **Network Name**: `skewed-network`
+- **Network Name**: the ship's minted name (`basilisk/.ship`; legacy
+  hulls may still carry `skewed-network`)
 - **Purpose**: Enables container-to-container communication
 - **Key Benefit**: Allows SLIME connection from Skewed Emacs to Gendl Swank server
 
@@ -220,7 +223,7 @@ Host Machine
 │   └── mcp__genworks-gdl-*__*  → genworks-gdl-*:9098  (overlay)
 └── Host Ports: 6942 (ttyd), 19080 (gendl-ccl), 29080 (gendl-sbcl)
 
-Docker Network: skewed-network
+Docker Network: <the ship's minted name> (basilisk/.ship)
 ├── skewed-emacs   (Emacs + MCP + ttyd)           ── always present
 ├── gendl-ccl      (CCL + Swank 4200)             ── always present
 ├── gendl-sbcl     (SBCL + Swank 4210)            ── always present
@@ -231,8 +234,8 @@ Docker Network: skewed-network
 
 ### Container Management
 ```bash
-# Create network (one-time)
-docker network create skewed-network
+# The ship's network is created at ./basilisk up and removed at
+# ./basilisk down, named from basilisk/.ship -- no manual create.
 
 # List running containers
 docker ps
@@ -243,8 +246,8 @@ docker stop skewed-emacs gendl-ccl
 # Remove containers
 docker rm skewed-emacs gendl-ccl
 
-# Remove network
-docker network rm skewed-network
+# Remove network (name from basilisk/.ship, if a down left it standing)
+docker network rm $(cat ~/projects/basilisk/.ship | tr 'A-Z' 'a-z')
 ```
 
 ### Development Commands
