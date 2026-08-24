@@ -31,6 +31,8 @@
 
 (dashboard-setup-startup-hook)
 ;;(setq dashboard-banner-logo-title "𝒮𝓀𝑒𝓌𝑒𝒹 𝓉𝑜𝓌𝒶𝓇𝒹 𝒴𝑜𝓊𝓇 𝐵𝑒𝓈𝓉 𝐼𝓃𝓉𝑒𝓇𝑒𝓈𝓉𝓈")
+;; nil standalone; `generate-skewed-dashboard-banner' hangs the Cap'n's
+;; sign here when aboard a ship
 (setq dashboard-banner-logo-title nil)
 
 (setq dashboard-startup-banner skewed-dashboard-banner-file)
@@ -57,6 +59,11 @@
 
 (setq initial-buffer-choice
       (lambda ()
+        ;; regenerate rather than reuse: crew identities are minted at
+        ;; the raising, which can land after daemon init -- deciding
+        ;; SKEWED EMACS vs READY ROOM at init time would freeze the
+        ;; pre-mint answer into every later refresh
+        (generate-skewed-dashboard-banner)
         (dashboard-refresh-buffer)
         (get-buffer-create "*dashboard*")))
 
@@ -772,54 +779,101 @@ $$\\   $$ |$$ |\\$$\\  $$ |      $$$  / \\$$$ |$$ |      $$ |  $$ |
 "
     :emacs
     "
-       ________  __       __   ______    ______    ______      
-      |        \\|  \\     /  \\ /      \\  /      \\  /      \\     
-      | $$$$$$$$| $$\\   /  $$|  $$$$$$\\|  $$$$$$\\|  $$$$$$\\    
-      | $$__    | $$$\\ /  $$$| $$__| $$| $$   \\$$| $$___\\$$    
-      | $$  \\   | $$$$\\  $$$$| $$    $$| $$       \\$$    \\     
-      | $$$$$   | $$\\$$ $$ $$| $$$$$$$$| $$   __  _\\$$$$$$\\    
-      | $$_____ | $$ \\$$$| $$| $$  | $$| $$__/  \\|  \\__| $$    
-      | $$     \\| $$  \\$ | $$| $$  | $$ \\$$    $$ \\$$    $$    
+       ________  __       __   ______    ______    ______
+      |        \\|  \\     /  \\ /      \\  /      \\  /      \\
+      | $$$$$$$$| $$\\   /  $$|  $$$$$$\\|  $$$$$$\\|  $$$$$$\\
+      | $$__    | $$$\\ /  $$$| $$__| $$| $$   \\$$| $$___\\$$
+      | $$  \\   | $$$$\\  $$$$| $$    $$| $$       \\$$    \\
+      | $$$$$   | $$\\$$ $$ $$| $$$$$$$$| $$   __  _\\$$$$$$\\
+      | $$_____ | $$ \\$$$| $$| $$  | $$| $$__/  \\|  \\__| $$
+      | $$     \\| $$  \\$ | $$| $$  | $$ \\$$    $$ \\$$    $$
        \\$$$$$$$$ \\$$      \\$$ \\$$   \\$$  \\$$$$$$   \\$$$$$$
+"
+    :room
+    "
+     _______    ______    ______   __       __
+    |       \\  /      \\  /      \\ |  \\     /  \\
+    | $$$$$$$\\|  $$$$$$\\|  $$$$$$\\| $$\\   /  $$
+    | $$__| $$| $$  | $$| $$  | $$| $$$\\ /  $$$
+    | $$    $$| $$  | $$| $$  | $$| $$$$\\  $$$$
+    | $$$$$$$\\| $$  | $$| $$  | $$| $$\\$$ $$ $$
+    | $$  | $$| $$__/ $$| $$__/ $$| $$ \\$$$| $$
+    | $$  | $$ \\$$    $$ \\$$    $$| $$  \\$ | $$
+     \\$$   \\$$  \\$$$$$$   \\$$$$$$  \\$$      \\$$
 ")
 
     :big-money-sw
     (:skewed
      "
-  ______   __    __  ________  __       __  ________  _______  
- /      \\ /  |  /  |/        |/  |  _  /  |/        |/       \\ 
+  ______   __    __  ________  __       __  ________  _______
+ /      \\ /  |  /  |/        |/  |  _  /  |/        |/       \\
 /$$$$$$  |$$ | /$$/ $$$$$$$$/ $$ | / \\ $$ |$$$$$$$$/ $$$$$$$  |
 $$ \\__$$/ $$ |/$$/  $$ |__    $$ |/$  \\$$ |$$ |__    $$ |  $$ |
 $$      \\ $$  $$<   $$    |   $$ /$$$  $$ |$$    |   $$ |  $$ |
  $$$$$$  |$$$$$  \\  $$$$$/    $$ $$/$$ $$ |$$$$$/    $$ |  $$ |
 /  \\__$$ |$$ |$$  \\ $$ |_____ $$$$/  $$$$ |$$ |_____ $$ |__$$ |
-$$    $$/ $$ | $$  |$$       |$$$/    $$$ |$$       |$$    $$/ 
+$$    $$/ $$ | $$  |$$       |$$$/    $$$ |$$       |$$    $$/
  $$$$$$/  $$/   $$/ $$$$$$$$/ $$/      $$/ $$$$$$$$/ $$$$$$$/
+"
+     :ready
+     "
+ _______   ________   ______   _______   __      __
+/       \\ /        | /      \\ /       \\ /  \\    /  |
+$$$$$$$  |$$$$$$$$/ /$$$$$$  |$$$$$$$  |$$  \\  /$$/
+$$ |__$$ |$$ |__    $$ |__$$ |$$ |  $$ | $$  \\/$$/
+$$    $$< $$    |   $$    $$ |$$ |  $$ |  $$  $$/
+$$$$$$$  |$$$$$/    $$$$$$$$ |$$ |  $$ |   $$$$/
+$$ |  $$ |$$ |_____ $$ |  $$ |$$ |__$$ |    $$ |
+$$ |  $$ |$$       |$$ |  $$ |$$    $$/     $$ |
+$$/   $$/ $$$$$$$$/ $$/   $$/ $$$$$$$/      $$/
 "
      :emacs
      "
-       ________  __       __   ______    ______    ______      
-      /        |/  \\     /  | /      \\  /      \\  /      \\     
-      $$$$$$$$/ $$  \\   /$$ |/$$$$$$  |/$$$$$$  |/$$$$$$  |    
-      $$ |__    $$$  \\ /$$$ |$$ |__$$ |$$ |  $$/ $$ \\__$$/     
-      $$    |   $$$$  /$$$$ |$$    $$ |$$ |      $$      \\     
-      $$$$$/    $$ $$ $$/$$ |$$$$$$$$ |$$ |   __  $$$$$$  |    
-      $$ |_____ $$ |$$$/ $$ |$$ |  $$ |$$ \\__/  |/  \\__$$ |    
-      $$       |$$ | $/  $$ |$$ |  $$ |$$    $$/ $$    $$/     
-      $$$$$$$$/ $$/      $$/ $$/   $$/  $$$$$$/   $$$$$$/      
+       ________  __       __   ______    ______    ______
+      /        |/  \\     /  | /      \\  /      \\  /      \\
+      $$$$$$$$/ $$  \\   /$$ |/$$$$$$  |/$$$$$$  |/$$$$$$  |
+      $$ |__    $$$  \\ /$$$ |$$ |__$$ |$$ |  $$/ $$ \\__$$/
+      $$    |   $$$$  /$$$$ |$$    $$ |$$ |      $$      \\
+      $$$$$/    $$ $$ $$/$$ |$$$$$$$$ |$$ |   __  $$$$$$  |
+      $$ |_____ $$ |$$$/ $$ |$$ |  $$ |$$ \\__/  |/  \\__$$ |
+      $$       |$$ | $/  $$ |$$ |  $$ |$$    $$/ $$    $$/
+      $$$$$$$$/ $$/      $$/ $$/   $$/  $$$$$$/   $$$$$$/
 ")))
 
 
 
-(defun generate-skewed-dashboard-banner (&optional text-file)
-  "Generate our needed dashboard banner TEXT-FILE."
-  (unless text-file (setq text-file skewed-dashboard-banner-file))
-  (let ((skewed-banner (plist-get
-                        (plist-get skewed-dashboard-banners :big-money-sw) :skewed))
-        (emacs-banner (plist-get
-                       (plist-get skewed-dashboard-banners :big-money-se) :emacs)))
+(defun skewed-dashboard-aboard-p ()
+  "Is this Emacs serving aboard a Basilisk ship?
 
-    (write-region (concat skewed-banner emacs-banner) nil text-file nil nil nil nil)
+Aboard a ship, this container is the READY ROOM and the daemon inside
+it is the Cap'n; standalone, it is plain Skewed Emacs.  The tell is
+the crew identity minted at the raising (/tmp/skewed-crew-identity,
+the same file `skewed-dashboard-local-crew-name' reads): no shipyard
+ever raised a standalone container, so no identity was ever minted
+for it.  The container check keeps a stray identity file on a
+non-container host from dressing a desktop Emacs in ship's colors."
+  (and skewed-emacs-container?
+       (file-readable-p "/tmp/skewed-crew-identity")))
+
+(defun generate-skewed-dashboard-banner (&optional text-file)
+  "Generate our needed dashboard banner TEXT-FILE.
+
+Standalone, the marquee reads SKEWED EMACS.  Aboard a Basilisk ship
+(`skewed-dashboard-aboard-p') the same room hangs out its shipboard
+shingle instead: READY ROOM, with a small sign under it for whose
+room it is.  Same lettering either way -- Big Money-sw over Big
+Money-se -- so the two guises read as one artifact wearing two names."
+  (unless text-file (setq text-file skewed-dashboard-banner-file))
+  (let* ((aboard? (skewed-dashboard-aboard-p))
+         (top-banner (plist-get
+                      (plist-get skewed-dashboard-banners :big-money-sw)
+                      (if aboard? :ready :skewed)))
+         (bottom-banner (plist-get
+                         (plist-get skewed-dashboard-banners :big-money-se)
+                         (if aboard? :room :emacs))))
+    (setq dashboard-banner-logo-title
+          (when aboard? "𝒯𝒽𝑒 𝒞𝒶𝓅'𝓃 𝒾𝓈 𝒾𝓃."))
+    (write-region (concat top-banner bottom-banner) nil text-file nil nil nil nil)
     ))
 
 
