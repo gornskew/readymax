@@ -8,24 +8,29 @@ License, or (at your option) any later version.  Distributed WITHOUT
 ANY WARRANTY; see <https://www.gnu.org/licenses/agpl-3.0.html>.
 -->
 
-# Skewed Emacs: A packaged Emacs Environment that can make your Emacs a Model Context Protocol (MCP) Server
+# Readymax: A packaged Emacs Environment that can make your Emacs a Model Context Protocol (MCP) Server
 
-Skewed Emacs is a containerized software development environment with
+> **Renaming in progress (2026-08-24):** Skewed Emacs is becoming
+> **Readymax**. The prose here uses the new name; repository URLs and
+> image coordinates (`gornskew/skewed-emacs`) keep the old name until
+> the registry renames land.
+
+Readymax is a containerized software development environment with
 a package-rich user configuration, that comes preconfigured with MCP
 support for enabling AI agents to interact directly with your
 container-sandboxed Emacs. 
 
 
-Skewed Emacs works best as the "Captain" of a
+Readymax works best as the ready room of a
 [Basilisk](https://gornskew.com/basilisk/index.html)-class "space
-vessel."
+vessel," with your Emacs daemon serving as the ship's Cap'n.
 
-![Skewed Emacs Logo](img/skewed-colorful.png)
+![Readymax Logo](img/skewed-colorful.png)
 
-## Why Skewed Emacs? The Inversion
+## Why Readymax? The Inversion
 
 Most Emacs+AI projects put the agent *inside* Emacs: Emacs is the UI,
-and an LLM is wired into a buffer. Skewed Emacs inverts that: it puts
+and an LLM is wired into a buffer. Readymax inverts that: it puts
 **Emacs inside the agent** — Emacs (and any other Lisply-compliant
 Lisp environment, such as Gendl/Common Lisp) becomes a set of MCP
 tools that *any* agent can drive: Claude Desktop, Claude Code, Cursor,
@@ -44,28 +49,30 @@ container stack management, and that wider vision lives with the
 
 ## What Will I Find Here?
 
-This Skewed Emacs repository houses two assets:
+This Readymax repository houses two assets:
 
 1.  a ready-to-setup local Emacs configuration, including the lisply
     backend that makes Emacs answerable over MCP. This can be used on
     its own, on your host, without (2) if desired.
 
 2.  a Dockerfile for building a containerized emacs server with the
-    skewed-emacs configuration (as per (1) above) preïnstalled for the
+    Readymax configuration (as per (1) above) preïnstalled for the
     built-in `emacs-user` user account.
 
 Running that image alongside Gendl backends and other helper
 containers is a third thing with its own repo:
 **[Basilisk](https://github.com/gornskew/basilisk)**.  So Basilisk is
-the stack (`./basilisk up`, from a Basilisk clone), and `skewed-emacs`
+the stack (`./basilisk up`, from a Basilisk clone), and **Readymax**
 refers to the Emacs configuration and the image that carries it.
 
-In Basilisk's terms, live containers built from this repo are
-typically the **Captain** of the Basilisk-class ship, with its
-container name and Docker compose service name indeed set to `captain`.
+In Basilisk's terms, a live container built from this repo is
+typically the ship's **ready room** (Docker compose service name
+`ready-room`), with the Emacs daemon inside serving as the ship's
+Cap'n. The container itself wears a crew name minted fresh at each
+raising of the ship.
 
-See **BASILISK.md in the Basilisk repo** for more behind the crew
-postings and naming trope.
+See **BASILISK.md in the Basilisk repo** for more behind the rooms,
+crew postings, and naming trope.
 
 
 ## Two Ways to Use This
@@ -79,10 +86,10 @@ made available in your shell (bash, zsh, ksh, or plain sh). You do not
 need to run `./setup`. You do not need Emacs installed on your
 host. You do need docker installed on your host.
 
-**Option B — Local Installation:** run `./setup`.  Installs the Skewed
-Emacs dot-files and Emacs configuration directly into your host
+**Option B — Local Installation:** run `./setup`.  Installs the
+Readymax dot-files and Emacs configuration directly into your host
 account (`~/.emacs.d`, `~/.bash_profile`, etc.). Use this if you want
-the Skewed Emacs configuration in your own personal host Emacs. Does
+the Readymax configuration in your own personal host Emacs. Does
 not start any containers. MCP support is **off by default** on the host,
 but you can opt in — either with `./setup --with-mcp` or, from inside
 Emacs, `M-x lisply-enable-host-server` — to let an MCP client (and thus an
@@ -101,7 +108,7 @@ other.
 don't have or don't care about your personal setup. If you are an
 experienced Emacs user with a preëxisting setup, then you can run
 `./setup --dry-run` to see what it would do without touching your own
-files, then wire your own init files into the standard skewed-emacs
+files, then wire your own init files into the standard Readymax
 ones.
 
 
@@ -178,9 +185,9 @@ from the Basilisk clone as a ready-made first message.
 ```
 
    Cloning under your own `~/projects/` instead is useful only if you
-   want to hack on skewed-emacs internals from inside the container
+   want to hack on Readymax internals from inside the container
    (the host `~/projects/` directory is mounted at `/projects`
-   there). For just *using* skewed-emacs to work on other projects,
+   there). For just *using* Readymax to work on other projects,
    the clone location doesn't matter — the running container never
    needs the clone.
 
@@ -259,11 +266,11 @@ and the build-stage layout — are in
 
 ### Emacs-slanted Keyboard Tweaks for Windows
 
-Skewed-emacs uses the traditional Emacs keybindings by default, which
+Readymax uses the traditional Emacs keybindings by default, which
 make heavy use of the Control key ("C-" in emacs parlance). For this
 reason, it can be convenient to bind a more ergonomic key such as
 CapsLock to Control, on modern keyboards. (Older keyboards had Control
-in the place of current CapsLock). The Skewed Emacs repository
+in the place of current CapsLock). This repository
 contains [instructions](windows-keybindings/README.md) for mapping
 CapsLock to Control (with or without WSL) using a free program called
 SharpKeys.
@@ -298,7 +305,7 @@ Once Docker is running, `./basilisk up` will work normally.
 
 ## Local Installation
 
-This section is for users who want to install the Skewed Emacs dot-files
+This section is for users who want to install the Readymax dot-files
 and Emacs configuration **directly on their host machine**, without
 Docker. It is independent of Containerized Runnings — do not run
 `./setup` as part of a container-based setup; it is not needed and
@@ -403,7 +410,7 @@ tilde (~) in the dot-files directory.
 
 ## Terminal Icons Setup 
 
-Skewed Emacs includes a flexible icon system for the dashboard and
+Readymax includes a flexible icon system for the dashboard and
 org-mode agenda. By default we use colorful Unicode icons. If these do
 not work in your terminal, or you'd like a more muted experience, we
 recommend installing a **Nerd Font** in your terminal.
@@ -430,7 +437,7 @@ icons rather than loud colorful gaudy ones.
    - **GNOME Terminal**: Preferences → Profile → Custom font
    - **Alacritty**: Edit `font.normal.family` in config
 
-4. **Enable nerd icons in Skewed Emacs** by adding to your config or running:
+4. **Enable nerd icons in Readymax** by adding to your config or running:
    ```elisp
    (setq skewed-icons-style 'nerd)
    ```

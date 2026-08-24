@@ -31,8 +31,8 @@
 
 (dashboard-setup-startup-hook)
 ;;(setq dashboard-banner-logo-title "𝒮𝓀𝑒𝓌𝑒𝒹 𝓉𝑜𝓌𝒶𝓇𝒹 𝒴𝑜𝓊𝓇 𝐵𝑒𝓈𝓉 𝐼𝓃𝓉𝑒𝓇𝑒𝓈𝓉𝓈")
-;; nil standalone; `generate-skewed-dashboard-banner' hangs the Cap'n's
-;; sign here when aboard a ship
+;; `generate-skewed-dashboard-banner' hangs the sign here: the Cap'n's
+;; when aboard a ship, the Readymax welcome when standalone
 (setq dashboard-banner-logo-title nil)
 
 (setq dashboard-startup-banner skewed-dashboard-banner-file)
@@ -800,6 +800,18 @@ $$\\   $$ |$$ |\\$$\\  $$ |      $$$  / \\$$$ |$$ |      $$ |  $$ |
     | $$  | $$| $$__/ $$| $$__/ $$| $$ \\$$$| $$
     | $$  | $$ \\$$    $$ \\$$    $$| $$  \\$ | $$
      \\$$   \\$$  \\$$$$$$   \\$$$$$$  \\$$      \\$$
+"
+    :max
+    "
+          __       __   ______   __    __
+         |  \\     /  \\ /      \\ |  \\  |  \\
+         | $$\\   /  $$|  $$$$$$\\| $$  | $$
+         | $$$\\ /  $$$| $$__| $$ \\$$\\/  $$
+         | $$$$\\  $$$$| $$    $$  >$$  $$
+         | $$\\$$ $$ $$| $$$$$$$$ /  $$$$\\
+         | $$ \\$$$| $$| $$  | $$|  $$ \\$$\\
+         | $$  \\$ | $$| $$  | $$| $$  | $$
+          \\$$      \\$$ \\$$   \\$$ \\$$   \\$$
 ")
 
     :big-money-sw
@@ -846,7 +858,7 @@ $$/   $$/ $$$$$$$$/ $$/   $$/ $$$$$$$/      $$/
   "Is this Emacs serving aboard a Basilisk ship?
 
 Aboard a ship, this container is the READY ROOM and the daemon inside
-it is the Cap'n; standalone, it is plain Skewed Emacs.  The tell is
+it is the Cap'n; standalone, it is plain Readymax.  The tell is
 the crew identity minted at the raising (/tmp/skewed-crew-identity,
 the same file `skewed-dashboard-local-crew-name' reads): no shipyard
 ever raised a standalone container, so no identity was ever minted
@@ -858,21 +870,24 @@ non-container host from dressing a desktop Emacs in ship's colors."
 (defun generate-skewed-dashboard-banner (&optional text-file)
   "Generate our needed dashboard banner TEXT-FILE.
 
-Standalone, the marquee reads SKEWED EMACS.  Aboard a Basilisk ship
-(`skewed-dashboard-aboard-p') the same room hangs out its shipboard
-shingle instead: READY ROOM, with a small sign under it for whose
-room it is.  Same lettering either way -- Big Money-sw over Big
-Money-se -- so the two guises read as one artifact wearing two names."
+The product is READYMAX (the 2026-08-24 renaming; SKEWED EMACS
+lettering below is kept as heritage).  Standalone, the marquee reads
+READY MAX.  Aboard a Basilisk ship (`skewed-dashboard-aboard-p') the
+same room hangs out its shipboard shingle instead: READY ROOM, with
+the Cap'n's sign under it.  The top word is READY either way -- Big
+Money-sw over Big Money-se -- so the two guises read as one artifact
+wearing two names."
   (unless text-file (setq text-file skewed-dashboard-banner-file))
   (let* ((aboard? (skewed-dashboard-aboard-p))
          (top-banner (plist-get
                       (plist-get skewed-dashboard-banners :big-money-sw)
-                      (if aboard? :ready :skewed)))
+                      :ready))
          (bottom-banner (plist-get
                          (plist-get skewed-dashboard-banners :big-money-se)
-                         (if aboard? :room :emacs))))
+                         (if aboard? :room :max))))
     (setq dashboard-banner-logo-title
-          (when aboard? "𝒯𝒽𝑒 𝒞𝒶𝓅'𝓃 𝒾𝓈 𝒾𝓃."))
+          (if aboard? "𝒯𝒽𝑒 𝒞𝒶𝓅'𝓃 𝒾𝓈 𝒾𝓃."
+            "ℛ𝑒𝒶𝒹𝓎 𝓌𝒽𝑒𝓃 𝓎𝑜𝓊 𝒶𝓇𝑒."))
     (write-region (concat top-banner bottom-banner) nil text-file nil nil nil nil)
     ))
 
