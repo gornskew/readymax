@@ -23,7 +23,7 @@ container-sandboxed Emacs.
 
 Readymax works best as the ready room of a
 [Basilisk](https://gornskew.com/basilisk/index.html)-class "space
-vessel," with your Emacs daemon serving as the ship's Cap'n.
+vessel," with your Emacs daemon serving as the ship's Captain.
 
 ![Readymax Logo](img/skewed-colorful.png)
 
@@ -68,7 +68,7 @@ refers to the Emacs configuration and the image that carries it.
 In Basilisk's terms, a live container built from this repo is
 typically the ship's **ready room** (Docker compose service name
 `ready-room`), with the Emacs daemon inside serving as the ship's
-Cap'n. The container itself wears a crew name minted fresh at each
+Captain. The container itself wears a crew name minted fresh at each
 raising of the ship.
 
 See **BASILISK.md in the Basilisk repo** for more behind the rooms,
