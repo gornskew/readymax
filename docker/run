@@ -161,7 +161,10 @@ fi
 
 # Set run mode options
 if [ "$RUN_MODE" = "detached" ]; then
-    RUN_OPTIONS="-d --rm"
+    # -dit, not bare -d: the entrypoint falls back to its stdio REPL when
+    # no web terminal is requested, and with no tty/stdin that REPL sees
+    # EOF immediately and shuts the container down (verified 2026-08-26).
+    RUN_OPTIONS="-dit --rm"
     echo "  Access with: docker exec -it ${CONTAINER_NAME} emacsclient -t"
 else
     RUN_OPTIONS="-it --rm"
