@@ -7,7 +7,8 @@
 # License, or (at your option) any later version.  Distributed WITHOUT
 # ANY WARRANTY; see <https://www.gnu.org/licenses/agpl-3.0.html>.
 
-# Consolidated run script for Skewed Emacs Docker container
+# Consolidated run script for the Readymax Docker container (the
+# lifepod posting: freestanding, no ship around it)
 # Compatible with lisply-mcp port handling
 
 # Default values - avoid conflicts with host services
@@ -26,7 +27,7 @@ if [ -z "${IMAGE_TAG}" ]; then
         IMAGE_TAG=${CI_COMMIT_REF_NAME//\/\/\//--}
     fi
 fi
-CONTAINER_NAME="${CONTAINER_NAME:-skewed-emacs}"
+CONTAINER_NAME="${CONTAINER_NAME:-readymax}"
 HTTP_PORT="${HTTP_PORT:-7080}"              # Internal container port
 # Compute default HTTP_HOST_PORT as HTTP_PORT + 1 if not set
 if [ -z "${HTTP_HOST_PORT}" ]; then
@@ -75,7 +76,7 @@ while [[ $# -gt 0 ]]; do
       echo "Usage: $0 [OPTIONS]"
       echo "Options:"
       echo "  -t, --tag TAG               Image tag to run (default: dev)"
-      echo "  -n, --name NAME             Container name (default: skewed-emacs)"
+      echo "  -n, --name NAME             Container name (default: readymax)"
       echo "  --http-port PORT            Internal HTTP port (default: 7080)"
       echo "  --http-host-port PORT       Host HTTP port (default: 7080)"
       echo "  -p, --port PORT             Alias for --http-host-port"
@@ -114,8 +115,8 @@ if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     docker rm ${CONTAINER_NAME} 2>/dev/null || true
 fi
 
-echo "Starting Skewed Emacs container..."
-echo "  Image: gornskew/skewed-emacs:${IMAGE_TAG}"
+echo "Starting Readymax container..."
+echo "  Image: gornskew/readymax:${IMAGE_TAG}"
 echo "  Container name: ${CONTAINER_NAME}"
 echo "  HTTP API: localhost:${HTTP_HOST_PORT} -> container:${HTTP_PORT}"
 echo "  HTTP Service: ${START_HTTP}"
@@ -174,7 +175,7 @@ fi
 ENV_OPTIONS="-e HTTP_PORT=${HTTP_PORT} -e HTTP_HOST_PORT=${HTTP_HOST_PORT} -e START_HTTP=${START_HTTP} -e START_SWANK=${START_SWANK} -e SWANK_PORT=${SWANK_PORT}"
 
 # Run the container with proper port mapping
-echo "  Command: docker run ${RUN_OPTIONS} --name ${CONTAINER_NAME} -p ${HTTP_HOST_PORT}:${HTTP_PORT} ${ENV_OPTIONS} ${NETWORK_OPTIONS} ${MOUNT_OPTIONS} gornskew/skewed-emacs:${IMAGE_TAG}"
+echo "  Command: docker run ${RUN_OPTIONS} --name ${CONTAINER_NAME} -p ${HTTP_HOST_PORT}:${HTTP_PORT} ${ENV_OPTIONS} ${NETWORK_OPTIONS} ${MOUNT_OPTIONS} gornskew/readymax:${IMAGE_TAG}"
 echo ""
 
 docker run ${RUN_OPTIONS} \
@@ -185,7 +186,7 @@ docker run ${RUN_OPTIONS} \
     ${MOUNT_OPTIONS} \
     -e DISPLAY=$DISPLAY \
     -v /tmp/.X11-unix:/tmp/.X11-unix \
-    gornskew/skewed-emacs:${IMAGE_TAG}
+    gornskew/readymax:${IMAGE_TAG}
 
 if [ "$RUN_MODE" = "detached" ]; then
     echo "Container started successfully."

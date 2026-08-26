@@ -6,7 +6,7 @@
 # License, or (at your option) any later version.  Distributed WITHOUT
 # ANY WARRANTY; see <https://www.gnu.org/licenses/agpl-3.0.html>.
 
-# GitLab CI for skewed-emacs container images (gornskew/skewed-emacs on
+# GitLab CI for readymax container images (gornskew/readymax on
 # Docker Hub).
 #
 # Native per-arch builds -- no QEMU emulation (see the exec-format-error

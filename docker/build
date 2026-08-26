@@ -152,8 +152,8 @@ fi
 
 PUSH_IMAGE="${CLI_SET_PUSH:-false}"
 
-IMAGE_NAME="gornskew/skewed-emacs"
-FINAL_IMAGE="gornskew/skewed-emacs"
+IMAGE_NAME="gornskew/readymax"
+FINAL_IMAGE="gornskew/readymax"
 
 # -----------------------------
 # Stage mapping
