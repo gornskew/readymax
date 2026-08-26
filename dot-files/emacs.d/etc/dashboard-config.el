@@ -67,6 +67,18 @@
         (dashboard-refresh-buffer)
         (get-buffer-create "*dashboard*")))
 
+;; The initial draw can still lose the race outright (observed live
+;; 2026-08-26: a fresh raise flew READY MAX aboard ship because the
+;; daemon drew the board before the identity was minted).  Regenerate
+;; the marquee at EVERY refresh, not only the initial draw, so the
+;; board self-corrects the next time anything refreshes it.  The
+;; regeneration is one small file write.
+(defun skewed-dashboard--refresh-banner (&rest _)
+  "Regenerate the marquee so the guise tracks the current aboard state."
+  (generate-skewed-dashboard-banner))
+
+(advice-add 'dashboard-refresh-buffer :before #'skewed-dashboard--refresh-banner)
+
 ;;; Helper for Alignment =======================================================
 
 (defun skewed-dashboard-is-wide-char-p (icon-str)
