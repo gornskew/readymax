@@ -1,14 +1,25 @@
-# Skewed Emacs + Gendl Docker Development Environment
+# Readymax (the Ready Room) — agent guidance
 
-This file provides guidance to Claude Code (claude.ai/code) or other AI agents when working with the integrated Skewed Emacs and Gendl development environment.
+This file guides Claude Code (claude.ai/code) or other AI agents
+working with this repo's environment, standalone or aboard a Basilisk
+stack.  It is deliberately mixed-register: lore nouns are bound to
+their referents in parentheses at first use, then used freely;
+commands, identifiers, and warnings never take the voice.
 
 ## Overview
 
 This setup provides a complete Lisp development environment with:
-- **Skewed Emacs Container**: Custom Emacs configuration with MCP integration
-- **Gendl Container**: 3D CAD/modeling system with Common Lisp REPL and MCP integration
-- **Network Integration**: Containers communicate via Docker network for SLIME connections
-- **MCP Services**: Both containers expose services via Model Context Protocol for external tool integration
+- **The ready room** (this repo's container, compose service
+  `ready-room`): the Captain (a long-running Emacs daemon with the
+  Readymax configuration) attended by the Protocol Officer (the
+  lisply-mcp layer that receives arriving agents)
+- **The Gendl rooms** (`bridge`, `engine-room`): 3D CAD/modeling
+  residents with Common Lisp REPLs, answering the same lisply dialect
+- **Network Integration**: the rooms share the ship's Docker network
+  (its name minted fresh at each raising, kept in `basilisk/.ship`),
+  which carries SLIME connections
+- **MCP Services**: every room exposes its resident via the Model
+  Context Protocol for external tool integration
 
 ## MCP Integration
 
@@ -16,26 +27,31 @@ The containers are now wrapped as MCP (Model Context Protocol) services, providi
 
 ### Available MCP Services
 
-**Emacs Lisp Evaluation Service:**
-- **Service Name**: `mcp__skewed-emacs__skewed-emacs__lisp_eval`
+MCP server names are the ROOM slugs.  The containers themselves wear
+minted crew names that change at every full raising — read
+`basilisk/.muster` or `docker ps -f label=basilisk.module=<room>`
+fresh each session, never from memory.
+
+**The ready room (this repo, Emacs Lisp):**
+- **Service Name**: `mcp__ready-room__ready-room__lisp_eval`
 - **Purpose**: Evaluate Emacs Lisp code remotely
-- **Usage**: `mcp__skewed-emacs__skewed-emacs__lisp_eval(code="(+ 1 2 3)")`
+- **Usage**: `mcp__ready-room__ready-room__lisp_eval(code="(+ 1 2 3)")`
 
-**Gendl Common Lisp Services (included with skewed-emacs):**
-- `mcp__gendl_ccl__gendl_ccl__lisp_eval` — Gendl on Clozure CL (port 9080)
-- `mcp__gendl_sbcl__gendl_sbcl__lisp_eval` — Gendl on SBCL (port 9090)
+**Gendl rooms (included, free and open-source):**
+- `mcp__bridge__bridge__lisp_eval` — Gendl on Clozure CL (port 9080)
+- `mcp__engine-room__engine-room__lisp_eval` — Gendl on SBCL (port 9090)
 
-**Commercial Genworks GDL Services (via supplemental overlay repos):**
-- `mcp__genworks_gdl_smp__genworks_gdl_smp__lisp_eval` — GDL with NURBS (port 9098)
-- `mcp__genworks_gdl_enterprise_smp__genworks_gdl_enterprise_smp__lisp_eval` — Enterprise variant
-- These are not included in skewed-emacs. Licensed users receive a supplemental
+**Guild workshops (commercial Genworks GDL, via supplemental overlay repos):**
+- `mcp__guild-workshop__guild-workshop__lisp_eval` — GDL with NURBS, SMP (port 9098)
+- `mcp__guild-workshop-2__guild-workshop-2__lisp_eval` — non-SMP variant (port 9088)
+- These are not included here. Licensed users receive a supplemental
   repo to clone as a sibling directory, then run its `./install` script to
-  add Docker Compose and MCP config overlays into skewed-emacs.
+  add Docker Compose and MCP config overlays into the stack.
 
 **Ping Services:**
-- `mcp__skewed_emacs__skewed_emacs__ping_lisp` - Check Emacs availability
-- `mcp__gendl_ccl__gendl_ccl__ping_lisp` - Check Gendl CCL availability
-- `mcp__gendl_sbcl__gendl_sbcl__ping_lisp` - Check Gendl SBCL availability
+- `mcp__ready-room__ready-room__ping_lisp` - Check Emacs availability
+- `mcp__bridge__bridge__ping_lisp` - Check Gendl CCL availability
+- `mcp__engine-room__engine-room__ping_lisp` - Check Gendl SBCL availability
 
 ### MCP vs Raw HTTP
 
@@ -48,7 +64,7 @@ curl -X POST http://localhost:7080/lisply/lisp-eval -d '{"code": "(+ 1 2 3)"}'  
 **Current Approach (Recommended):**
 ```python
 # Through MCP services (seamless with Claude Code)
-mcp__skewed_emacs__skewed_emacs__lisp_eval(code="(+ 1 2 3)")
+mcp__ready-room__ready-room__lisp_eval(code="(+ 1 2 3)")
 ```
 
 
@@ -57,13 +73,13 @@ mcp__skewed_emacs__skewed_emacs__lisp_eval(code="(+ 1 2 3)")
 Check if workarounds are active:
 ```bash
 # Test current environment via MCP
-mcp__skewed_emacs__skewed_emacs__lisp_eval(code='(list (getenv "SHELL") shell-file-name (getenv "PATH"))')
+mcp__ready-room__ready-room__lisp_eval(code='(list (getenv "SHELL") shell-file-name (getenv "PATH"))')
 
 # Test native compilation settings
-mcp__skewed_emacs__skewed_emacs__lisp_eval(code='native-comp-jit-compilation')
+mcp__ready-room__ready-room__lisp_eval(code='native-comp-jit-compilation')
 
 # Test assembler accessibility
-mcp__skewed_emacs__skewed_emacs__lisp_eval(code='(shell-command-to-string "which as")')
+mcp__ready-room__ready-room__lisp_eval(code='(shell-command-to-string "which as")')
 ```
 
 ## Quick Start
@@ -78,46 +94,48 @@ cd ~/projects/basilisk
 ./basilisk up
 
 # Verify services are running via MCP
-mcp__skewed_emacs__skewed_emacs__ping_lisp()      # Should return "pong"
-mcp__gendl_ccl__gendl_ccl__ping_lisp()            # Should return "pong"
+mcp__ready-room__ready-room__ping_lisp()      # Should return "pong"
+mcp__bridge__bridge__ping_lisp()            # Should return "pong"
 ```
 
 ### 2. Connect to Development Environment
 
 ```bash
-# Connect to Emacs in the container
-docker exec -it skewed-emacs emacsclient -t
+# Connect to Emacs in the ready room (the container's name is minted
+# per raising, so look it up by room label)
+docker exec -it $(docker ps -qf label=basilisk.module=ready-room | head -1) emacsclient -t
 
 # From within Emacs, connect to Gendl SLIME
-# M-x slime-connect RET gendl-ccl RET 4200 RET
+# M-x slime-connect RET bridge RET 4200 RET
 ```
 
 ## Container Details
 
-### Skewed Emacs Container (`skewed-emacs`)
-- **Base**: Custom Emacs configuration
-- **Network Name**: `skewed-emacs` (accessible as `skewed-emacs:7080` from other containers)
+### The Ready Room (compose service `ready-room`, this repo's image)
+- **Base**: the Readymax Emacs configuration
+- **Network Name**: `ready-room` (accessible as `ready-room:7080` from
+  other containers; the container's own name is its keeper's minted
+  name — read it fresh from `basilisk/.muster`)
 - **Host Ports**: 
-- `6942` → `6942` (ttyd web terminal)
-- **MCP Service**: Available via `mcp__skewed-emacs__*` functions
+- `6942` → `6942` (web terminal — the gangway)
+- **MCP Service**: Available via `mcp__ready-room__*` functions
 - **Mount**: `~/projects` → `/projects`
 
 ### Gendl/GDL Containers
 
-**Included with skewed-emacs** (free, open-source Gendl kernel):
+**Included in the base articles** (free, open-source Gendl kernel):
 
-| Container | Image | HTTP Port | Swank Port |
-|-----------|-------|-----------|------------|
-| `gendl-ccl` | `genworks/gendl:devo-ccl` | 9080 (host: 19080) | 4200 |
-| `gendl-sbcl` | `genworks/gendl:devo-sbcl` | 9090 (host: 29080) | 4210 |
+| Room (service) | Image | HTTP Port | Swank Port |
+|----------------|-------|-----------|------------|
+| `bridge` | `gornskew/gendl:devo-ccl` | 9080 | 4200 |
+| `engine-room` | `gornskew/gendl:devo-sbcl` | 9090 | 4210 |
 
 **Available via supplemental overlay repos** (licensed, commercial GDL with NURBS):
 
-| Container | HTTP Port | Swank Port |
-|-----------|-----------|------------|
-| `genworks-gdl-smp` | 9098 | 4218 |
-| `genworks-gdl-non-smp` | 9089 | 4209 |
-| `genworks-gdl-enterprise-smp` | 9098 | 4218 |
+| Room (service) | HTTP Port | Swank Port |
+|----------------|-----------|------------|
+| `guild-workshop` (SMP) | 9098 | 4218 |
+| `guild-workshop-2` (non-SMP) | 9088 | 4208 |
 
 Licensed users clone their supplemental repo as a sibling to `basilisk/`,
 run `./install` (which copies the overlay into the Basilisk checkout —
@@ -139,7 +157,7 @@ Check the Dashboard (`*dashboard*` buffer) for current service health.
 
 ### 1. Basic SLIME Development
 ```elisp
-;; In Skewed Emacs container, after slime-connect to gendl-ccl:4200
+;; In the ready room, after slime-connect to bridge:4200
 ;; Load Quicklisp
 (load-quicklisp)
 
@@ -157,25 +175,25 @@ Check the Dashboard (`*dashboard*` buffer) for current service health.
 ### 2. MCP API Development  
 ```python
 # Test Gendl MCP service
-result = mcp__gendl_ccl__gendl_ccl__lisp_eval(code="(+ 1 2 3)")
+result = mcp__bridge__bridge__lisp_eval(code="(+ 1 2 3)")
 
 # Test Emacs MCP service
-result = mcp__skewed_emacs__skewed_emacs__lisp_eval(code="(+ 1 2 3)")
+result = mcp__ready-room__ready-room__lisp_eval(code="(+ 1 2 3)")
 
 # Test connectivity
-gendl_status = mcp__gendl_ccl__gendl_ccl__ping_lisp()
-emacs_status = mcp__skewed_emacs__skewed_emacs__ping_lisp()
+gendl_status = mcp__bridge__bridge__ping_lisp()
+emacs_status = mcp__ready-room__ready-room__ping_lisp()
 ```
 
 ### 3. Monitoring Claude Code Activity
 With MCP services running, you can monitor what Claude Code or other agents are doing:
 
 ```bash
-# Watch Emacs activities
-docker logs -f skewed-emacs
+# Watch Emacs activities (rooms wear minted names; look up by label)
+docker logs -f $(docker ps -qf label=basilisk.module=ready-room | head -1)
 
-# Watch Gendl activities  
-docker logs -f gendl-ccl
+# Watch Gendl activities
+docker logs -f $(docker ps -qf label=basilisk.module=bridge | head -1)
 
 # Or from within Emacs, watch the *Messages* buffer for API calls
 ```
@@ -188,13 +206,13 @@ For detailed MCP API documentation, examples, and best practices, see:
 ### Quick MCP API Reference
 ```python
 # Basic evaluation
-mcp__skewed_emacs__skewed_emacs__lisp_eval(code="(+ 1 2 3)")
+mcp__ready-room__ready-room__lisp_eval(code="(+ 1 2 3)")
 
 # File editing (see lisply-backend docs for detailed patterns)
-mcp__skewed_emacs__skewed_emacs__lisp_eval(code='(find-file "/path/to/file.lisp")')
+mcp__ready-room__ready-room__lisp_eval(code='(find-file "/path/to/file.lisp")')
 
 # Test connectivity
-mcp__skewed_emacs__skewed_emacs__ping_lisp()
+mcp__ready-room__ready-room__ping_lisp()
 ```
 
 **⚠️ CRITICAL WARNING**: When using MCP file editing, you share the **global current buffer** with the user. Always use `with-current-buffer` patterns to avoid conflicts. See lisply-backend documentation for safe practices.
@@ -217,17 +235,17 @@ That documentation includes:
 ```
 Host Machine
 ├── MCP Services (via lisply-mcp wrapper)
-│   ├── mcp__skewed-emacs__*    → skewed-emacs:7080
-│   ├── mcp__gendl-ccl__*       → gendl-ccl:9080      (included)
-│   ├── mcp__gendl-sbcl__*      → gendl-sbcl:9090     (included)
-│   └── mcp__genworks-gdl-*__*  → genworks-gdl-*:9098  (overlay)
-└── Host Ports: 6942 (ttyd), 19080 (gendl-ccl), 29080 (gendl-sbcl)
+│   ├── mcp__ready-room__*       → ready-room:7080
+│   ├── mcp__bridge__*           → bridge:9080           (included)
+│   ├── mcp__engine-room__*      → engine-room:9090      (included)
+│   └── mcp__guild-workshop*__*  → guild-workshop*:9098/9088 (overlay)
+└── Host Ports: 6942 (the gangway / web terminal)
 
 Docker Network: <the ship's minted name> (basilisk/.ship)
-├── skewed-emacs   (Emacs + MCP + ttyd)           ── always present
-├── gendl-ccl      (CCL + Swank 4200)             ── always present
-├── gendl-sbcl     (SBCL + Swank 4210)            ── always present
-└── genworks-gdl-* (Allegro CL + Swank 4218/4209) ── overlay repos
+├── ready-room       (Emacs + MCP + gangway)          ── always present
+├── bridge           (CCL + Swank 4200)               ── always present
+├── engine-room      (SBCL + Swank 4210)              ── always present
+└── guild-workshop*  (Allegro CL + Swank 4218/4208)   ── overlay repos
 ```
 
 ## Commands Reference
@@ -237,14 +255,14 @@ Docker Network: <the ship's minted name> (basilisk/.ship)
 # The ship's network is created at ./basilisk up and removed at
 # ./basilisk down, named from basilisk/.ship -- no manual create.
 
-# List running containers
+# List running containers (names are minted per raising)
 docker ps
 
-# Stop containers
-docker stop skewed-emacs gendl-ccl
+# Stop/remove a single room by its label rather than a remembered name
+docker stop $(docker ps -qf label=basilisk.module=ready-room)
 
-# Remove containers
-docker rm skewed-emacs gendl-ccl
+# Whole-stack operations go through the yard, not docker directly:
+#   cd ~/projects/basilisk && ./basilisk down
 
 # Remove network (name from basilisk/.ship, if a down left it standing)
 docker network rm $(cat ~/projects/basilisk/.ship | tr 'A-Z' 'a-z')
@@ -252,26 +270,26 @@ docker network rm $(cat ~/projects/basilisk/.ship | tr 'A-Z' 'a-z')
 
 ### Development Commands
 ```bash
-# Connect to Emacs
-docker exec -it skewed-emacs emacsclient -t
+# Connect to Emacs (or just use rmax from any host shell)
+docker exec -it $(docker ps -qf label=basilisk.module=ready-room | head -1) emacsclient -t
 
 # Connect to Gendl REPL directly
-docker exec -it gendl-ccl ccl
+docker exec -it $(docker ps -qf label=basilisk.module=bridge | head -1) ccl
 
 # Check logs
-docker logs skewed-emacs
-docker logs gendl-ccl
+docker logs $(docker ps -qf label=basilisk.module=ready-room | head -1)
+docker logs $(docker ps -qf label=basilisk.module=bridge | head -1)
 ```
 
 ### Testing Connectivity
 ```python
 # Test MCP services
-emacs_status = mcp__skewed_emacs__skewed_emacs__ping_lisp()
-gendl_status = mcp__gendl_ccl__gendl_ccl__ping_lisp()
+emacs_status = mcp__ready-room__ready-room__ping_lisp()
+gendl_status = mcp__bridge__bridge__ping_lisp()
 
 # Test basic operations
-emacs_result = mcp__skewed_emacs__skewed_emacs__lisp_eval(code="(+ 1 2 3)")
-gendl_result = mcp__gendl_ccl__gendl_ccl__lisp_eval(code="(+ 1 2 3)")
+emacs_result = mcp__ready-room__ready-room__lisp_eval(code="(+ 1 2 3)")
+gendl_result = mcp__bridge__bridge__lisp_eval(code="(+ 1 2 3)")
 ```
 
 ## Troubleshooting
@@ -288,8 +306,8 @@ gendl_result = mcp__gendl_ccl__gendl_ccl__lisp_eval(code="(+ 1 2 3)")
    - Check container names: `docker ps --format "table {{.Names}}\t{{.Networks}}"`
 
 3. **SLIME connection fails**:
-   - Verify Swank is running: `docker exec gendl-ccl netstat -an | grep 4200`
-   - Check network connectivity: `docker exec skewed-emacs telnet gendl-ccl 4200`
+   - Verify Swank is running: `docker exec $(docker ps -qf label=basilisk.module=bridge | head -1) netstat -an | grep 4200`
+   - Check network connectivity from inside the ready room: `telnet bridge 4200`
 
 4. **Mount issues**:
    - Ensure `~/projects` exists on host
@@ -297,11 +315,11 @@ gendl_result = mcp__gendl_ccl__gendl_ccl__lisp_eval(code="(+ 1 2 3)")
 
 ### Reset Environment
 ```bash
-# Stop and remove everything
-cd ~/projects/skewed-emacs
+# Stop and remove everything (the stack lives in the Basilisk repo)
+cd ~/projects/basilisk
 ./basilisk down
 
-# Recreate from scratch
+# Recreate from scratch (a fresh raising mints a new ship and crew)
 ./basilisk up
 ```
 
@@ -317,7 +335,7 @@ This environment is designed to work seamlessly with Claude Code:
 ### Example Claude Code Workflow
 ```python
 # Claude makes changes via MCP services
-result = mcp__gendl_ccl__gendl_ccl__lisp_eval(code='(ql:quickload :my-project)')
+result = mcp__bridge__bridge__lisp_eval(code='(ql:quickload :my-project)')
 
 # You can see the results in your SLIME session
 # And use Update! links in Gendl web interface for live reloading
@@ -341,7 +359,7 @@ result = mcp__gendl_ccl__gendl_ccl__lisp_eval(code='(ql:quickload :my-project)')
 
 ## Related Documentation
 
-- **Gendl MCP Docs**: Use `gendl-ccl:get_docs(id="claude-md")` or equivalent for each backend
+- **Gendl MCP Docs**: Use `bridge get_docs(id="claude-md")` or equivalent for each backend
 - **Main Gendl Guide**: `/projects/CLAUDE.md` (top-level project documentation)
 
 ## Lessons Learned (March 2026 Session)
@@ -392,7 +410,7 @@ Claude's scratch container cannot write to `/projects/`. Create files through Em
 This avoids triple-escaping issues when content contains strings with quotes (e.g., JSON in CL).
 
 ### Modern-Mode Allegro CL: Case Sensitivity
-`genworks-gdl-enterprise-smp` runs modern-mode Allegro CL with `(readtable-case *readtable*)` → `:preserve`.
+The commercial GDL rooms (the guild workshops) run modern-mode Allegro CL with `(readtable-case *readtable*)` → `:preserve`.
 - Keywords are case-sensitive: `:email` ≠ `:EMAIL`
 - When interning strings as keywords, do NOT upcase: `(intern key :keyword)` not `(intern (string-upcase key) :keyword)`
 - This affects JSON parsing, property access, and any dynamic symbol creation
@@ -518,7 +536,7 @@ for long-running work.
 **Host-side line tools are out of bounds for /projects files**: even
 when an agent runs on the host with ~/projects
 mounted, sed/awk/grep-style edits and filters on project files go
-through the skewed-emacs container -- either elisp temp-buffer edits
+through the ready-room container -- either elisp temp-buffer edits
 (insert-file-contents + write-region, never find-file-noselect from
 batch evals) or a shell command run inside the container.  Host bash
 is a last resort and needs permission.
@@ -526,7 +544,7 @@ is a last resort and needs permission.
 **Always refresh stale buffers before consulting:**
 ```elisp
 ;; Dired: refresh before reading
-(with-current-buffer (dired-noselect "/projects/skewed-emacs/")
+(with-current-buffer (dired-noselect "/projects/gs/readymax/")
   (revert-buffer)  ;; Same as pressing 'g' interactively
   ...)
 
@@ -547,27 +565,27 @@ is a last resort and needs permission.
 
 ### File Path Confusion - Always Use MCP
 **WRONG**: Assuming files are in `/mnt/project` (Claude.ai container filesystem)
-**RIGHT**: Files in Dave's projects are at `/projects/apps/...` and accessed via skewed-emacs MCP
+**RIGHT**: Files in the user's projects are at `/projects/apps/...` and accessed via ready-room MCP
 
 Example:
 ```elisp
 ;; WRONG - trying to use local filesystem
 (with-temp-file "/mnt/project/assembly.lisp" ...)
 
-;; RIGHT - use MCP to access Dave's environment
+;; RIGHT - use MCP to access the user's environment
 (with-current-buffer (find-file-noselect "/projects/apps/tw-site-2025/source/assembly.lisp")
   ...)
 ```
 
-**Rule**: If you find yourself creating files in `/home/claude/`, you're doing it wrong. Use skewed-emacs MCP.
+**Rule**: If you find yourself creating files in `/home/claude/`, you're doing it wrong. Use ready-room MCP.
 
 ### Minibuffer Blocking Issue
 **Symptom**: All MCP calls suddenly fail with connectivity errors
 **Cause**: Emacs is waiting for minibuffer input (e.g., "File changed on disk. Discard edits? (yes or no)")
-**Solution**: Alert Dave that Emacs needs input before continuing
+**Solution**: Alert the user that Emacs needs input before continuing
 
 ### Event-Loop Blocking: Unbounded Child Processes (2026-07-26 Incident)
-**Symptom**: skewed-emacs MCP goes totally dark mid-session — `lisp_eval` AND `ping_lisp` both time out; nothing recovers until the child process dies or the container restarts.
+**Symptom**: ready-room MCP goes totally dark mid-session — `lisp_eval` AND `ping_lisp` both time out; nothing recovers until the child process dies or the container restarts.
 **Cause**: ANY synchronous child process (`shell-command-to-string`, `call-process`, `process-file`) blocks the single Emacs event loop until the child exits. Timers, `with-timeout`, network filters, and the lisply httpd all starve. An unbounded `curl` (no `--max-time`) against a stalled server is exactly as fatal as `sleep-for`. Demonstrated live 2026-07-26: one `(shell-command-to-string "sleep 60")` blacked out the entire transport for 60 s.
 **Mandatory rules for every shell-out through lisp_eval**:
 - `curl` always gets `--max-time N`
@@ -578,7 +596,7 @@ Example:
 - **Guard durability**: as of the 2026-07-26 image rebuild, the guard (`lisply-shell-guard.el` + the `endpoints.el` lint) is baked into the image and survives all container restarts, including autoheal. Cheap sanity probe after any restart: `(fboundp 'lisply-shell-bounded)` should be `t` on a fresh boot with no re-sync.
 - **After an autoheal restart**: fully self-healing as of 2026-07-26. The container recovers in ~2 min and the mcp-exec supervise loop respawns all wrapper processes into the recovered container (~2.5 min wedge-to-restored, proven end-to-end). If calls STILL time out after that window, the residual cause is client-side: the Claude Desktop MCP client stops routing to a server after in-flight failures -- a claude.ai session reconnect resumes it (no wrapper or desktop restart needed).
 **Relay budget**: the claude.ai MCP relay times out responses at ~35–40 s (Claude Desktop wrapper: ~240 s). Longer evals EXECUTE but report a bare "Tool execution failed" — split work into short calls and poll.
-**Recovery runbook (host side)**: `docker exec skewed-emacs ps -ef --forest` → find the stuck child under emacs → `docker exec skewed-emacs pkill -f '<child pattern>'` → service restores instantly (verified: transport recovers the moment the child exits). If no child visible: `docker exec skewed-emacs sh -c 'kill -USR2 $(pgrep -o emacs)'` and read the backtrace from `docker logs`; last resort is container restart.
+**Recovery runbook (host side)**: the ready-room container wears a minted name, so resolve it first: `RR=$(docker ps -qf label=basilisk.module=ready-room | head -1)`. Then `docker exec $RR ps -ef --forest` → find the stuck child under emacs → `docker exec $RR pkill -f '<child pattern>'` → service restores instantly (verified: transport recovers the moment the child exits). If no child visible: `docker exec $RR sh -c 'kill -USR2 $(pgrep -o emacs)'` and read the backtrace from `docker logs $RR`; last resort is container restart.
 
 ### Incremental Editing > Wholesale Replacement
 **WRONG**: Using `with-temp-file` to rewrite entire complex files
@@ -636,13 +654,13 @@ section *Structural Authoring via Elisp Data — a Third Path*.
 
 ### When Structural Editing Fails
 If you're stuck in unbalanced buffer hell:
-1. Ask Dave to revert the file: `git checkout path/to/file`
-2. Ask Dave to create a placeholder comment where you can insert balanced content
+1. Ask the user to revert the file: `git checkout path/to/file`
+2. Ask the user to create a placeholder comment where you can insert balanced content
 3. Insert the content into the placeholder position
 
 Example workflow that works:
 ```elisp
-;; Dave creates placeholder in buffer:
+;; The user creates placeholder in buffer:
 ;;
 ;; Insert balanced lhtml body here
 ;;
@@ -697,7 +715,7 @@ Balanced-parens check without visiting:
   (with-syntax-table lisp-mode-syntax-table (check-parens)))
 ```
 Recovery when the daemon does block and no stuck child shows in
-`ps -ef --forest`: `docker restart skewed-emacs` self-heals in ~20 s
+`ps -ef --forest`: `docker restart $(docker ps -qf label=basilisk.module=ready-room | head -1)` self-heals in ~20 s
 (then restart any emacs-managed watcher processes).  Do NOT send
 SIGUSR2 + pkill of clients — that combination killed the daemon once.
 Full-stack restarts go through `./basilisk down && ./basilisk up`
@@ -724,7 +742,8 @@ webshot "http://genworks.localhost/demo/staircase" /tmp/s.png 1440x2200 \
   --host-resolver-rules="MAP genworks.localhost cyclops"
 ```
 Host-side agents export binaries without `docker cp` via:
-`docker exec skewed-emacs base64 /tmp/s.png | base64 -d > local.png`.
+`docker exec $(docker ps -qf label=basilisk.module=ready-room | head -1) base64 /tmp/s.png | base64 -d > local.png`
+— or skip that entirely by writing under `/projects` (see the 2026-08-14 addendum).
 
 `webshot-clip URL SELECTOR [out.png] [WxH] [pad] [--mobile]
 [--settle=MS] [--scale=N] [extra chromium flags]` (source:
@@ -749,7 +768,7 @@ Gendl/GDL GEOMETRY itself the lisply backends additionally carry
 native emitters (inline `render_png` MCP tool; standalone drawing
 system and `with-format` lenses emitting PDF/PNG/JPEG/SVG/DXF files at
 runtime, no browser involved) -- see "Geometry & Image Output
-Channels" in gendl/CLAUDE.md (gendl-ccl doc id `claude-gendl-md`).
+Channels" in gendl/CLAUDE.md (bridge doc id `claude-gendl-md`).
 Keep both channels in mind: chromium for web-app UI iteration, native
 emitters for model iteration and runtime file deliverables.
 
@@ -809,7 +828,7 @@ and the difference decides what to re-check:
 So: re-verify JS-driven responsive behavior at phone sizes, not every
 stylesheet ever written.  Verification recipe:
 ```bash
-webshot file:///projects/skewed-emacs/docker/webshot-viewport-probe.html \
+webshot file:///projects/gs/readymax/docker/webshot-viewport-probe.html \
   /projects/tmp-shots/vp.png 390x844 --mobile
 ```
 The probe prints innerWidth/innerHeight/touch points/matchMedia and colors
@@ -850,8 +869,8 @@ visible to the user, no event-loop blocking:
                "sh" "-c" "cd /projects/apps/tailwind && exec npm run dev:demos")
 ```
 They die with the daemon/container — restart them after any restart.
-Node/npm live ONLY in the skewed-emacs container, never in gendl/gdl
-containers (those consume compiled artifacts from /projects).
+Node/npm live ONLY in the ready-room container, never in the Gendl/GDL
+rooms (those consume compiled artifacts from /projects).
 
 ### Git Commits from Inside the Container
 No git identity or ssh keys exist in the container.  Commit with
@@ -894,14 +913,15 @@ elisp temp-buffer.  General rule: once content originated in the
 container's world, keep working it there rather than shelling out on the
 host (same principle as the file-ops and syntax-check guidance above).
 
-## Raising a buffer in the user's live eskew session (2026-08-17)
+## Raising a buffer in the user's live rmax session (2026-08-17)
 
 When a piece deserves reading in Emacs rather than chat scroll — a
 draft document, a review skeleton, a diff — put it in a buffer and
-raise it in the user's attached client frame.  An eskew session is an
-emacsclient frame on the shared captain daemon, so anything done to a
-buffer via `lisp_eval` is already in the user's Emacs; the only trick
-is selecting THEIR frame, not the daemon's initial one:
+raise it in the user's attached client frame.  An rmax session (elder
+alias: eskew) is an emacsclient frame on the shared Captain daemon, so
+anything done to a buffer via `lisp_eval` is already in the user's
+Emacs; the only trick is selecting THEIR frame, not the daemon's
+initial one:
 
 ```elisp
 (let ((buf (get-buffer-create "*name the user will recognize*")))
