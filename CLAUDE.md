@@ -917,8 +917,8 @@ host (same principle as the file-ops and syntax-check guidance above).
 
 When a piece deserves reading in Emacs rather than chat scroll — a
 draft document, a review skeleton, a diff — put it in a buffer and
-raise it in the user's attached client frame.  An rmax session (elder
-alias: eskew) is an emacsclient frame on the shared Captain daemon, so
+raise it in the user's attached client frame.  An rmax session is an
+emacsclient frame on the shared Captain daemon, so
 anything done to a buffer via `lisp_eval` is already in the user's
 Emacs; the only trick is selecting THEIR frame, not the daemon's
 initial one:

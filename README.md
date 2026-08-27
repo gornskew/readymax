@@ -101,8 +101,7 @@ and speak the incantation `./basilisk up` there. A whole vessel
 comes up around the ready room.
 
 That pulls and raises several Docker containers and leaves your host
-machine untouched except for two hailing calls (`rmax`/`grmax`, with
-the elder `eskew`/`egskew` staying aboard as aliases)
+machine untouched except for two hailing calls (`rmax`/`grmax`)
 made available in your shell (bash, zsh, ksh, or plain sh). You
 need not speak `./setup`. You do not need Emacs installed on your
 host. You do need docker installed on your host.
@@ -288,8 +287,7 @@ gear — every piece of it real and reachable:
 Everything runs inside Docker containers — **you need not speak
 `./setup`, install any scrolls, or touch your own host Emacs.**
 Your host machine stays clean. The only intentional side effect is that
-`./basilisk up` makes `rmax` and `grmax` (and their elder aliases
-`eskew`/`egskew`) available in your shell.
+`./basilisk up` makes `rmax` and `grmax` available in your shell.
 
 ### Requirements
 
@@ -359,8 +357,7 @@ the containerized Emacs:
 - `grmax` — the Captain receives you in a new window (graphical emacsclient)
 
 With more than one ship on the box, name the one you mean with a
-leading @-arg: `rmax @alpha my-proj.lisp`. The elder hailing calls
-`eskew` and `egskew` remain aboard as aliases.
+leading @-arg: `rmax @alpha my-proj.lisp`.
 
 `./basilisk up` writes these to
 `~/.config/skewed-emacs/shell-functions.sh` and adds a single source
