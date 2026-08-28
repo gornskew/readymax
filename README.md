@@ -8,7 +8,7 @@ License, or (at your option) any later version.  Distributed WITHOUT
 ANY WARRANTY; see <https://www.gnu.org/licenses/agpl-3.0.html>.
 -->
 
-# Readymax: Your Captain in a Ship's Ready Room, a land-side Lifepod, or a galaxy-traveling Space Suit
+# Readymax: a Ship's Ready Room, a land-side Lifepod, or a galaxy-traveling Space Suit — pre-crewed with a Captain
 
 Aboard a [Basilisk](https://gornskew.com/basilisk/index.html)-class
 vessel, the ready room is the quiet room off the bridge where the
