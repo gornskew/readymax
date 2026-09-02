@@ -55,7 +55,12 @@
                             dashboard-item-generators)))
 
 (setq dashboard-center-content t)
-(setq dashboard-footer-messages '("Brought to you by 𝙶𝚘𝚛𝚗𝚜𝚔𝚎𝚠 𝙴𝚗𝚝𝚎𝚛𝚙𝚛𝚒𝚜𝚎𝚜"))
+;; A deployment may sign its own footer (SKEWED_DASHBOARD_FOOTER),
+;; the same way it may hang its own marquee -- see
+;; generate-skewed-dashboard-banner.
+(setq dashboard-footer-messages
+      (list (or (getenv "SKEWED_DASHBOARD_FOOTER")
+                "Brought to you by 𝙶𝚘𝚛𝚗𝚜𝚔𝚎𝚠 𝙴𝚗𝚝𝚎𝚛𝚙𝚛𝚒𝚜𝚎𝚜")))
 
 (setq initial-buffer-choice
       (lambda ()
@@ -128,6 +133,16 @@ Ghost emojis get 2 spaces, normal emojis get 1 space."
     (insert "\n")
     (dolist (line (system-info-strings list-size))
       (insert line))))
+
+(defun skewed-dashboard--service-sku (name)
+  "The :sku recorded for service NAME in the generated inventory, or nil.
+The generator derives it from the image (gendl-ccl, readymax) or from
+an articles-level :sku-label override; the backend listings show it
+beside the service name so the role and the image type read together."
+  (and (boundp 'skewed-generated-services)
+       (cl-loop for svc in skewed-generated-services
+                when (equal (plist-get svc :name) name)
+                return (plist-get svc :sku))))
 
 (defun dashboard-insert-lisply-backends (list-size)
   "Insert Lisply backends status using propertized strings list."
@@ -501,9 +516,12 @@ Which of the three applies is decided by
                                               (plist-get backend :type)))))
                         (format "    %s\n"
                                (propertize
-                                (format "%s%s (%s:%s)%s%s"
+                                (format "%s%s%s (%s:%s)%s%s"
                                         (skewed-dashboard-pad-icon icon)
-                                        name host port
+                                        name
+                                        (let ((sku (skewed-dashboard--service-sku name)))
+                                          (if sku (format " · %s" sku) ""))
+                                        host port
                                         (if is-ok
                                             (format " - %s" (or (plist-get result :time) "?ms"))
                                           "")
@@ -536,7 +554,10 @@ Which of the three applies is decided by
                          (format "    %s\n"
                                  (propertize
                                   ;; Use pad-icon helper to guarantee alignment
-                                  (format "%s%s on %s" (skewed-dashboard-pad-icon icon) (or name host) port)
+                                  (format "%s%s%s on %s" (skewed-dashboard-pad-icon icon) (or name host)
+                                          (let ((sku (skewed-dashboard--service-sku (or name host))))
+                                            (if sku (format " · %s" sku) ""))
+                                          port)
                                   'keymap (let ((map (make-sparse-keymap)))
                                             (define-key map (kbd "RET")
                                                         `(lambda () (interactive)
@@ -890,18 +911,30 @@ the Captain's sign under it.  The top word is READY either way -- Big
 Money-sw over Big Money-se -- so the two guises read as one artifact
 wearing two names."
   (unless text-file (setq text-file skewed-dashboard-banner-file))
-  (let* ((aboard? (skewed-dashboard-aboard-p))
-         (top-banner (plist-get
-                      (plist-get skewed-dashboard-banners :big-money-sw)
-                      :ready))
-         (bottom-banner (plist-get
-                         (plist-get skewed-dashboard-banners :big-money-se)
-                         (if aboard? :room :max))))
-    (setq dashboard-banner-logo-title
-          (if aboard? "𝒯𝒽𝑒 𝒞𝒶𝓅𝓉𝒶𝒾𝓃 𝒾𝓈 𝒾𝓃."
-            "ℛ𝑒𝒶𝒹𝓎 𝓌𝒽𝑒𝓃 𝓎𝑜𝓊 𝒶𝓇𝑒."))
-    (write-region (concat top-banner bottom-banner) nil text-file nil nil nil nil)
-    ))
+  ;; A deployment may hang its OWN sign: when the container's
+  ;; environment names a readable banner file
+  ;; (SKEWED_DASHBOARD_BANNER_FILE, with an optional
+  ;; SKEWED_DASHBOARD_BANNER_TITLE), the marquee flies that art
+  ;; instead of the built-in guises -- how a register fork's stack
+  ;; brands its console without rebuilding this image.  The file is
+  ;; re-read at every refresh, same as the guises regenerate.
+  (let ((override (getenv "SKEWED_DASHBOARD_BANNER_FILE")))
+    (if (and override (file-readable-p override))
+        (progn
+          (setq dashboard-banner-logo-title
+                (getenv "SKEWED_DASHBOARD_BANNER_TITLE"))
+          (copy-file override text-file t))
+      (let* ((aboard? (skewed-dashboard-aboard-p))
+             (top-banner (plist-get
+                          (plist-get skewed-dashboard-banners :big-money-sw)
+                          :ready))
+             (bottom-banner (plist-get
+                             (plist-get skewed-dashboard-banners :big-money-se)
+                             (if aboard? :room :max))))
+        (setq dashboard-banner-logo-title
+              (if aboard? "𝒯𝒽𝑒 𝒞𝒶𝓅𝓉𝒶𝒾𝓃 𝒾𝓈 𝒾𝓃."
+                "ℛ𝑒𝒶𝒹𝓎 𝓌𝒽𝑒𝓃 𝓎𝑜𝓊 𝒶𝓇𝑒."))
+        (write-region (concat top-banner bottom-banner) nil text-file nil nil nil nil)))))
 
 
 (provide 'dashboard-config)
