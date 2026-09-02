@@ -127,3 +127,8 @@ history.*
 # Also removed 2026-08-16: a second `.#*' (already covered at the top of
 # the file) and *cyclops*.yml / *cyclops*.el, which matched nothing here
 # -- cyclops has its own repo and its config is generated into basilisk.
+
+# project.el's known-projects state: machine-written runtime data
+# carrying local absolute paths -- never tracked (it leaked a
+# /home/<user> path once, 2026-09-02).
+dot-files/emacs.d/projects
