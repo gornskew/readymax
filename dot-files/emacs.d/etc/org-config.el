@@ -126,6 +126,16 @@
 (defvar my/org-future-file nil)
 (defvar my/org-journal-file nil)
 
+;; Design threads ride the agenda beside projects.org: every .org under
+;; <org-root>/galaxy-world/ (time-flow.org and its successors carry their
+;; own :must:/:should:/:could: TODOs).  A function, not a cached list, so
+;; a file added mid-session is seen at the next agenda.
+(defun my/org-galaxy-world-files ()
+  "The galaxy-world design files under `my/org-root', if any."
+  (let ((dir (and my/org-root (expand-file-name "galaxy-world" my/org-root))))
+    (when (and dir (file-directory-p dir))
+      (directory-files dir t "\\.org\\'"))))
+
 ;; Re-detect on every load: a fresh machine may gain its org clone only
 ;; after Emacs (and this file) first loaded, and `defvar' alone would
 ;; leave the nil sticky forever.  `skewed-daily-focus-init' reloads this
@@ -136,7 +146,8 @@
         my/org-future-file   (expand-file-name "future.org" my/org-root)
         my/org-journal-file  (expand-file-name "journal.org" my/org-root)
         org-directory my/org-root
-        org-agenda-files (delq nil (list my/org-projects-file))))
+        org-agenda-files (delq nil (append (list my/org-projects-file)
+                                           (my/org-galaxy-world-files)))))
 
 ;; ============================================================================
 ;; Agenda settings
@@ -166,11 +177,14 @@
                        '(if (my/org-has-urgent-inbox-p) nil '(goto-char (point-max))))
                       (org-agenda-overriding-header
                        (if (my/org-has-urgent-inbox-p) (concat (skewed-icon :lightning) " Urgent (from Inbox)") ""))))
-          (tags-todo "must"   ((org-agenda-files (delq nil (list my/org-projects-file my/org-future-file)))
+          (tags-todo "must"   ((org-agenda-files (delq nil (append (list my/org-projects-file my/org-future-file)
+                                                    (my/org-galaxy-world-files))))
                                (org-agenda-overriding-header "Must Do")))
-          (tags-todo "should" ((org-agenda-files (delq nil (list my/org-projects-file my/org-future-file)))
+          (tags-todo "should" ((org-agenda-files (delq nil (append (list my/org-projects-file my/org-future-file)
+                                                    (my/org-galaxy-world-files))))
                                (org-agenda-overriding-header "Should Do")))
-          (tags-todo "could"  ((org-agenda-files (delq nil (list my/org-projects-file my/org-future-file)))
+          (tags-todo "could"  ((org-agenda-files (delq nil (append (list my/org-projects-file my/org-future-file)
+                                                    (my/org-galaxy-world-files))))
                                (org-agenda-overriding-header "Could Do"))))
          ((org-agenda-tag-filter-preset '("-meta"))))
         ("i" "Inbox Review"
