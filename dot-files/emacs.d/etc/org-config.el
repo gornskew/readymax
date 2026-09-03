@@ -126,15 +126,29 @@
 (defvar my/org-future-file nil)
 (defvar my/org-journal-file nil)
 
-;; Design threads ride the agenda beside projects.org: every .org under
-;; <org-root>/galaxy-world/ (time-flow.org and its successors carry their
-;; own :must:/:should:/:could: TODOs).  A function, not a cached list, so
-;; a file added mid-session is seen at the next agenda.
-(defun my/org-galaxy-world-files ()
-  "The galaxy-world design files under `my/org-root', if any."
-  (let ((dir (and my/org-root (expand-file-name "galaxy-world" my/org-root))))
-    (when (and dir (file-directory-p dir))
-      (directory-files dir t "\\.org\\'"))))
+;; Every .org under the org root rides the agenda -- projects.org and
+;; future.org first, then the rest of the tree recursively (design
+;; threads, sub-projects), so a file dropped anywhere under the root
+;; joins Daily Focus at its next run without touching this config.
+;; Skipped only what org itself keeps out of an agenda: *_archive.org
+;; files, hidden directories and lock files.  Nothing is hidden for
+;; being stale -- what is too stale to show belongs deleted, not
+;; skipped.  A function rather than a cached list, so a file added
+;; mid-session is seen at the next agenda.
+
+(defun my/org-agenda-files ()
+  "All agenda files under `my/org-root', projects.org and future.org first."
+  (when my/org-root
+    (let ((root (expand-file-name my/org-root)))
+      (delete-dups
+       (delq nil
+             (append (list my/org-projects-file my/org-future-file)
+                     (seq-remove
+                      (lambda (file)
+                        (let ((rel (file-relative-name file root)))
+                          (or (string-match-p "_archive\\.org\\'" rel)
+                              (string-match-p "\\(\\`\\|/\\)\\." rel))))
+                      (directory-files-recursively root "\\.org\\'"))))))))
 
 ;; Re-detect on every load: a fresh machine may gain its org clone only
 ;; after Emacs (and this file) first loaded, and `defvar' alone would
@@ -146,8 +160,7 @@
         my/org-future-file   (expand-file-name "future.org" my/org-root)
         my/org-journal-file  (expand-file-name "journal.org" my/org-root)
         org-directory my/org-root
-        org-agenda-files (delq nil (append (list my/org-projects-file)
-                                           (my/org-galaxy-world-files)))))
+        org-agenda-files (my/org-agenda-files)))
 
 ;; ============================================================================
 ;; Agenda settings
@@ -177,14 +190,11 @@
                        '(if (my/org-has-urgent-inbox-p) nil '(goto-char (point-max))))
                       (org-agenda-overriding-header
                        (if (my/org-has-urgent-inbox-p) (concat (skewed-icon :lightning) " Urgent (from Inbox)") ""))))
-          (tags-todo "must"   ((org-agenda-files (delq nil (append (list my/org-projects-file my/org-future-file)
-                                                    (my/org-galaxy-world-files))))
+          (tags-todo "must"   ((org-agenda-files (my/org-agenda-files))
                                (org-agenda-overriding-header "Must Do")))
-          (tags-todo "should" ((org-agenda-files (delq nil (append (list my/org-projects-file my/org-future-file)
-                                                    (my/org-galaxy-world-files))))
+          (tags-todo "should" ((org-agenda-files (my/org-agenda-files))
                                (org-agenda-overriding-header "Should Do")))
-          (tags-todo "could"  ((org-agenda-files (delq nil (append (list my/org-projects-file my/org-future-file)
-                                                    (my/org-galaxy-world-files))))
+          (tags-todo "could"  ((org-agenda-files (my/org-agenda-files))
                                (org-agenda-overriding-header "Could Do"))))
          ((org-agenda-tag-filter-preset '("-meta"))))
         ("i" "Inbox Review"
