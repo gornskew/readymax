@@ -65,10 +65,16 @@ for i in {1..30}; do
 done
 
 # === Optionally start web terminal in background ===
+# WEBTERM_ARGS: extra flags for the terminal server, e.g. for ttyd
+#   "-b /hack -a -m 8" (base path behind a reverse proxy, URL-arg
+#   passing, client cap).  WEBTERM_ENTRY: the command every new
+#   browser connection runs, default "emacsclient -t" -- a fresh tty
+#   frame on the shared daemon.  With ttyd's -a among WEBTERM_ARGS,
+#   the URL's ?arg=... values arrive as its positional arguments.
 if [ -n "${WEBTERM:-}" ] && [ "${WEBTERM}" != "none" ]; then
     case "${WEBTERM}" in
       ttyd)
-        WEBTERM_CMD="/usr/local/bin/ttyd -W -p ${WEBTERM_PORT:-6942} -6"
+        WEBTERM_CMD="/usr/local/bin/ttyd -W -p ${WEBTERM_PORT:-6942} -6 ${WEBTERM_ARGS:-}"
         ;;
       gotty-soren)
         WEBTERM_CMD="/usr/local/bin/gotty-soren -w --port ${WEBTERM_PORT:-6942}"
@@ -83,8 +89,8 @@ if [ -n "${WEBTERM:-}" ] && [ "${WEBTERM}" != "none" ]; then
         ;;
     esac
 
-    echo "Starting web terminal in background: $WEBTERM on port ${WEBTERM_PORT:-6942}"
-    $WEBTERM_CMD /bin/bash -c "emacsclient -t" &
+    echo "Starting web terminal in background: $WEBTERM on port ${WEBTERM_PORT:-6942}${WEBTERM_ARGS:+ ($WEBTERM_ARGS)}"
+    $WEBTERM_CMD /bin/bash -c "exec ${WEBTERM_ENTRY:-emacsclient -t} \"\$@\"" _ &
 else
     echo "No web terminal requested — only interactive REPL on stdio"
 fi
