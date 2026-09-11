@@ -206,7 +206,7 @@ each working his own rune arrangement.
 | `ping_lisp` | is anyone home |
 | `get_docs` / `get_docs_list` | the ship's education packets, served on demand |
 | `http_request` | reach the room's HTTP services through one gate |
-| `lisply_search` | search the ship's indexed document corpus (Readymax rooms; `skewed_search` until 2026-09-09, still answered as an alias) |
+| `lisply_search` | search the ship's indexed document corpus (Readymax rooms) |
 
 **Where he takes his orders.** Aboard ship, `./basilisk up`
 generates the client registries (`mcp/claude_desktop_config.json`

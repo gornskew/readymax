@@ -1452,10 +1452,26 @@ During a Cyclops proxy development session, an LLM agent attempted to add new bi
 
 The `lisply_search` MCP tool provides lexical search over curated GDL/Gendl documentation and source code. The index is pre-built at Docker build time with snippets extracted and embedded, making it fully self-contained (no `/projects` mount needed at runtime for search).
 
-The tool was called `skewed_search` until 2026-09-09. The old name is
-still advertised as a deprecated alias (and the old HTTP endpoint still
-answers) for one release so agents configured before the rename keep
-working; new prompts and docs say `lisply_search`.
+The tool was called `skewed_search` until 2026-09-09; that name and its
+endpoint were dropped on 2026-09-10.
+
+**How it matches and ranks (2026-09-10).** The query is split into
+index terms (`hidden-objects` → `hidden`, `objects`; stopwords such as
+"how", "the", "from" are ignored) and into *phrases* -- the hyphenated
+tokens kept whole. By default every term must appear in one snippet
+(`match_mode="all"`); when nothing holds every term the search retries
+with any-term matching and says so in `warning` (`match_fallback` is
+true), so a natural-language question still answers. Candidates are
+scored by IDF-weighted term coverage (rare terms count for more), term
+density, verbatim phrase hits, whether the snippet *defines* the queried
+name (`(define-object wall ...` outranks ten mentions of `wall`) and
+whether the file name carries it. Snippets are cut at top-level forms
+in Lisp files and at headings in Markdown/Org, so a hit is a whole
+`define-object` or section rather than the tail of one and the head of
+the next; each hit reports `match_line`, the first line holding a query
+term, and a snippet longer than `max_snippet_tokens` is excerpted from
+just above that line. There is no embedding model: `search_mode` other
+than `lexical` is answered lexically with a warning.
 
 ### Architecture
 
@@ -1466,8 +1482,9 @@ working; new prompts and docs say `lisply_search`.
 │  Source files ──► lisply-search-build-index   │
 │       │                    │                            │
 │       ▼                    ▼                            │
-│  Pre-extract snippets → lisply-search-index.sexp (~16MB)   │
-│  (24 lines, 1200 chars per snippet)                     │
+│  Pre-extract snippets → lisply-search-index.sexp (~30MB)   │
+│  (chunks begin at top-level forms / headings,           │
+│   packed to 24 lines, 1200 chars)                       │
 └─────────────────────────────────────────────────────────┘
                          │
                          │ baked into container image
@@ -1565,12 +1582,12 @@ lisply_search(query="define-object first example", sources=["genworks-learn"], k
 | `query` | string | (required) | Natural-language or keyword query |
 | `k` | integer | 8 | Max number of hits to return |
 | `sources` | array | all | Logical sources to restrict search |
-| `path_filters` | array | none | Prefix or glob-style path filters |
+| `path_filters` | array | none | Repo-relative path prefixes or globs (`*` within a directory, `**` across), e.g. `geom-base/wire/*` |
 | `language` | string | none | Language hint (lisp, gdl, markdown) |
-| `match_mode` | string | `all` | `all` (AND) or `any` (OR) term matching |
+| `match_mode` | string | `all` | `all` (AND; retried as `any` when nothing matches) or `any` (OR) |
 | `any_max_candidates` | integer | none | Max candidates when `match_mode="any"` |
-| `search_mode` | string | lexical | Currently only lexical supported |
-| `max_snippet_tokens` | integer | 512 | Soft cap for snippet length |
+| `search_mode` | string | lexical | The only mode in this build; other values answered lexically with a warning |
+| `max_snippet_tokens` | integer | 512 | Soft cap for snippet length; longer snippets are excerpted from just above the first matching line |
 | `include_metadata` | boolean | true | Include metadata in hits |
 
 ### Response Format
@@ -1579,18 +1596,26 @@ lisply_search(query="define-object first example", sources=["genworks-learn"], k
 {
   "query": "define-object computed-slots",
   "search_mode": "lexical",
+  "match_mode": "all",
+  "match_fallback": false,
+  "terms": ["define", "object", "computed", "slots"],
+  "phrases": ["define-object", "computed-slots"],
   "sources": ["gendl", "readymax", "genworks-learn"],
+  "total_candidates": 41,
+  "warning": null,
   "hits": [
     {
       "id": "hit-001",
-      "score": 1.0,
+      "score": 0.93,
       "source": "genworks-learn",
       "repo": "apps",
       "path": "genworks-learn/t1/source/first-object.lisp",
-      "start_line": 1,
-      "end_line": 24,
+      "start_line": 11,
+      "end_line": 34,
+      "match_line": 11,
+      "excerpt_start_line": 11,
       "snippet": "...(actual code/text)...",
-      "preview": "First non-empty line",
+      "preview": "The first line holding a query term",
       "metadata": {
         "language": "lisp",
         "section": "Optional section heading",

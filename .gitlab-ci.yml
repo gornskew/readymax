@@ -33,16 +33,22 @@
 #   DOCKERHUB_USER  -- Docker Hub account with push rights to gornskew/*
 #   DOCKERHUB_TOKEN -- read/write access token (masked)
 # Optional:
-#   CORPUS_NETRC    -- type File, protected: a netrc granting READ access
-#                      to the private corpus repositories of the
-#                      lisply_search index (genworks-learn lives in
+#   CORPUS_NETRC    -- type File: a netrc granting READ access to the
+#                      private corpus repositories of the lisply_search
+#                      index (genworks-learn lives in
 #                      gitlab.genworks.com/genworks/apps).  One line:
 #                        machine gitlab.genworks.com login <deploy-token-user> password <deploy-token>
 #                      docker/build hands it to BuildKit as a secret for
-#                      the index step only; without it that corpus is
-#                      skipped and the build logs SOURCE MISSING.  Add
-#                      --strict-index to the build lines below once the
-#                      variable is in place, so a short corpus fails CI.
+#                      the index step only.  A PROTECTED variable reaches
+#                      only pipelines on protected refs: protect every
+#                      branch this file builds (devo, master) or leave
+#                      the flag off -- on 2026-09-10 pipeline 3716 on an
+#                      unprotected devo saw no netrc and shipped an image
+#                      without the training corpus.  The build lines pass
+#                      --strict-index, so a corpus that cannot be fetched
+#                      FAILS the build instead of going quietly missing;
+#                      a fork without the credential drops the private
+#                      source from lisply-search-config.sexp.
 #
 # docker/build honors CI_COMMIT_REF_NAME for branch detection, so tags
 # come out as <branch>-<target>[-<arch>] automatically.
@@ -80,14 +86,14 @@ build-amd64:
   tags:
     - amd64
   script:
-    - docker/build --all --push --skip-manifests
+    - docker/build --all --push --skip-manifests --strict-index
 
 build-arm64:
   stage: build
   tags:
     - arm64
   script:
-    - docker/build --all --push --skip-manifests
+    - docker/build --all --push --skip-manifests --strict-index
 
 # The single manifest pass per pipeline: merges the arch-suffixed tags
 # pushed by the build jobs into the canonical multi-arch tags.

@@ -45,41 +45,34 @@
                                                    ("description" . "Not used in Emacs Lisp but kept for protocol compatibility")))))
                        ("required" . ["code"]))))
 
-   ;; lisply_search tool (skewed_search until 2026-09-09; the old name
-   ;; is still advertised below as a deprecated alias for one release,
-   ;; so agents configured before the rename keep working)
+   ;; lisply_search tool: lexical search over the corpus index baked into
+   ;; the image (lisply-search.el).  The tool was skewed_search until
+   ;; 2026-09-09; the alias was dropped on 2026-09-10.
    `(("name" . "lisply_search")
-     ("description" . "Search the indexed corpus: Gendl/GDL source and docs, the console's own configuration, and the Genworks training material")
+     ("description" . "Search the indexed corpus: Gendl/GDL source and docs, the console's own configuration, and the Genworks training material.  Lexical: by default every query term must appear in one snippet; when nothing holds every term the search retries with any-term matching and says so in `warning'.  Hyphenated tokens such as hidden-objects are matched verbatim and ranked up, as is the snippet that DEFINES a queried name.  Each hit carries the file path, the snippet's line range, and match_line (the first line holding a query term).")
      ("inputSchema" . (("type" . "object")
                        ("properties" . (("query" . (("type" . "string")
-                                                   ("description" . "Natural-language or keyword query")))
+                                                   ("description" . "Keyword or natural-language query; stopwords are ignored")))
                                        ("k" . (("type" . "integer")
                                                ("description" . "Max number of hits to return (default 8)")))
                                        ("sources" . (("type" . "array")
                                                      ("items" . (("type" . "string")))
-                                                     ("description" . "Logical sources to restrict search")))
+                                                     ("description" . "Logical sources to restrict search; the response's sources field lists what the index carries")))
                                        ("path_filters" . (("type" . "array")
                                                           ("items" . (("type" . "string")))
-                                                          ("description" . "Prefix or glob-style path filters")))
+                                                          ("description" . "Repo-relative path prefixes or globs (* within one directory, ** across), e.g. geom-base/wire/*")))
                                        ("language" . (("type" . "string")
                                                      ("description" . "Language hint, e.g. lisp, gdl, gendl, markdown")))
+                                       ("match_mode" . (("type" . "string")
+                                                        ("description" . "all (default: every term in one snippet, retried as any when nothing matches) or any")))
+                                       ("any_max_candidates" . (("type" . "integer")
+                                                                ("description" . "Cap on the candidates gathered in any mode")))
                                        ("search_mode" . (("type" . "string")
-                                                        ("description" . "lexical, semantic, or hybrid (default lexical)")))
+                                                        ("description" . "lexical is the only mode in this build; any other value is answered lexically with a warning")))
                                        ("max_snippet_tokens" . (("type" . "integer")
-                                                                ("description" . "Soft cap for snippet length")))
+                                                                ("description" . "Soft cap for snippet length (default 512); a longer snippet is excerpted from just above its first matching line")))
                                        ("include_metadata" . (("type" . "boolean")
                                                               ("description" . "Include metadata in hits (default true)")))))
-                       ("required" . ["query"]))))
-
-   ;; Deprecated alias of lisply_search -- same arguments, same corpus.
-   ;; Remove one release after 2026-09-09.
-   `(("name" . "skewed_search")
-     ("description" . "DEPRECATED: renamed lisply_search (same arguments, same corpus); use lisply_search")
-     ("inputSchema" . (("type" . "object")
-                       ("properties" . (("query" . (("type" . "string")
-                                                   ("description" . "Natural-language or keyword query")))
-                                       ("k" . (("type" . "integer")
-                                               ("description" . "Max number of hits to return (default 8)")))))
                        ("required" . ["query"]))))
 
 

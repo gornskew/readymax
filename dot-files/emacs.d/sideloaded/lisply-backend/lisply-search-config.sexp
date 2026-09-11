@@ -16,8 +16,8 @@
 ;;; belonged there: nothing in the stack generator ever read it, and its
 ;;; only consumer has always been lisply-search.el, which ships here.
 ;;; Renamed 2026-09-09 together with the tool (skewed_search ->
-;;; lisply_search); the reader still accepts the old file name and the old
-;;; :skewed-search-config top-level key.
+;;; lisply_search); the old file name and top-level key stopped being read
+;;; on 2026-09-10.
 ;;;
 ;;; Each source entry:
 ;;;   :root      where the corpus lives, relative to /projects (the host
