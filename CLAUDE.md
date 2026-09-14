@@ -21,6 +21,21 @@ This setup provides a complete Lisp development environment with:
 - **MCP Services**: every room exposes its resident via the Model
   Context Protocol for external tool integration
 
+## The downstream fork: every edit here has a Readymacs analog
+
+Readymacs (`/projects/gw/readymacs`, github.com/genworks/readymacs)
+is the Genworks-maintained downstream of this repo: the same code
+under Genworks naming, attribution and documentation voice.  **An
+edit to Readymax is not finished until its Readymacs analog is made
+in the same session** (the user, 2026-09-14) -- code files byte-
+identical (copy them across and compare hashes), docs and comments
+translated to that repo's register, one commit on each repo with the
+same story.  Its own `CLAUDE.md` carries the register rules and the
+identifiers that must never be renamed.  Do not wait for a merge to
+carry a change down: the fork merges upstream only when chosen, and a
+session that leaves the two apart leaves the next one to find out
+which is right.
+
 ## MCP Integration
 
 The containers are now wrapped as MCP (Model Context Protocol) services, providing seamless integration with Claude Code and other MCP-enabled tools.
