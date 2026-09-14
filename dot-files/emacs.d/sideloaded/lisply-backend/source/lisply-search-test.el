@@ -267,5 +267,66 @@ to the next window instead of dropping them (the pre-v4 behaviour)."
     (should (equal (mapcar (lambda (c) (cons (plist-get c :start) (plist-get c :end))) chunks)
                    '((0 . 1) (2 . 3) (4 . 4))))))
 
+(ert-deftest lisply-search-snippets-are-capped-by-chars ()
+  "A line longer than the character budget -- a minified asset -- is
+stored truncated to the budget; the cap holds whatever the line count
+(2026-09-14: a 15 KB one-line v4-shims.min.css topped a ranking)."
+  (let ((file (make-temp-file "lisply-search-min" nil ".css")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert (make-string 15000 ?x) "\n" ".a{color:red}\n"))
+          (let ((snippets (lisply-search--extract-file-snippets file 24 1200)))
+            (should (> (length snippets) 0))
+            (should (cl-every (lambda (s) (<= (length (plist-get s :snippet)) 1200))
+                              snippets))
+            (should (cl-every (lambda (s) (<= (length (plist-get s :preview)) 1200))
+                              snippets))))
+      (delete-file file))))
+
+(ert-deftest lisply-search-index-round-trips-non-ascii ()
+  "An index written and read back keeps its strings multibyte, so a
+snippet's length is its character count and © survives the trip
+(2026-09-14: a locale-less batch build and daemon read the index as
+raw bytes)."
+  (let ((file (make-temp-file "lisply-search-index" nil ".sexp"))
+        (text "©  ▓▓▓  (define-object naïve-box (box))"))
+    (unwind-protect
+        (let ((coding-system-for-read nil) (coding-system-for-write nil))
+          (lisply-search--write-sexp-file
+           (list :version 4 :files (list (list :path "/tmp/x.lisp" :snippets (list (list :snippet text)))))
+           file)
+          (let* ((back (lisply-search--read-sexp-file file))
+                 (snippet (plist-get (car (plist-get (car (plist-get back :files)) :snippets)) :snippet)))
+            (should (multibyte-string-p snippet))
+            (should (equal snippet text))
+            (should (= (length snippet) (length text)))))
+      (delete-file file))))
+
+(ert-deftest lisply-search-exclude-patterns-drop-minified-and-vendored ()
+  "The shipped config keeps minified assets and vendored static trees
+out of the index, and `**/*.min.css' does not reach an ordinary
+stylesheet."
+  (let* ((config-file (expand-file-name
+                       "../lisply-search-config.sexp"
+                       (file-name-directory (or (locate-library "lisply-search")
+                                                load-file-name
+                                                buffer-file-name))))
+         (config (plist-get (lisply-search--read-sexp-file config-file)
+                            :lisply-search-config))
+         (excludes (lisply-search--config-exclude-paths config)))
+    (should (member "**/*.min.css" excludes))
+    (should (member "**/*.min.js" excludes))
+    (should (member "**/3rdpty/**" excludes))
+    (dolist (path '("/projects/gw/gendl/gwl/static/3rdpty/fa/css/v4-shims.min.css"
+                    "/projects/gw/gendl/gwl/static/3rdpty/x_ite/x_ite.js"
+                    "/projects/gw/demos/gorg/static/js/jquery-1.8.3.min.js"
+                    "/projects/gw/demos/timer/static/plugins/hideseek/demo/index.html"))
+      (should (lisply-search--path-excluded-p path excludes)))
+    (dolist (path '("/projects/gw/gendl/gwl/static/gwl/style.css"
+                    "/projects/gw/gendl/gwl/static/gwl/gdlajax.js"
+                    "/projects/gw/demos/demos-common/source/cad-export.lisp"))
+      (should-not (lisply-search--path-excluded-p path excludes)))))
+
 (provide 'lisply-search-test)
 ;;; lisply-search-test.el ends here

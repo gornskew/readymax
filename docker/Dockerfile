@@ -236,7 +236,8 @@ RUN set -euxo pipefail; \
 # index aboard, because one failed clone skipped the whole build.
 #
 # Private corpora (genworks-learn lives inside the private genworks/apps
-# repository) authenticate through a BuildKit secret mounted as the
+# repository; the demos corpus is the private genworks/demos repository)
+# authenticate through a BuildKit secret mounted as the
 # build user's ~/.netrc -- never a build-arg, which would land in the
 # image history.  docker/build passes it from CORPUS_NETRC=<file>, one
 # line:  machine gitlab.genworks.com login <user> password <token>

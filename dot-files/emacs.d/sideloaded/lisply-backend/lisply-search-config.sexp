@@ -59,11 +59,33 @@
                         :repo "apps"
                         :repo-url "https://gitlab.genworks.com/genworks/apps.git"
                         :repo-root "gw/apps"
-                        :sparse ("genworks-learn")))))
+                        :sparse ("genworks-learn"))))
+            ;; The Genworks demos (2026-09-14): naca-nurbs, gear,
+            ;; demos-common with the stateless CAD-export machinery
+            ;; (register-cad-export!, define-cad-export), the worked
+            ;; examples of a public Gendl app.  A PRIVATE repository on
+            ;; gitlab.genworks.com, so the build credential (CORPUS_NETRC)
+            ;; has to read it as well as genworks/apps.  Its default
+            ;; branch is devo and the deployed demos come from it, so the
+            ;; clone is pinned there whatever branch the image builds from.
+            (:name "demos"
+             :entries ((:root "gw/demos"
+                        :repo "demos"
+                        :repo-url "https://gitlab.genworks.com/genworks/demos.git"
+                        :repo-root "gw/demos"
+                        :branch "devo"))))
 
   :ignore-dirs (".git" "node_modules" "dist" "build" "vendor" "target" ".cache" "logs" "tmp" "docker")
 
-  :exclude-paths ("**/elpa/**" )
+  ;; Globs match the absolute path (`*' crosses directories in Emacs
+  ;; wildcards, so `**' is spelled for the reader).  Minified assets and
+  ;; vendored static trees stay out (2026-09-14): a 15 KB one-line
+  ;; v4-shims.min.css under gwl/static/3rdpty topped the ranking for
+  ;; "involute gear export" with nothing readable in it, and nothing in
+  ;; a vendored jquery, x_ite or font-awesome tree is ours to search.
+  :exclude-paths ("**/elpa/**"
+                  "**/*.min.js" "**/*.min.css"
+                  "**/3rdpty/**" "**/static/plugins/**")
   :extensions (:default (".lisp" ".lsp" ".cl" ".gdl" ".gendl" ".asd" ".isc"
 				 ".md" ".markdown" ".org" ".txt" ".rst"
 				 ".el" ".js" ".ts" ".json" ".yml" ".yaml" ".html" ".css")

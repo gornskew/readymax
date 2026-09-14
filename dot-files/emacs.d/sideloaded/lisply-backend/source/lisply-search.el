@@ -20,6 +20,14 @@
 ;; mid-form.  Older indexes (1-3) still load; the runtime ranking below
 ;; does not depend on the chunking.
 ;;
+;; A snippet is capped by characters regardless of its line count
+;; (2026-09-14): the chunker respects its character budget line by line,
+;; so the only way past it was a single line longer than the budget -- a
+;; minified asset, a one-line data file -- and one such line (a 15 KB
+;; v4-shims.min.css) topped a ranking with nothing readable in it.
+;; Minified files and vendored static trees are also kept out of the
+;; index by the config's :exclude-paths.
+;;
 ;; Ranking is lexical: an inverted term index over the snippets, scored
 ;; by IDF-weighted term coverage, term density, verbatim phrase hits
 ;; (hyphenated query tokens such as `hidden-objects'), whether the
@@ -129,12 +137,32 @@ term list unless nothing else remains.")
   (apply #'message (concat "[lisply-search] " fmt) args))
 
 (defun lisply-search--read-sexp-file (path)
-  "Read a single s-expression from PATH, or nil if not found."
+  "Read a single s-expression from PATH, or nil if not found.
+The file is decoded as UTF-8 whatever the locale: the index is written
+that way (`lisply-search--write-sexp-file'), and left to detection a
+locale-less daemon read a 23 MB index as raw bytes, so every snippet
+came back unibyte -- lengths in bytes, and © or box-drawing art
+handed to the client as octal escapes (2026-09-14)."
   (when (file-exists-p path)
     (with-temp-buffer
-      (insert-file-contents path)
+      (let ((coding-system-for-read 'utf-8-unix))
+        (insert-file-contents path))
       (goto-char (point-min))
       (read (current-buffer)))))
+
+(defun lisply-search--write-sexp-file (sexp path)
+  "Write SEXP to PATH as UTF-8, unabridged.
+Pinning the coding system means a build in a locale-less container
+(Docker, CI) writes the same bytes as a developer's Emacs, and the
+reader above can decode them without guessing."
+  (let ((coding-system-for-write 'utf-8-unix))
+    (with-temp-file path
+      (set-buffer-multibyte t)
+      (let ((print-length nil)
+            (print-level nil)
+            (print-escape-multibyte nil)
+            (print-escape-nonascii nil))
+        (prin1 sexp (current-buffer))))))
 
 (defun lisply-search--pget (plist key &optional default)
   "Get KEY from PLIST, returning DEFAULT if missing or nil.
@@ -393,8 +421,23 @@ windows.  Returns a list of (:start S :end E :lines L) plists with
                          (string-match "^#+\\s-+\\(.+\\)$" line))
                return (string-trim (match-string 1 line))))))
 
+(defun lisply-search--cap-text (text max-chars)
+  "TEXT cut to at most MAX-CHARS characters.
+The chunker keeps every chunk within its character budget line by
+line, so the only text that arrives here over budget is a single line
+longer than the whole budget: a minified asset, a one-line data file.
+Such a line is stored truncated -- a snippet is a few hundred
+characters of context, and a 15 KB one-liner is a hit with nothing to
+read in it."
+  (if (and max-chars (> (length text) max-chars))
+      (substring text 0 max-chars)
+    text))
+
 (defun lisply-search--extract-file-snippets (path max-lines max-chars)
-  "Extract snippets from file at PATH."
+  "Extract snippets from file at PATH.
+Each snippet holds at most MAX-LINES lines and MAX-CHARS characters;
+the character cap holds whatever the line count (see
+`lisply-search--cap-text')."
   (with-temp-buffer
     (insert-file-contents path)
     (let* ((all-lines (split-string (buffer-string) "\n" nil))
@@ -406,7 +449,8 @@ windows.  Returns a list of (:start S :end E :lines L) plists with
       (mapcar
        (lambda (snip)
          (cl-destructuring-bind (&key lines start end) snip
-           (let* ((text (string-join lines "\n"))
+           (let* ((text (lisply-search--cap-text (string-join lines "\n") max-chars))
+                  (lines (split-string text "\n"))
                   (preview (or (cl-find-if (lambda (l) (> (length (string-trim l)) 0)) lines) "")))
              (list :start-line start
                    :end-line end
@@ -484,10 +528,7 @@ windows.  Returns a list of (:start S :end E :lines L) plists with
                         :config config
                         :files (lisply-search--to-vector files))))
       ;; Write index
-      (with-temp-file lisply-search-index-path
-        (let ((print-length nil)
-              (print-level nil))
-          (prin1 index (current-buffer))))
+      (lisply-search--write-sexp-file index lisply-search-index-path)
       (lisply-search--log "Index written: %s (%d files, %d snippets)"
                           lisply-search-index-path (length files)
                           (cl-reduce #'+ files

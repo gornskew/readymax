@@ -67,8 +67,10 @@ Search index:
                         be fetched (default: skip it, index the rest)
   CORPUS_NETRC=<file>   environment: a netrc file granting read access to
                         the private corpus repositories (genworks-learn
-                        lives in the private genworks/apps repo); handed
-                        to BuildKit as a secret, never baked into a layer.
+                        lives in the private genworks/apps repo, the demos
+                        corpus in the private genworks/demos repo -- one
+                        credential that reads both); handed to BuildKit
+                        as a secret, never baked into a layer.
                         One line per host:
                           machine gitlab.genworks.com login <user> password <token>
 

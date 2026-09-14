@@ -1512,11 +1512,22 @@ than `lexical` is answered lexically with a warning.
 Sources are defined in `lisply-search-config.sexp` (beside this file)
 under `:lisply-search-config` → `:sources`; the file is the single source
 of truth, so consult it rather than any list copied into docs. As of
-2026-09-09 the sources are `gendl` (the open-source engine), `readymax`
-(this console's own configuration and lisply backend) and
-`genworks-learn` (the Genworks training material, a directory of the
-private `genworks/apps` repository -- fetched at build time only when the
-build has a credential; see `docker/build --help`, CORPUS_NETRC).
+2026-09-14 the sources are `gendl` (the open-source engine), `readymax`
+(this console's own configuration and lisply backend), `genworks-learn`
+(the Genworks training material, a directory of the private
+`genworks/apps` repository) and `demos` (the Genworks demos:
+naca-nurbs, gear, demos-common with the stateless CAD-export machinery
+-- the private `genworks/demos` repository, pinned to its devo branch).
+The two private corpora are fetched at build time only when the build
+has a credential that reads BOTH repositories; see `docker/build
+--help`, CORPUS_NETRC.
+
+What is kept out (2026-09-14): `*.min.js`, `*.min.css`, and the
+vendored static trees (`**/3rdpty/**`, `**/static/plugins/**`) via the
+config's `:exclude-paths`, and every snippet is capped at the
+configured character budget whatever its line count -- a 15 KB
+one-line minified stylesheet used to top rankings with nothing readable
+in it.
 
 At build time a corpus that cannot be fetched is skipped with a
 `SOURCE MISSING` line and the index is built from the rest; the build
