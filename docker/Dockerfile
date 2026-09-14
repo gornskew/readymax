@@ -363,10 +363,15 @@ COPY docker/skewed-install /usr/local/bin/skewed-install
 # can build its corpus from this image, and the yard can index mounted
 # source aboard the ready room.
 COPY docker/lisply-index /usr/local/bin/lisply-index
+# A world-readable copy of the indexer itself: the image user's home is
+# 0700, so `docker run --user <the CI runner's uid>' could not reach the
+# clone's copy (gendl pipeline 15989).
+COPY --from=builder /home/emacs-user/lisply-mcp/scripts/lisply-index.js /usr/local/lib/lisply/lisply-index.js
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/webshot \
       /usr/local/bin/webshot-clip /usr/local/bin/skewed-install \
       /usr/local/bin/lisply-index \
-      /home/emacs-user/emacs-repl.sh
+      /home/emacs-user/emacs-repl.sh \
+    && chmod 0755 /usr/local/lib/lisply && chmod 0644 /usr/local/lib/lisply/lisply-index.js
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 

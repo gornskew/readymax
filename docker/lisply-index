@@ -19,4 +19,11 @@
 # with docker exec to index mounted source.
 
 set -euo pipefail
-exec node /home/emacs-user/lisply-mcp/scripts/lisply-index.js "$@"
+# The world-readable copy first (so `docker run --user <any uid>' can
+# run it: the image user's home is 0700); the clone's own as fallback
+# for an image built before the copy existed.
+for script in /usr/local/lib/lisply/lisply-index.js /home/emacs-user/lisply-mcp/scripts/lisply-index.js; do
+  if [ -r "$script" ]; then exec node "$script" "$@"; fi
+done
+echo "lisply-index: the reference indexer is not in this image" >&2
+exit 1
