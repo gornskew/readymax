@@ -141,7 +141,10 @@ branch="$(printf '%s' "$branch" | tr '/' '-')"
 # lisply-mcp revision
 # -----------------------------
 echo "Fetching latest commit from lisply-mcp for branch ${branch}..."
-LISPLY_MCP_REVISION=$(curl -s "https://api.github.com/repos/gornskew/lisply-mcp/git/refs/heads/${branch}" \
+# The GitHub mirror renamed to cyborg-whisperer on 2026-08-28; the old
+# name redirects for git but the API answers 301 with no sha, which
+# read as "latest" and left the clone layer cacheable across builds.
+LISPLY_MCP_REVISION=$(curl -s "https://api.github.com/repos/gornskew/cyborg-whisperer/git/refs/heads/${branch}" \
   | grep '"sha"' | head -1 | cut -d'"' -f4 || echo "latest")
 if [[ -z "$LISPLY_MCP_REVISION" ]]; then
   echo "Warning: Could not fetch lisply-mcp revision, falling back to 'latest'"

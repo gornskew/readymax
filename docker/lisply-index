@@ -11,10 +11,12 @@
 # the reference indexer that ships inside this image with lisply-mcp.
 # Any project can run it from the image in its own CI:
 #
-#   docker run --rm -v "$PWD:/corpus:ro" -v "$PWD/out:/out" \
-#     gornskew/readymax:devo-lite lisply-index --root /corpus --out /out/<name>.sexp
+#   docker run --rm --entrypoint lisply-index -v "$PWD:/corpus:ro" -v "$PWD/out:/out" \
+#     gornskew/readymax:devo-lite --root /corpus --out /out/<name>.sexp
 #
-# and the yard runs it aboard the ready room to index mounted source.
+# (--entrypoint, because the image's own entrypoint starts the console
+# and ignores the command), and the yard runs it aboard the ready room
+# with docker exec to index mounted source.
 
 set -euo pipefail
 exec node /home/emacs-user/lisply-mcp/scripts/lisply-index.js "$@"
