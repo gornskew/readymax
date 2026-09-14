@@ -66,11 +66,12 @@ Search index:
   --strict-index        fail the build when any corpus repository cannot
                         be fetched (default: skip it, index the rest)
   CORPUS_NETRC=<file>   environment: a netrc file granting read access to
-                        the private corpus repositories (genworks-learn
-                        lives in the private genworks/apps repo, the demos
-                        corpus in the private genworks/demos repo -- one
-                        credential that reads both); handed to BuildKit
-                        as a secret, never baked into a layer.
+                        any private corpus repository the baked index
+                        clones (none in the shipped config since
+                        2026-09-14: the other projects' corpora travel
+                        with those projects, lisply-mcp CORPUS.md);
+                        handed to BuildKit as a secret, never baked into
+                        a layer.
                         One line per host:
                           machine gitlab.genworks.com login <user> password <token>
 

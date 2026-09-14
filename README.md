@@ -249,17 +249,28 @@ takes the glass aboard while underway
 ### The Chart Locker — a Gendl search index, pre-packed
 
 Every Readymax image comes pre-packed with a `lisply_search` index,
-built at casting time: a lexical index over the
+built at casting time: a lexical index over Readymax's own elisp and
+configuration and, so a room works standalone, over the
 [Gendl](https://gitlab.common-lisp.net/gendl/gendl) engine's source
-and documentation, Readymax's own elisp and configuration, the
-Genworks training material ([genworks.dev](https://genworks.dev)) and
-the live Genworks demos. A cyborg that boards asks `lisply_search`
-before it writes GDL and gets back whole `define-object` forms and
+and documentation. A cyborg that boards asks `lisply_search` before
+it writes GDL and gets back whole `define-object` forms and
 documentation sections, each with its file and line range — no
-`/projects` mount required. When the corpora on your own mount move,
-rebuild it aboard with `M-x lisply-search-build-index`.
+`/projects` mount required.
 
-What the locker holds is public by construction: the sources are
+Aboard a ship the locker fills itself. Every species that carries its
+own corpus in its image (Gendl does, under the `lisply.corpus` label)
+has that one file copied out by the yard at each raising, and the
+ship indexes whatever its articles name from its own hold (the live
+Genworks demos, the training material at
+[genworks.dev](https://genworks.dev)). The Captain merges them over
+his baked index, a corpus aboard outranking a same-named baked one —
+so the Gendl searched is the Gendl actually flying, not the one this
+image was cast against. The contract every project follows to provide
+its corpus, and the reference indexer (`lisply-index`, on the path in
+every Readymax image), live with the protocol that promises the tool:
+[lisply-mcp `CORPUS.md`](https://github.com/gornskew/lisply-mcp/blob/devo/CORPUS.md).
+
+What the baked index holds is public by construction: the sources are
 listed in
 `dot-files/emacs.d/sideloaded/lisply-backend/lisply-search-config.sexp`,
 each marked for distribution, and a casting indexes only those, with

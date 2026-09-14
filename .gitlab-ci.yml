@@ -33,19 +33,15 @@
 #   DOCKERHUB_USER  -- Docker Hub account with push rights to gornskew/*
 #   DOCKERHUB_TOKEN -- read/write access token (masked)
 # Optional:
-#   CORPUS_NETRC    -- type File: a netrc granting READ access to the
-#                      private corpus repositories of the lisply_search
-#                      index: genworks-learn lives in
-#                      gitlab.genworks.com/genworks/apps and, since
-#                      2026-09-14, the demos corpus in
-#                      gitlab.genworks.com/genworks/demos.  One line:
+#   CORPUS_NETRC    -- type File: a netrc granting READ access to any
+#                      PRIVATE repository the baked lisply_search index
+#                      clones.  Since the evening of 2026-09-14 the
+#                      shipped config clones none (the index bakes this
+#                      console's own corpus and a public Gendl fallback;
+#                      every other corpus travels with its own project,
+#                      lisply-mcp CORPUS.md), so the variable is unused
+#                      unless a fork adds a private source.  One line:
 #                        machine gitlab.genworks.com login <deploy-token-user> password <deploy-token>
-#                      The credential must read BOTH repositories: the
-#                      genworks group carries no deploy token, so a
-#                      per-project token minted on apps alone leaves
-#                      demos SOURCE MISSING and --strict-index fails the
-#                      build.  A group deploy token (read_repository) or
-#                      a read-only PAT covers both.
 #                      docker/build hands it to BuildKit as a secret for
 #                      the index step only.  A PROTECTED variable reaches
 #                      only pipelines on protected refs: protect every

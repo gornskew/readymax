@@ -46,6 +46,18 @@
 ;;; The rule, 2026-09-14: the training material is public, the rest of
 ;;; the private apps repository (invoicing, letterheads, the sites) is
 ;;; not, and no distributed index may reflect an internal app.
+;;;
+;;; WHAT THIS FILE BAKES IS THE CONSOLE'S OWN CORPUS AND ONE FALLBACK.
+;;; Since 2026-09-14 the corpora of the other projects travel with those
+;;; projects (lisply-mcp CORPUS.md): a species image carries its own
+;;; corpus file under the `lisply.corpus' label, the yard copies the
+;;; files out of the images aboard into the ready room's corpora
+;;; directory (LISPLY_SEARCH_CORPORA), and the console merges them,
+;;; a corpus there replacing a same-named source here.  So this file
+;;; names readymax itself and a gendl FALLBACK for standalone use (the
+;;; lifepod, the space suit), nothing else; aboard a ship the Gendl
+;;; corpus comes from the Gendl actually flying.  The demos and the
+;;; training material are mount corpora the ship builds itself.
 
 (:lisply-search-config
  (:index-path "~/.emacs.d/sideloaded/lisply-backend/lisply-search-index.sexp"
@@ -63,46 +75,15 @@
              :entries ((:root "readymax"
                         :repo "readymax"
                         :repo-url "https://github.com/gornskew/readymax"
-                        :repo-root "readymax")))
-            ;; The Genworks training material -- the successor of the
-            ;; retired github.com/gornskew/training corpus, whose
-            ;; disappearance (2026-08-20) left every console image without
-            ;; an index until 2026-09-09.  It is one directory of the
-            ;; PRIVATE genworks/apps repository: fetched as a sparse
-            ;; checkout when the build has a credential, skipped otherwise.
-            ;; Public because the material itself is: it is served at
-            ;; genworks.dev under the AGPL.  Nothing else in that
-            ;; repository is, and nothing else in it is a source.
-            (:name "genworks-learn"
-             :distribution :public
-             :entries ((:root "gw/apps/genworks-learn"
-                        :repo "apps"
-                        :repo-url "https://gitlab.genworks.com/genworks/apps.git"
-                        :repo-root "gw/apps"
-                        :sparse ("genworks-learn"))))
-            ;; The Genworks demos (2026-09-14): the LIVE ones only -- the
-            ;; systems the stack hosts publish, whose source the pages
-            ;; already show (demos-common with the stateless CAD-export
-            ;; machinery, gear, naca-nurbs, staircase, robot, bus,
-            ;; brick-wall).  The older applications the repository still
-            ;; carries (gorg, prasad, timer, bench, lumber, pui, deck,
-            ;; house, tw-practice, the attic) stay out of any public
-            ;; corpus until they are brought up to date; ci/cold-load.lisp
-            ;; in the repository says why each one does not load.  A
-            ;; PRIVATE repository on gitlab.genworks.com, so the build
-            ;; credential (CORPUS_NETRC) has to read it as well as
-            ;; genworks/apps.  Its default branch is devo and the deployed
-            ;; demos come from it, so the clone is pinned there whatever
-            ;; branch the image builds from.
-            (:name "demos"
-             :distribution :public
-             :entries ((:root "gw/demos"
-                        :repo "demos"
-                        :repo-url "https://gitlab.genworks.com/genworks/demos.git"
-                        :repo-root "gw/demos"
-                        :subdirs ("demos-common" "gear" "naca-nurbs"
-                                  "staircase" "robot" "bus" "brick-wall")
-                        :branch "devo"))))
+                        :repo-root "readymax"))))
+            ;; Retired from this file 2026-09-14, now corpora of their
+            ;; own (CORPUS.md): the Genworks training material
+            ;; (gw/apps/genworks-learn, public at genworks.dev) and the
+            ;; live demos (gw/demos: demos-common, gear, naca-nurbs,
+            ;; staircase, robot, bus, brick-wall; the older applications
+            ;; there stay out until brought up to date) are built by the
+            ;; ship from its /projects mount into the corpora directory.
+            ;; No private repository is cloned to build this image.
 
   :ignore-dirs (".git" "node_modules" "dist" "build" "vendor" "target" ".cache" "logs" "tmp" "docker")
 

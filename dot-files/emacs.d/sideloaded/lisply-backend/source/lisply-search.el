@@ -69,7 +69,19 @@ explicitly."
 
 (defcustom lisply-search-index-path
   (expand-file-name "~/.emacs.d/sideloaded/lisply-backend/lisply-search-index.sexp")
-  "Path to the search index file."
+  "Path to the console's own baked index file."
+  :type 'string
+  :group 'lisply-search)
+
+(defcustom lisply-search-corpora-directory
+  (or (getenv "LISPLY_SEARCH_CORPORA") "/lisply/corpora")
+  "Directory of corpus files the deployment puts in front of the console.
+Every *.sexp there is a Lisply corpus (lisply-mcp CORPUS.md): what the
+yard copied out of the species images aboard, and what it built from
+mounted source.  They are loaded beside the baked index, and a corpus
+here REPLACES a same-named source in the baked index -- the Gendl
+aboard outranks the Gendl the console was built with.  Set from
+LISPLY_SEARCH_CORPORA; a missing directory means no extra corpora."
   :type 'string
   :group 'lisply-search)
 
@@ -318,6 +330,11 @@ Skip IGNORE-DIRS and paths matching EXCLUDES patterns."
                                  (lisply-search--list-files
                                   entry extensions ignore-dirs excludes)))))
          ((and (file-regular-p entry)
+               ;; `file-name-extension' strips a backup suffix, so
+               ;; ui.lisp~ would pass as .lisp: editor backups and
+               ;; autosaves are never corpus (CORPUS.md, section 2).
+               (not (string-suffix-p "~" entry))
+               (not (string-match-p "\\`#.*#\\'" (file-name-nondirectory entry)))
                (member (lisply-search--file-ext entry) extensions)
                (not (lisply-search--path-excluded-p entry excludes)))
           (push entry results)))))
@@ -761,32 +778,101 @@ Returns hash-table: term -> list of (:snippet S :file F :source SRC :entry E)."
              :key (lambda (f) (length (plist-get f :snippets)))
              :initial-value 0))
 
+(defun lisply-search--index-files ()
+  "The index files to load, in order: the baked index (when it exists)
+and then every *.sexp in `lisply-search-corpora-directory', sorted.
+Returns a list of (PATH . MTIME); the list is the cache key."
+  (let ((paths (append (when (file-exists-p lisply-search-index-path)
+                         (list lisply-search-index-path))
+                       (when (and lisply-search-corpora-directory
+                                  (file-directory-p lisply-search-corpora-directory))
+                         (sort (directory-files lisply-search-corpora-directory t "\\.sexp\\'")
+                               #'string<)))))
+    (mapcar (lambda (p) (cons p (file-attribute-modification-time (file-attributes p))))
+            paths)))
+
+(defun lisply-search--read-index-file (path)
+  "Read and validate the index at PATH; nil (logged) when it is unusable."
+  (let ((index (condition-case err
+                   (lisply-search--read-sexp-file path)
+                 (error (lisply-search--log "WARNING: %s: %s" path (error-message-string err)) nil))))
+    (when index
+      (let ((err (lisply-search--validate-index index)))
+        (when err
+          (lisply-search--log "WARNING: %s: %s" path err)
+          (setq index nil))))
+    index))
+
+(defun lisply-search--merge-indexes (loaded)
+  "Merge LOADED, a list of (PATH . INDEX) in load order, into one index plist.
+The first entry is the console's baked index when there is one; the
+rest are corpora from the corpora directory.  A corpus's sources
+replace same-named sources of the baked index (lisply-mcp CORPUS.md,
+section 5); corpora do not override each other.  The merged plist
+carries the baked index's :config (or the first corpus's) and a
+:corpora list describing every file loaded."
+  (let* ((baked-p (and loaded (equal (caar loaded) lisply-search-index-path)))
+         (baked (and baked-p (cdar loaded)))
+         (corpora (if baked-p (cdr loaded) loaded))
+         (corpus-sources nil)
+         (files nil)
+         (descriptions nil))
+    (dolist (entry corpora)
+      (dolist (f (lisply-search--to-list (plist-get (cdr entry) :files)))
+        (cl-pushnew (plist-get f :source) corpus-sources)))
+    (when baked
+      (dolist (f (lisply-search--to-list (plist-get baked :files)))
+        (unless (memq (plist-get f :source) corpus-sources)
+          (push f files)))
+      (push (list :file lisply-search-index-path :corpus "baked"
+                  :generated-at (plist-get baked :generated-at)
+                  :distribution (plist-get baked :distribution))
+            descriptions))
+    (dolist (entry corpora)
+      (let ((index (cdr entry)))
+        (dolist (f (lisply-search--to-list (plist-get index :files)))
+          (push f files))
+        (push (list :file (car entry)
+                    :corpus (or (plist-get index :corpus)
+                                (file-name-base (car entry)))
+                    :generated-at (plist-get index :generated-at)
+                    :distribution (plist-get index :distribution))
+              descriptions)))
+    (list :version lisply-search--index-version
+          :config (plist-get (or baked (cdar loaded)) :config)
+          :corpora (nreverse descriptions)
+          :files (lisply-search--to-vector (nreverse files)))))
+
 (defun lisply-search--load-index ()
-  "Load and cache index. Returns cache plist or nil."
-  (let* ((path lisply-search-index-path)
-         (attrs (and (file-exists-p path) (file-attributes path)))
-         (mtime (and attrs (file-attribute-modification-time attrs))))
-    ;; Check cache validity
+  "Load and cache the index: the baked index merged with every corpus in
+`lisply-search-corpora-directory'.  Reloads when any file's
+modification time changes.  Returns the cache plist, or nil when
+nothing loadable exists."
+  (let ((key (lisply-search--index-files)))
     (if (and lisply-search--cache
-             (equal (plist-get lisply-search--cache :path) path)
-             (equal (plist-get lisply-search--cache :mtime) mtime))
+             (equal (plist-get lisply-search--cache :key) key))
         lisply-search--cache
-      ;; Reload
-      (let* ((raw (lisply-search--read-sexp-file path))
-             (index raw))
+      (let* ((loaded (delq nil
+                           (mapcar (lambda (pm)
+                                     (let ((index (lisply-search--read-index-file (car pm))))
+                                       (and index (cons (car pm) index))))
+                                   key)))
+             (index (and loaded (lisply-search--merge-indexes loaded))))
         (when index
-          (let ((err (lisply-search--validate-index index)))
-            (when err
-              (lisply-search--log "WARNING: %s" err)
-              (setq index nil))))
+          (lisply-search--log "Index loaded: %d file(s) -- %s"
+                              (length loaded)
+                              (mapconcat (lambda (d) (format "%s" (plist-get d :corpus)))
+                                         (plist-get index :corpora) ", ")))
         (setq lisply-search--cache
               (when index
-                (list :path path
-                      :mtime mtime
+                (list :key key
+                      :path lisply-search-index-path
                       :index index
                       :config (plist-get index :config)
-                      ;; The sources the index actually carries: a
-                      ;; :public build leaves the :internal ones out.
+                      :corpora (plist-get index :corpora)
+                      ;; The sources actually loaded: a :public build
+                      ;; leaves :internal ones out, and a corpus from
+                      ;; the directory may have replaced a baked one.
                       :present-sources
                       (let (names)
                         (dolist (f (lisply-search--to-list (plist-get index :files)))
@@ -1093,7 +1179,8 @@ Returns plist: (:query Q :search-mode :lexical :match-mode M
            warnings)
       (cond
        ((not cache)
-        (list :error (format "Index not found: %s" lisply-search-index-path)))
+        (list :error (format "No index: neither %s nor a corpus under %s"
+                             lisply-search-index-path lisply-search-corpora-directory)))
        ((not snippet-map)
         (list :error "Index has no snippet map"))
        (t
@@ -1170,6 +1257,11 @@ Returns plist: (:query Q :search-mode :lexical :match-mode M
                   :terms (lisply-search--to-vector terms)
                   :phrases (lisply-search--to-vector phrases)
                   :sources (lisply-search--to-vector sources)
+                  :corpora (lisply-search--to-vector
+                            (mapcar (lambda (d)
+                                      (list :corpus (plist-get d :corpus)
+                                            :generated-at (plist-get d :generated-at)))
+                                    (plist-get cache :corpora)))
                   :total-candidates (length candidates)
                   :hits (lisply-search--to-vector final)
                   :warning (when warnings (string-join (nreverse warnings) "; "))

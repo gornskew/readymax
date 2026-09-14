@@ -1,0 +1,20 @@
+#!/bin/bash
+# Copyright © 2026 Gornskew Enterprises
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.  Distributed WITHOUT
+# ANY WARRANTY; see <https://www.gnu.org/licenses/agpl-3.0.html>.
+
+# lisply-index: build a Lisply corpus file (lisply-mcp CORPUS.md) with
+# the reference indexer that ships inside this image with lisply-mcp.
+# Any project can run it from the image in its own CI:
+#
+#   docker run --rm -v "$PWD:/corpus:ro" -v "$PWD/out:/out" \
+#     gornskew/readymax:devo-lite lisply-index --root /corpus --out /out/<name>.sexp
+#
+# and the yard runs it aboard the ready room to index mounted source.
+
+set -euo pipefail
+exec node /home/emacs-user/lisply-mcp/scripts/lisply-index.js "$@"

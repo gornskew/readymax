@@ -1509,33 +1509,46 @@ than `lexical` is answered lexically with a warning.
 
 ### Available Sources
 
-Sources are defined in `lisply-search-config.sexp` (beside this file)
-under `:lisply-search-config` → `:sources`; the file is the single source
-of truth, so consult it rather than any list copied into docs. As of
-2026-09-14 the sources are `gendl` (the open-source engine), `readymax`
-(this console's own configuration and lisply backend), `genworks-learn`
-(the Genworks training material, a directory of the private
-`genworks/apps` repository) and `demos` (the LIVE Genworks demos only:
-demos-common with the stateless CAD-export machinery, gear, naca-nurbs,
-staircase, robot, bus, brick-wall -- `:subdirs` of the private
-`genworks/demos` repository, pinned to its devo branch; the older
-applications that repository still carries stay out until they are
-brought up to date). The two private corpora are fetched at build time
-only when the build has a credential that reads BOTH repositories; see
-`docker/build --help`, CORPUS_NETRC.
+The corpus a console searches has three tiers (2026-09-14; the
+contract is lisply-mcp's `CORPUS.md`, the single source of truth for
+the file format, the image label and the merge):
 
-**Distribution rule (2026-09-14).** The index ships inside a public
-Docker Hub image, so each source carries a `:distribution`, `:public`
-(the default) or `:internal`, and an image build indexes the public
-sources only, whatever its credential can read (`docker/build` and the
-Dockerfile build `:public`; `LISPLY_INDEX_DISTRIBUTION=all`, or
-`lisply-search-build-index` by hand on a console with a `/projects`
-mount, indexes everything present). The training material is public
-because it is served at genworks.dev under the AGPL; the rest of the
-private apps repository (invoicing, letterheads, the sites) is not, and
-no distributed index may reflect an internal application. An internal
-index built at container start from the mount is the planned next
-layer; until it exists, internal corpora are not indexed anywhere.
+1. **The baked index** -- `lisply-search-config.sexp` beside this file,
+   `:lisply-search-config` → `:sources`: `readymax` (this console's
+   own configuration and lisply backend) and `gendl` as a FALLBACK for
+   standalone use. Built into the image by `docker/build`; no private
+   repository is cloned for it.
+2. **Species corpora** -- each project builds its own corpus with the
+   reference indexer (`lisply-index`, on the path in every Readymax
+   image) and ships it in its image under the `lisply.corpus` label
+   (Gendl: `/opt/gendl/lisply-corpus/gendl.sexp`). The yard copies
+   the files out of the images aboard into the corpora directory.
+3. **Mount corpora** -- what the ship builds itself from `/projects`
+   (the live demos, the training material, internal applications on
+   internal ships), declared in the ship's articles and written into
+   the same directory at raise.
+
+The console loads the baked index plus every `*.sexp` in the directory
+named by `LISPLY_SEARCH_CORPORA` (default `/lisply/corpora`), and a
+corpus there REPLACES a same-named baked source: aboard a ship the
+Gendl corpus is the Gendl actually flying, not the one this image was
+built with. The response's `sources` lists what is loaded and
+`corpora` names each file with its `generated_at`. Rebuild the baked
+index in a dev room with `M-x lisply-search-build-index`; a corpus
+file for any tree with `lisply-index --root DIR --name NAME --out
+FILE`.
+
+**Distribution rule (2026-09-14).** The baked index ships inside a
+public Docker Hub image, so each source carries a `:distribution`,
+`:public` (the default) or `:internal`, and an image build indexes the
+public sources only, whatever its credential can read (`docker/build`
+and the Dockerfile build `:public`; `LISPLY_INDEX_DISTRIBUTION=all`, or
+`lisply-search-build-index` by hand, indexes everything present). The
+training material is public because it is served at genworks.dev under
+the AGPL; the rest of the private apps repository (invoicing,
+letterheads, the sites) is not, and no distributed index may reflect
+an internal application. Internal corpora reach a console only as
+mount corpora on internal ships.
 
 What is kept out (2026-09-14): `*.min.js`, `*.min.css`, and the
 vendored static trees (`**/3rdpty/**`, `**/static/plugins/**`) via the
@@ -1626,7 +1639,10 @@ lisply_search(query="define-object first example", sources=["genworks-learn"], k
   "match_fallback": false,
   "terms": ["define", "object", "computed", "slots"],
   "phrases": ["define-object", "computed-slots"],
-  "sources": ["gendl", "readymax", "genworks-learn"],
+  "sources": ["readymax", "gendl", "demos"],
+  "corpora": [{"corpus": "baked", "generated_at": "2026-09-14T14:51:02Z"},
+              {"corpus": "gendl", "generated_at": "2026-09-14T20:10:00Z"},
+              {"corpus": "demos", "generated_at": "2026-09-14T21:00:00Z"}],
   "total_candidates": 41,
   "warning": null,
   "hits": [

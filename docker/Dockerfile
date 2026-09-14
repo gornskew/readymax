@@ -235,9 +235,11 @@ RUN set -euxo pipefail; \
 # presence: from 2026-08-20 to 2026-09-09 every image went green with no
 # index aboard, because one failed clone skipped the whole build.
 #
-# Private corpora (genworks-learn lives inside the private genworks/apps
-# repository; the demos corpus is the private genworks/demos repository)
-# authenticate through a BuildKit secret mounted as the
+# The baked index is this console's own corpus plus a public Gendl
+# fallback for standalone rooms; every other project's corpus travels
+# with that project's image and reaches a console through the yard
+# (lisply-mcp CORPUS.md, 2026-09-14).  Should a fork add a private
+# corpus, it authenticates through a BuildKit secret mounted as the
 # build user's ~/.netrc -- never a build-arg, which would land in the
 # image history.  docker/build passes it from CORPUS_NETRC=<file>, one
 # line:  machine gitlab.genworks.com login <user> password <token>
@@ -356,8 +358,14 @@ COPY --chown=emacs-user:emacs-user docker/emacs-repl.sh /home/emacs-user/emacs-r
 COPY docker/webshot /usr/local/bin/webshot
 COPY docker/webshot-clip /usr/local/bin/webshot-clip
 COPY docker/skewed-install /usr/local/bin/skewed-install
+# The Lisply corpus indexer (lisply-mcp CORPUS.md): the reference tool
+# rides in with lisply-mcp; this puts it on the path so a project's CI
+# can build its corpus from this image, and the yard can index mounted
+# source aboard the ready room.
+COPY docker/lisply-index /usr/local/bin/lisply-index
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/webshot \
       /usr/local/bin/webshot-clip /usr/local/bin/skewed-install \
+      /usr/local/bin/lisply-index \
       /home/emacs-user/emacs-repl.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

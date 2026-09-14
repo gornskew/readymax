@@ -341,9 +341,10 @@ in the repository when the root is not the repository)."
       (delete-directory root t))))
 
 (ert-deftest lisply-search-shipped-config-is-distributable ()
-  "Every source in the shipped config is public, and the demos source
-names the live demos only (2026-09-14 ruling: the stale ones stay out
-of any public corpus until they are brought up to date)."
+  "The shipped config bakes only public sources, and only two: this
+console's own corpus and a Gendl fallback.  Every other project's
+corpus travels with that project (CORPUS.md), so nothing here clones
+a private repository."
   (let* ((config-file (expand-file-name
                        "../lisply-search-config.sexp"
                        (file-name-directory (or (locate-library "lisply-search")
@@ -351,12 +352,116 @@ of any public corpus until they are brought up to date)."
                                                 buffer-file-name))))
          (config (plist-get (lisply-search--read-sexp-file config-file) :lisply-search-config))
          (sources (lisply-search--config-sources config))
-         (demos (cl-find :demos sources :key (lambda (s) (plist-get s :name)))))
+         (names (mapcar (lambda (s) (plist-get s :name)) sources)))
     (should (cl-every (lambda (s) (eq (plist-get s :distribution) :public)) sources))
-    (should demos)
-    (should (equal (plist-get demos :subdirs)
-                   '("demos-common" "gear" "naca-nurbs" "staircase" "robot" "bus" "brick-wall")))
-    (should (equal (plist-get demos :sparse) (plist-get demos :subdirs)))))
+    (should (= (length sources) 2))
+    (should (memq :gendl names))
+    (should (cl-some (lambda (n) (memq n '(:readymax :readymacs))) names))
+    (should (cl-every (lambda (s) (string-match-p "\\`https://\\(gitlab\\.common-lisp\\.net\\|github\\.com\\)/"
+                                                  (plist-get s :repo-url)))
+                      sources))))
+
+;;;; Corpora (lisply-mcp CORPUS.md)
+
+(ert-deftest lisply-search-corpora-directory-merges-and-overrides ()
+  "Corpus files in the corpora directory load beside the baked index, and
+a corpus replaces a same-named baked source: the Gendl aboard outranks
+the Gendl the console was built with."
+  (let* ((dir (make-temp-file "lisply-search-corpora" t))
+         (baked (expand-file-name "baked.sexp" dir))
+         (corpora (expand-file-name "corpora" dir)))
+    (unwind-protect
+        (progn
+          (make-directory corpora)
+          (lisply-search--write-sexp-file
+           (list :version 4 :generated-at "2026-01-01T00:00:00Z" :distribution :public
+                 :config '(:sources ((:name "gendl" :entries ((:root "/tmp/g" :repo "gendl" :repo-root "/tmp/g")))
+                                     (:name "own" :entries ((:root "/tmp/o" :repo "own" :repo-root "/tmp/o"))))
+                           :extensions (:default (".lisp")) :exclude-paths ())
+                 :files (list (list :path "/tmp/g/old.lisp" :source :gendl :repo "gendl" :repo-root "/tmp/g"
+                                    :snippets (list (list :snippet "(define-object stale-box ())"
+                                                          :terms '("define" "object" "stale" "box")
+                                                          :start-line 0 :end-line 0)))
+                              (list :path "/tmp/o/own.lisp" :source :own :repo "own" :repo-root "/tmp/o"
+                                    :snippets (list (list :snippet "(defun own-thing ())"
+                                                          :terms '("defun" "own" "thing")
+                                                          :start-line 0 :end-line 0)))))
+           baked)
+          (lisply-search--write-sexp-file
+           (list :version 4 :generated-at "2026-09-14T00:00:00Z" :corpus "gendl" :distribution :public
+                 :config '(:sources ((:name "gendl" :entries ((:root "/corpus" :repo "gendl" :repo-root "/corpus"))))
+                           :extensions (:default (".lisp")) :exclude-paths ())
+                 :files (list (list :path "/corpus/new.lisp" :source :gendl :repo "gendl" :repo-root "/corpus"
+                                    :snippets (list (list :snippet "(define-object fresh-box ())"
+                                                          :terms '("define" "object" "fresh" "box")
+                                                          :start-line 0 :end-line 0)))))
+           (expand-file-name "gendl.sexp" corpora))
+          (let ((lisply-search-index-path baked)
+                (lisply-search-corpora-directory corpora)
+                (lisply-search--cache nil))
+            (let ((box (lisply-search (list :query "box" :k 5)))
+                  (own (lisply-search (list :query "own-thing" :k 5))))
+              ;; the baked gendl file is gone, the corpus's is there
+              (should (equal (lisply-search-test--paths box) '("new.lisp")))
+              (should (equal (lisply-search-test--paths own) '("own.lisp")))
+              (should (equal (append (plist-get box :sources) nil) '(:own :gendl)))
+              (should (equal (mapcar (lambda (c) (plist-get c :corpus))
+                                     (append (plist-get box :corpora) nil))
+                             '("baked" "gendl"))))
+            ;; A corpus alone, with no baked index, still answers.
+            (let ((lisply-search-index-path (expand-file-name "absent.sexp" dir))
+                  (lisply-search--cache nil))
+              (should (equal (lisply-search-test--paths (lisply-search (list :query "box" :k 5)))
+                             '("new.lisp"))))))
+      (delete-directory dir t))))
+
+(ert-deftest lisply-search-reference-indexer-conforms ()
+  "The lisply-mcp reference indexer (scripts/lisply-index.js) and this
+file cut the same fixture into the same snippets, terms and text -- the
+contract CORPUS.md states.  Skipped where node or the script is absent."
+  (let* ((node (executable-find "node"))
+         (script (cl-find-if #'file-exists-p
+                             (delq nil (list (getenv "LISPLY_INDEX_JS")
+                                             "/home/emacs-user/lisply-mcp/scripts/lisply-index.js"
+                                             "/projects/gs/lisply-mcp/scripts/lisply-index.js")))))
+    (unless (and node script) (ert-skip "no node or no reference indexer"))
+    (let* ((root (make-temp-file "lisply-search-fixture" t))
+           (out (expand-file-name "out/fixture.sexp" root)))
+      (unwind-protect
+          (progn
+            (with-temp-file (expand-file-name "a.lisp" root)
+              (dotimes (i 10) (insert (format ";; header %d\n" i)))
+              (insert "(defun a () 1)\n\n(defun b () 2)\n\n(define-object big (base-object)\n")
+              (dotimes (i 30) (insert (format "  :slot-%d 1\n" i)))
+              (insert ")\n"))
+            (with-temp-file (expand-file-name "notes.md" root)
+              (insert "intro\n\n# One\na\nb ©\n# Two\nc\n"))
+            (with-temp-file (expand-file-name "style.css" root)
+              (insert (make-string 3000 ?x) "\n.a{}\n"))
+            (with-temp-file (expand-file-name "stale.lisp~" root) (insert "(defun stale ())\n"))
+            (with-temp-buffer
+              (let ((status (call-process node nil (current-buffer) nil script
+                                          "--root" root "--name" "fixture" "--out" out "--quiet")))
+                (should (eql status 0))))
+            (let* ((index (lisply-search--read-sexp-file out))
+                   (files (append (plist-get index :files) nil)))
+              (should (= (plist-get index :version) 4))
+              (should (equal (plist-get index :corpus) "fixture"))
+              (should (equal (sort (mapcar (lambda (f) (file-name-nondirectory (plist-get f :path))) files) #'string<)
+                             '("a.lisp" "notes.md" "style.css")))
+              (dolist (f files)
+                (let ((mine (lisply-search--extract-file-snippets (plist-get f :path) 24 1200))
+                      (theirs (append (plist-get f :snippets) nil)))
+                  (should (= (length mine) (length theirs)))
+                  (cl-loop for m in mine for th in theirs
+                           do (should (equal (list (plist-get m :start-line) (plist-get m :end-line))
+                                             (list (plist-get th :start-line) (plist-get th :end-line))))
+                              (should (equal (plist-get m :snippet) (plist-get th :snippet)))
+                              (should (equal (plist-get m :preview) (plist-get th :preview)))
+                              (should (equal (plist-get m :section) (plist-get th :section)))
+                              (should (equal (append (plist-get m :terms) nil)
+                                             (append (plist-get th :terms) nil))))))))
+        (delete-directory root t)))))
 
 (ert-deftest lisply-search-exclude-patterns-drop-minified-and-vendored ()
   "The shipped config keeps minified assets and vendored static trees
