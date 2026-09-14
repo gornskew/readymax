@@ -303,6 +303,61 @@ raw bytes)."
             (should (= (length snippet) (length text)))))
       (delete-file file))))
 
+(ert-deftest lisply-search-distribution-keeps-internal-sources-out ()
+  "A :public build carries only sources marked :public (the default);
+an :all build carries everything; a build that does not say is public."
+  (let* ((config '(:sources ((:name "open" :entries ((:root "/tmp/open" :repo "open" :repo-root "/tmp/open")))
+                             (:name "shop" :distribution :internal
+                              :entries ((:root "/tmp/shop" :repo "shop" :repo-root "/tmp/shop"))))))
+         (sources (lisply-search--config-sources config))
+         (names (lambda (l) (mapcar (lambda (s) (plist-get s :name)) l))))
+    (should (equal (mapcar (lambda (s) (plist-get s :distribution)) sources) '(:public :internal)))
+    (should (equal (funcall names (lisply-search--sources-for-distribution sources :public)) '(:open)))
+    (should (equal (funcall names (lisply-search--sources-for-distribution sources :all)) '(:open :shop)))
+    (should (equal (funcall names (lisply-search--sources-for-distribution sources nil)) '(:open)))))
+
+(ert-deftest lisply-search-subdirs-restrict-the-scan-and-the-checkout ()
+  "With :subdirs, only those directories under the root are indexed, and
+they double as the sparse checkout list (prefixed by the root's place
+in the repository when the root is not the repository)."
+  (let* ((root (make-temp-file "lisply-search-subdirs" t)))
+    (unwind-protect
+        (progn
+          (dolist (d '("live" "stale"))
+            (make-directory (expand-file-name d root))
+            (with-temp-file (expand-file-name (concat d "/x.lisp") root)
+              (insert "(define-object x ())\n")))
+          (let* ((config `(:sources ((:name "t" :entries ((:root ,root :repo "t" :repo-root ,root
+                                                          :subdirs ("live")))))))
+                 (source (car (lisply-search--config-sources config)))
+                 (files (lisply-search--source-files source '(".lisp") '(".git") nil)))
+            (should (equal (plist-get source :sparse) '("live")))
+            (should (= (length files) 1))
+            (should (string-suffix-p "/live/x.lisp" (car files))))
+          (let* ((config `(:sources ((:name "t" :entries ((:root ,(expand-file-name "sub" root) :repo "t"
+                                                          :repo-root ,root :subdirs ("a" "b")))))))
+                 (source (car (lisply-search--config-sources config))))
+            (should (equal (plist-get source :sparse) '("sub/a" "sub/b")))))
+      (delete-directory root t))))
+
+(ert-deftest lisply-search-shipped-config-is-distributable ()
+  "Every source in the shipped config is public, and the demos source
+names the live demos only (2026-09-14 ruling: the stale ones stay out
+of any public corpus until they are brought up to date)."
+  (let* ((config-file (expand-file-name
+                       "../lisply-search-config.sexp"
+                       (file-name-directory (or (locate-library "lisply-search")
+                                                load-file-name
+                                                buffer-file-name))))
+         (config (plist-get (lisply-search--read-sexp-file config-file) :lisply-search-config))
+         (sources (lisply-search--config-sources config))
+         (demos (cl-find :demos sources :key (lambda (s) (plist-get s :name)))))
+    (should (cl-every (lambda (s) (eq (plist-get s :distribution) :public)) sources))
+    (should demos)
+    (should (equal (plist-get demos :subdirs)
+                   '("demos-common" "gear" "naca-nurbs" "staircase" "robot" "bus" "brick-wall")))
+    (should (equal (plist-get demos :sparse) (plist-get demos :subdirs)))))
+
 (ert-deftest lisply-search-exclude-patterns-drop-minified-and-vendored ()
   "The shipped config keeps minified assets and vendored static trees
 out of the index, and `**/*.min.css' does not reach an ordinary

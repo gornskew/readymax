@@ -1515,12 +1515,27 @@ of truth, so consult it rather than any list copied into docs. As of
 2026-09-14 the sources are `gendl` (the open-source engine), `readymax`
 (this console's own configuration and lisply backend), `genworks-learn`
 (the Genworks training material, a directory of the private
-`genworks/apps` repository) and `demos` (the Genworks demos:
-naca-nurbs, gear, demos-common with the stateless CAD-export machinery
--- the private `genworks/demos` repository, pinned to its devo branch).
-The two private corpora are fetched at build time only when the build
-has a credential that reads BOTH repositories; see `docker/build
---help`, CORPUS_NETRC.
+`genworks/apps` repository) and `demos` (the LIVE Genworks demos only:
+demos-common with the stateless CAD-export machinery, gear, naca-nurbs,
+staircase, robot, bus, brick-wall -- `:subdirs` of the private
+`genworks/demos` repository, pinned to its devo branch; the older
+applications that repository still carries stay out until they are
+brought up to date). The two private corpora are fetched at build time
+only when the build has a credential that reads BOTH repositories; see
+`docker/build --help`, CORPUS_NETRC.
+
+**Distribution rule (2026-09-14).** The index ships inside a public
+Docker Hub image, so each source carries a `:distribution`, `:public`
+(the default) or `:internal`, and an image build indexes the public
+sources only, whatever its credential can read (`docker/build` and the
+Dockerfile build `:public`; `LISPLY_INDEX_DISTRIBUTION=all`, or
+`lisply-search-build-index` by hand on a console with a `/projects`
+mount, indexes everything present). The training material is public
+because it is served at genworks.dev under the AGPL; the rest of the
+private apps repository (invoicing, letterheads, the sites) is not, and
+no distributed index may reflect an internal application. An internal
+index built at container start from the mount is the planned next
+layer; until it exists, internal corpora are not indexed anywhere.
 
 What is kept out (2026-09-14): `*.min.js`, `*.min.css`, and the
 vendored static trees (`**/3rdpty/**`, `**/static/plugins/**`) via the

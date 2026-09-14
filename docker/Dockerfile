@@ -244,6 +244,11 @@ RUN set -euxo pipefail; \
 # Without the secret the private corpus is skipped.  To make a missing
 # corpus fail the build instead, set LISPLY_INDEX_STRICT=true
 # (docker/build --strict-index).
+#
+# This is a PUBLIC build (:public below): sources marked :internal in
+# lisply-search-config.sexp are neither cloned nor indexed, whatever
+# the credential can read.  The image goes to Docker Hub; no internal
+# application may be reflected in the index it carries (2026-09-14).
 ARG LISPLY_INDEX_STRICT=false
 RUN --mount=type=secret,id=corpus_netrc,target=/home/emacs-user/.netrc,uid=1000,gid=1000 \
    set -euxo pipefail; \
@@ -256,7 +261,7 @@ RUN --mount=type=secret,id=corpus_netrc,target=/home/emacs-user/.netrc,uid=1000,
        --eval "(setq lisply-search-services-path \"/home/emacs-user/skewed-emacs/dot-files/emacs.d/sideloaded/lisply-backend/lisply-search-config.sexp\")" \
        --eval "(setq lisply-search-index-path \"~/.emacs.d/sideloaded/lisply-backend/lisply-search-index.sexp\")" \
        -l lisply-search.el \
-       --eval "(lisply-search-build-index-with-clone \"${GIT_BRANCH}\")"; \
+       --eval "(lisply-search-build-index-with-clone \"${GIT_BRANCH}\" nil :public)"; \
      test -s ~/.emacs.d/sideloaded/lisply-backend/lisply-search-index.sexp \
        || { echo "ERROR: the lisply_search index was not written" >&2; exit 1; }; \
    fi

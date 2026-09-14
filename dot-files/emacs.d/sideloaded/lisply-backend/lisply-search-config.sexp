@@ -31,7 +31,21 @@
 ;;;              reported relative to it)
 ;;;   :sparse    subdirectories to check out when the corpus is a small
 ;;;              part of a large repository
+;;;   :subdirs   the directories under :root that make up the corpus: the
+;;;              scan stays inside them, and they are the sparse checkout
+;;;              when no :sparse is given
 ;;;   :branch    overrides the build's branch for that clone (optional)
+;;;
+;;; Each source (the level above the entries) may say :distribution
+;;; :public (the default) or :internal.  THE INDEX SHIPS INSIDE A PUBLIC
+;;; DOCKER HUB IMAGE: an image build indexes the :public sources only,
+;;; whatever credentials it holds, and an :internal source is for a
+;;; console working from a /projects mount (docker/build and the
+;;; Dockerfile pass :public; LISPLY_INDEX_DISTRIBUTION=all or
+;;; `lisply-search-build-index' by hand indexes everything present).
+;;; The rule, 2026-09-14: the training material is public, the rest of
+;;; the private apps repository (invoicing, letterheads, the sites) is
+;;; not, and no distributed index may reflect an internal app.
 
 (:lisply-search-config
  (:index-path "~/.emacs.d/sideloaded/lisply-backend/lisply-search-index.sexp"
@@ -39,11 +53,13 @@
   :preextract-max-lines 24
   :preextract-max-chars 1200
   :sources ((:name "gendl"
+             :distribution :public
              :entries ((:root "gendl"
                         :repo "gendl"
                         :repo-url "https://gitlab.common-lisp.net/gendl/gendl"
                         :repo-root "gendl")))
             (:name "readymax"
+             :distribution :public
              :entries ((:root "readymax"
                         :repo "readymax"
                         :repo-url "https://github.com/gornskew/readymax"
@@ -54,25 +70,38 @@
             ;; an index until 2026-09-09.  It is one directory of the
             ;; PRIVATE genworks/apps repository: fetched as a sparse
             ;; checkout when the build has a credential, skipped otherwise.
+            ;; Public because the material itself is: it is served at
+            ;; genworks.dev under the AGPL.  Nothing else in that
+            ;; repository is, and nothing else in it is a source.
             (:name "genworks-learn"
+             :distribution :public
              :entries ((:root "gw/apps/genworks-learn"
                         :repo "apps"
                         :repo-url "https://gitlab.genworks.com/genworks/apps.git"
                         :repo-root "gw/apps"
                         :sparse ("genworks-learn"))))
-            ;; The Genworks demos (2026-09-14): naca-nurbs, gear,
-            ;; demos-common with the stateless CAD-export machinery
-            ;; (register-cad-export!, define-cad-export), the worked
-            ;; examples of a public Gendl app.  A PRIVATE repository on
-            ;; gitlab.genworks.com, so the build credential (CORPUS_NETRC)
-            ;; has to read it as well as genworks/apps.  Its default
-            ;; branch is devo and the deployed demos come from it, so the
-            ;; clone is pinned there whatever branch the image builds from.
+            ;; The Genworks demos (2026-09-14): the LIVE ones only -- the
+            ;; systems the stack hosts publish, whose source the pages
+            ;; already show (demos-common with the stateless CAD-export
+            ;; machinery, gear, naca-nurbs, staircase, robot, bus,
+            ;; brick-wall).  The older applications the repository still
+            ;; carries (gorg, prasad, timer, bench, lumber, pui, deck,
+            ;; house, tw-practice, the attic) stay out of any public
+            ;; corpus until they are brought up to date; ci/cold-load.lisp
+            ;; in the repository says why each one does not load.  A
+            ;; PRIVATE repository on gitlab.genworks.com, so the build
+            ;; credential (CORPUS_NETRC) has to read it as well as
+            ;; genworks/apps.  Its default branch is devo and the deployed
+            ;; demos come from it, so the clone is pinned there whatever
+            ;; branch the image builds from.
             (:name "demos"
+             :distribution :public
              :entries ((:root "gw/demos"
                         :repo "demos"
                         :repo-url "https://gitlab.genworks.com/genworks/demos.git"
                         :repo-root "gw/demos"
+                        :subdirs ("demos-common" "gear" "naca-nurbs"
+                                  "staircase" "robot" "bus" "brick-wall")
                         :branch "devo"))))
 
   :ignore-dirs (".git" "node_modules" "dist" "build" "vendor" "target" ".cache" "logs" "tmp" "docker")

@@ -207,15 +207,24 @@ top-level key is `:lisply-search-config'."
   "Extract sources from CONFIG as a flat list of entry plists.
 Each entry carries :name :root :repo :repo-root :repo-url, plus the
 optional :sparse (paths for a sparse checkout when the corpus is one
-directory of a larger repo) and :branch (overriding the build's
-default branch for that clone)."
+directory of a larger repo), :subdirs (the directories under :root that
+make up the corpus -- the scan is limited to them, and they double as
+the sparse checkout when no :sparse is given) and :branch (overriding
+the build's default branch for that clone).
+
+A source's :distribution, :public (the default) or :internal, says
+whether it may be baked into a distributed image.  An :internal source
+exists for a console working from a /projects mount and is never
+indexed for a :public build (2026-09-14: the training material is
+public, the rest of the private apps repository is not, and an index
+inside a Docker Hub image must never carry the latter)."
   (let ((sources (lisply-search--pget config :sources)))
     (mapcan
      (lambda (source)
-       (cl-destructuring-bind (&key name entries) source
+       (cl-destructuring-bind (&key name entries distribution &allow-other-keys) source
          (mapcar
           (lambda (entry)
-            (cl-destructuring-bind (&key root repo repo-root repo-url sparse branch
+            (cl-destructuring-bind (&key root repo repo-root repo-url sparse branch subdirs
                                          &allow-other-keys)
                 entry
               (let* (;; Expand relative paths from /projects
@@ -224,15 +233,42 @@ default branch for that clone)."
                                  root))
                      (abs-repo-root (if (and repo-root (not (file-name-absolute-p repo-root)))
                                         (expand-file-name repo-root "/projects")
-                                      (or repo-root abs-root))))
+                                      (or repo-root abs-root)))
+                     (subdirs (lisply-search--to-list subdirs))
+                     (root-in-repo (and abs-root abs-repo-root
+                                        (file-relative-name abs-root abs-repo-root)))
+                     (sparse (or (lisply-search--to-list sparse)
+                                 (mapcar (lambda (d)
+                                           (if (member root-in-repo '(nil "." ""))
+                                               d
+                                             (concat (file-name-as-directory root-in-repo) d)))
+                                         subdirs))))
                 (list :name (intern (concat ":" name))  ; keyword-ify
                       :root abs-root
                       :repo repo
                       :repo-root abs-repo-root
                       :repo-url repo-url
-                      :sparse (lisply-search--to-list sparse)
-                      :branch branch))))
+                      :sparse sparse
+                      :subdirs subdirs
+                      :branch branch
+                      :distribution (or distribution :public)))))
           entries)))
+     sources)))
+
+(defun lisply-search--sources-for-distribution (sources distribution)
+  "The SOURCES an index built for DISTRIBUTION may carry.
+DISTRIBUTION :all keeps every source; :public keeps only those whose
+:distribution is :public and logs each one left out.  Any other value
+is treated as :public: the safe reading of a build that did not say."
+  (if (eq distribution :all)
+      sources
+    (cl-remove-if-not
+     (lambda (s)
+       (or (eq (plist-get s :distribution) :public)
+           (progn
+             (lisply-search--log "INTERNAL source left out of the %s index: %s (%s)"
+                                 distribution (plist-get s :name) (plist-get s :root))
+             nil)))
      sources)))
 
 (defun lisply-search--config-extensions (config &optional language)
@@ -499,11 +535,33 @@ the character cap holds whatever the line count (see
           (cl-incf total-size (or (file-attribute-size (file-attributes path)) 0)))))
     (format "%d-%d" count total-size)))
 
-(defun lisply-search-build-index ()
-  "Build search index from the lisply-search-config.sexp sources."
+(defun lisply-search--source-files (source extensions ignore-dirs excludes)
+  "The files of SOURCE to index: those under its :root, or under each of
+its :subdirs when it names some.  A missing root or subdirectory is
+logged and yields nothing."
+  (let* ((root (plist-get source :root))
+         (subdirs (plist-get source :subdirs))
+         (roots (if subdirs
+                    (mapcar (lambda (d) (expand-file-name d root)) subdirs)
+                  (list root)))
+         files)
+    (dolist (r roots)
+      (if (not (file-exists-p r))
+          (lisply-search--log "WARNING: Source %s missing: %s"
+                              (if subdirs "subdirectory" "root") r)
+        (setq files (nconc files (lisply-search--list-files r extensions ignore-dirs excludes)))))
+    files))
+
+(defun lisply-search-build-index (&optional distribution)
+  "Build search index from the lisply-search-config.sexp sources.
+DISTRIBUTION is :all (the default here: every source present on the
+host is indexed, for a console working from a /projects mount) or
+:public (only sources marked for distribution, for an image)."
   (interactive)
   (let* ((config (lisply-search--read-config))
-         (sources (lisply-search--config-sources config))
+         (distribution (or distribution :all))
+         (sources (lisply-search--sources-for-distribution
+                   (lisply-search--config-sources config) distribution))
          (extensions (lisply-search--config-extensions config))
          (ignore-dirs (lisply-search--config-ignore-dirs config))
          (excludes (lisply-search--config-exclude-paths config))
@@ -513,17 +571,15 @@ the character cap holds whatever the line count (see
              lisply-search-services-path))
     ;; Scan each source
     (dolist (source sources)
-      (let ((root (plist-get source :root)))
-        (if (not (file-exists-p root))
-            (lisply-search--log "WARNING: Source root missing: %s" root)
-          (dolist (path (lisply-search--list-files root extensions ignore-dirs excludes))
-            (push (lisply-search--build-file-entry source path config) entries)))))
+      (dolist (path (lisply-search--source-files source extensions ignore-dirs excludes))
+        (push (lisply-search--build-file-entry source path config) entries)))
     (when (null entries)
       (error "lisply-search: nothing to index -- every configured source root is missing"))
     ;; Build index plist
     (let* ((files (nreverse entries))
            (index (list :version lisply-search--index-version
                         :generated-at (format-time-string "%Y-%m-%dT%H:%M:%SZ" nil t)
+                        :distribution distribution
                         :checksum (lisply-search--compute-checksum files)
                         :config config
                         :files (lisply-search--to-vector files))))
@@ -599,11 +655,13 @@ afterwards."
           (lisply-search--log "Clone landed but SOURCE MISSING inside it: %s" root)
           nil)))))))
 
-(defun lisply-search--clone-all-sources (config branch)
+(defun lisply-search--clone-all-sources (config branch &optional sources)
   "Make every source in CONFIG present, cloning where needed.
-Returns the list of source roots still missing afterwards; nil means
-every source is present."
-  (let ((sources (lisply-search--config-sources config))
+SOURCES, when given, is the subset to make present (the sources of one
+distribution); otherwise every configured source.  Returns the list of
+source roots still missing afterwards; nil means every source is
+present."
+  (let ((sources (or sources (lisply-search--config-sources config)))
         missing)
     (if (null sources)
         (progn
@@ -620,11 +678,17 @@ every source is present."
                           (if missing (format " -- %s" (string-join missing ", ")) ""))
       missing)))
 
-(defun lisply-search-build-index-with-clone (&optional branch strict)
+(defun lisply-search-build-index-with-clone (&optional branch strict distribution)
   "Clone corpora as needed, then build the index from every source present.
 BRANCH is the default git branch for clones (master); an entry's own
 :branch wins.  In Docker builds /projects/ is empty and the repos are
 cloned fresh; in dev the existing repos are used as-is.
+
+DISTRIBUTION is :public (the default, and what an image build must
+use: sources marked :internal are neither cloned nor indexed) or :all
+(every source, for an index built on a host that holds the internal
+corpora).  The environment variable LISPLY_INDEX_DISTRIBUTION
+(\"public\" or \"all\") sets it when the argument is nil.
 
 A source that cannot be fetched is logged as SOURCE MISSING and
 skipped, and the index is still built from the rest: a partial corpus
@@ -635,17 +699,22 @@ build step still exited 0.)  When STRICT is non-nil, or the environment
 variable LISPLY_INDEX_STRICT is \"true\", a missing source is an error
 instead, so a CI build cannot go green with a short corpus."
   (interactive)
-  (let ((config (lisply-search--read-config))
-        (strict (or strict (equal (getenv "LISPLY_INDEX_STRICT") "true"))))
+  (let* ((config (lisply-search--read-config))
+         (strict (or strict (equal (getenv "LISPLY_INDEX_STRICT") "true")))
+         (distribution (or distribution
+                           (if (equal (getenv "LISPLY_INDEX_DISTRIBUTION") "all") :all :public))))
     (if (not config)
         (error "lisply-search: no config found at %s" lisply-search-services-path)
-      (let ((missing (lisply-search--clone-all-sources config branch)))
+      (let* ((sources (lisply-search--sources-for-distribution
+                       (lisply-search--config-sources config) distribution))
+             (missing (lisply-search--clone-all-sources config branch sources)))
+        (lisply-search--log "Building the %s index" distribution)
         (when missing
           (lisply-search--log "SOURCE MISSING: %s" (string-join missing ", ")))
         (if (and missing strict)
             (error "lisply-search: %d source(s) missing in strict mode: %s"
                    (length missing) (string-join missing ", "))
-          (lisply-search-build-index))))))
+          (lisply-search-build-index distribution))))))
 
 
 ;;;; ============================================================
@@ -716,6 +785,13 @@ Returns hash-table: term -> list of (:snippet S :file F :source SRC :entry E)."
                       :mtime mtime
                       :index index
                       :config (plist-get index :config)
+                      ;; The sources the index actually carries: a
+                      ;; :public build leaves the :internal ones out.
+                      :present-sources
+                      (let (names)
+                        (dolist (f (lisply-search--to-list (plist-get index :files)))
+                          (cl-pushnew (plist-get f :source) names))
+                        (nreverse names))
                       :snippet-map (lisply-search--build-snippet-map index)
                       :snippet-count (lisply-search--count-snippets index))))
         lisply-search--cache))))
@@ -1027,8 +1103,9 @@ Returns plist: (:query Q :search-mode :lexical :match-mode M
                         search-mode)
                 warnings))
         ;; Determine which sources to search
-        (let* ((all-sources (mapcar (lambda (s) (plist-get s :name))
-                                    (lisply-search--config-sources config)))
+        (let* ((all-sources (or (plist-get cache :present-sources)
+                                (mapcar (lambda (s) (plist-get s :name))
+                                        (lisply-search--config-sources config))))
                (requested (when requested-sources
                             (mapcar (lambda (s)
                                       (if (keywordp s) s

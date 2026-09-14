@@ -206,7 +206,7 @@ each working his own rune arrangement.
 | `ping_lisp` | is anyone home |
 | `get_docs` / `get_docs_list` | the ship's education packets, served on demand |
 | `http_request` | reach the room's HTTP services through one gate |
-| `lisply_search` | search the ship's indexed document corpus (Readymax rooms) |
+| `lisply_search` | search the pre-packed Gendl index (Readymax rooms) — see The Chart Locker |
 
 **Where he takes his orders.** Aboard ship, `./basilisk up`
 generates the client registries (`mcp/claude_desktop_config.json`
@@ -246,10 +246,33 @@ strains carry the full glass with a GUI behind it. A lite room
 takes the glass aboard while underway
 (`M-x skewed-install` `headless-shell`).
 
+### The Chart Locker — a Gendl search index, pre-packed
+
+Every Readymax image comes pre-packed with a `lisply_search` index,
+built at casting time: a lexical index over the
+[Gendl](https://gitlab.common-lisp.net/gendl/gendl) engine's source
+and documentation, Readymax's own elisp and configuration, the
+Genworks training material ([genworks.dev](https://genworks.dev)) and
+the live Genworks demos. A cyborg that boards asks `lisply_search`
+before it writes GDL and gets back whole `define-object` forms and
+documentation sections, each with its file and line range — no
+`/projects` mount required. When the corpora on your own mount move,
+rebuild it aboard with `M-x lisply-search-build-index`.
+
+What the locker holds is public by construction: the sources are
+listed in
+`dot-files/emacs.d/sideloaded/lisply-backend/lisply-search-config.sexp`,
+each marked for distribution, and a casting indexes only those, with
+minified assets and vendored trees left out. How it matches and ranks
+is written up in that directory's `CLAUDE.md`.
+
 ### What Else Is Aboard
 
 Beyond the Captain and the Protocol Officer, the room carries working
 gear — every piece of it real and reachable:
+
+- **The chart locker** (`lisply_search`): a Gendl search index packed
+  at casting time — see The Chart Locker above.
 
 - **The gangway** (port 6942, answering to `webterm` from any shell
   aboard): how a biological walks aboard through a web browser
