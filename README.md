@@ -8,6 +8,18 @@ License, or (at your option) any later version.  Distributed WITHOUT
 ANY WARRANTY; see <https://www.gnu.org/licenses/agpl-3.0.html>.
 -->
 
+> [!IMPORTANT]
+> **Looking for Skewed Emacs?**  The plain-language "corporate" fork
+> lives at [genworks/readymacs](https://github.com/genworks/readymacs).
+>
+> This repository (`readymax`) is the gaming-language upstream and is
+> maintained separately.  A clone whose `origin` still points at
+> `gornskew/skewed-emacs` lands here; to follow the fork instead:
+>
+> ```bash
+> git remote set-url origin https://github.com/genworks/readymacs.git
+> ```
+
 # Readymax: a Ship's Ready Room, a land-side Lifepod, or a galaxy-traveling Space Suit — pre-crewed with a Captain
 
 Aboard a [Basilisk](https://gornskew.com/basilisk/index.html)-class
