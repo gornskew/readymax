@@ -1,7 +1,7 @@
 # Terminal Colors Across the Stack (WT / WSL / bash / Emacs)
 
 Last updated: 2026-08-09. Applies to: Windows + Windows Terminal +
-WSL2 Ubuntu-24.04 + bash + skewed-emacs.
+WSL2 Ubuntu-24.04 + bash + Readymax worn as the space suit.
 
 ## The four layers and who owns what
 
@@ -9,8 +9,8 @@ WSL2 Ubuntu-24.04 + bash + skewed-emacs.
 |-------|------|-------------|
 | Windows Terminal | Background, foreground, the 16 ANSI palette colors, cursor, selection | `settings.json` (Settings → "Open JSON file"; on disk under `AppData/Local/Packages/Microsoft.WindowsTerminal_*/LocalState/`) |
 | WSL/Ubuntu | Nothing color-specific | — |
-| bash | `LS_COLORS` (ls), `PS1` (prompt), via the `theme` function — all **24-bit truecolor**, so they bypass the WT palette entirely | `~/.bash_profile` (symlink → `skewed-emacs/dot-files/bash_profile`), `~/.bashrc` |
-| Emacs | Its own faces (modus-vivendi / modus-operandi); in GUI and truecolor terminals it ignores the WT palette too | `emacs.d` in skewed-emacs |
+| bash | `LS_COLORS` (ls), `PS1` (prompt), via the `theme` function — all **24-bit truecolor**, so they bypass the WT palette entirely | `~/.bash_profile` (symlink → `readymax/dot-files/bash_profile`), `~/.bashrc` |
+| Emacs | Its own faces (modus-vivendi / modus-operandi); in GUI and truecolor terminals it ignores the WT palette too | `emacs.d` in readymax |
 
 Key insight: the WT palette only matters for programs that use the
 classic 16 ANSI colors — git, grep, man, htop, stock ls defaults. Our

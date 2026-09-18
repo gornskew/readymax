@@ -1,12 +1,13 @@
-# A First Session: Building a Staircase Through MCP
+# A First Session: Building a Staircase Through the Protocol Officer
 
-This is a lightly edited transcript of a real first session: Claude
-(via Claude Desktop) connected to a freshly started skewed-emacs
-container stack, talking to the `skewed-emacs` (Emacs) and `gendl-ccl`
-(Gendl/Common Lisp) MCP servers. Every tool call and result below is
+This is a lightly edited transcript of a real first session: a cyborg
+(Claude, arriving in Claude Desktop) calling on a freshly raised
+Basilisk ship, through two crew channels -- the ready room's (the
+Captain, Emacs Lisp) and the bridge's (the First Officer, Gendl on
+Common Lisp). Every tool call and result below is
 genuine — captured live, trimmed only for brevity.
 
-The stack was started with nothing but:
+The ship was raised with nothing but:
 
 ```bash
 ./basilisk up
@@ -21,7 +22,7 @@ want treads of 2x6 deck lumber.
 **Claude:** I'll start by saying hello to Emacs, then set up a
 parametric staircase model in Gendl.
 
-*Tool call — `skewed-emacs__lisp_eval`:*
+*Tool call — `ready-room__lisp_eval`:*
 
 ```elisp
 (with-current-buffer "*scratch*"
@@ -40,7 +41,7 @@ I'll define it as a Gendl object: you give it a total rise and run,
 and it *computes* how many steps you need, keeping every riser under a
 building-code-style limit, and lays out the treads in space.
 
-*Tool call — `gendl-ccl__lisp_eval`:*
+*Tool call — `bridge__lisp_eval`:*
 
 ```lisp
 (define-object staircase (base-object)
@@ -82,7 +83,7 @@ Result: #<GDL-CLASS STAIRCASE>
 The object is defined. Notice there's no staircase *yet* — just
 knowledge about staircases. Let me instantiate one and interrogate it:
 
-*Tool call — `gendl-ccl__lisp_eval`:*
+*Tool call — `bridge__lisp_eval`:*
 
 ```lisp
 (progn
@@ -112,7 +113,7 @@ Now your actual dimensions — 3.1m rise, 3.9m run. I don't rebuild
 anything; I just change the inputs, and Gendl's dependency tracking
 recomputes whatever is affected:
 
-*Tool call — `gendl-ccl__lisp_eval`:*
+*Tool call — `bridge__lisp_eval`:*
 
 ```lisp
 (progn
@@ -138,7 +139,7 @@ Your staircase: **17 risers at 182.4mm, 16 treads at 243.8mm** — the
 riser height stayed legal automatically. One more question the model
 can answer: what do you buy at the lumber yard?
 
-*Tool call — `gendl-ccl__lisp_eval`:*
+*Tool call — `bridge__lisp_eval`:*
 
 ```lisp
 (let* ((boards-per-tread (the boards-per-tread))
@@ -167,16 +168,16 @@ list.
 
 ## What just happened
 
-- The agent never edited a file, ran a build, or restarted anything —
-  it *conversed with a live Lisp machine*, defining and refining a
-  running model incrementally. That is the REPL workflow Lisp people
-  have always had, now driveable by any MCP-capable agent.
-- Two different Lisp environments (Emacs elisp and Gendl Common Lisp)
-  were driven through the same uniform tool protocol
-  (`lisp_eval` / `http_request` / `ping_lisp`), served by
-  [lisply-mcp](https://github.com/gornskew/lisply-mcp).
-- Everything ran inside the container sandbox that `./basilisk up`
-  started; the host machine was never touched.
+- The cyborg never edited a scroll, cast anything, or woke anyone
+  afresh — it *conversed with a living resident*, defining and
+  refining a running model incrementally. That is the REPL workflow
+  Lisp people have always had, now open to any craft that speaks MCP.
+- Two residents of different species (the Captain in Emacs Lisp, the
+  First Officer in Gendl's Common Lisp) were worked through the same
+  small set of tools (`lisp_eval` / `http_request` / `ping_lisp`),
+  granted by the same [Protocol Officer](https://github.com/gornskew/cyborg-whisperer).
+- Everything happened aboard the ship `./basilisk up` raised; the
+  dock was never touched.
 
-Try it yourself: any MCP client works. See the README Quick Start for
-the two-minute setup.
+Try it yourself: any craft that speaks MCP will do. See the README's
+Quickest Start for the two-minute raising.

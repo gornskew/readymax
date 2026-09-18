@@ -1,12 +1,12 @@
 # Recording the Demo GIF
 
 Target: a ~30-second GIF for the README showing the arc:
-`./basilisk up` → dashboard → an AI agent driving Gendl through MCP.
+`./basilisk up` → dashboard → a cyborg driving the First Officer's Gendl through the Protocol Officer.
 
 ## Storyboard
 
 1. (~5s) `./basilisk up` scrolling, ending on healthy services.
-2. (~5s) `eskew` → the skewed-emacs dashboard (ASCII banner, backends green).
+2. (~5s) `rmax` → the room's day-board (the marquee, every crew channel green).
 3. (~15s) `claudly` (or any agent CLI) prompted with:
    "Build me a staircase in Gendl — 3.1m rise, 3.9m run, 2x6 treads"
    — capture the tool-call spinner and the numeric answer coming back.

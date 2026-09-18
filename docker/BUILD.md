@@ -1,4 +1,12 @@
-# Skewed Emacs Docker Build System
+# The Vat Hall: casting the room, and its strains
+
+A Readymax room is cast from the shipwright's plans in
+`docker/Dockerfile` by `docker/build`, in several strains -- some
+lighter, some fuller -- and every casting is pushed to the room's home
+planet, `gornskew/readymax` on Docker Hub. This scroll is the casting
+foundry's own: the strains, their names, and how to cast one. The
+CI line that casts them on every push is [CI.md](CI.md); the
+translators some strains carry are [README.md](README.md).
 
 ## Branch-Prefixed Additive Naming Scheme
 
@@ -16,11 +24,11 @@ Where:
 
 **devo branch:**
 ```
-gornskew/skewed-emacs:devo-lite              # Base only
-gornskew/skewed-emacs:devo-default           # Base + snapshotting (THE default)
-gornskew/skewed-emacs:devo-aituis            # Default + AI TUIs
-gornskew/skewed-emacs:devo-gui               # Base + GUI workstation
-gornskew/skewed-emacs:devo-gui-aituis        # Everything
+gornskew/readymax:devo-lite              # Base only
+gornskew/readymax:devo-default           # Base + snapshotting (THE default)
+gornskew/readymax:devo-aituis            # Default + AI TUIs
+gornskew/readymax:devo-gui               # Base + GUI workstation
+gornskew/readymax:devo-gui-aituis        # Everything
 ```
 
 **master branch:** same pattern with the `master-` prefix.
@@ -32,11 +40,11 @@ of `docker/Dockerfile`).  Measurements behind the layering:
 `docs/SLIMMING_MEASUREMENTS.md`.
 
 ### Base (included in all variants)
-- **Emacs configuration**: Full skewed-emacs config
-- **lisply-mcp**: MCP server for Lisp evaluation
+- **The Captain's configuration**: the full Readymax scrolls
+- **The Protocol Officer** (cyborg-whisperer): the MCP middleware through which cyborgs call on the Captain
 - **vterm**: Terminal emulator in Emacs
 - **ttyd**: Web-based terminal
-- **Node.js**: Required for lisply-mcp
+- **Node.js**: the Officer stands on it
 - **skewed-install**: on-demand module installer (elisp-first:
   `M-x skewed-install`; modules: AI TUIs, copilot-language-server,
   headless-shell).  Installs are ephemeral — for baked-in persistence
@@ -141,7 +149,7 @@ docker/build --all --no-push
 
 ```bash
 # Development workflow: Build everything for current branch
-cd /projects/skewed-emacs
+cd /projects/readymax
 docker/build --all
 
 # CI/CD: Build and push master branch

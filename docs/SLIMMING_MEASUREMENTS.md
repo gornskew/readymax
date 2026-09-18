@@ -1,7 +1,7 @@
 # Image Slimming: Measurements (2026-08-11)
 
 Data behind the slimming initiative.  All numbers
-measured on a WSL2 dev host against `gornskew/skewed-emacs:devo-full`
+measured on a WSL2 dev host against `gornskew/readymax:devo-full` (then still named skewed-emacs)
 (977MB compressed download / 3.72GB on disk) plus fresh-closure
 experiments on `debian:latest` containers.
 
@@ -12,7 +12,7 @@ experiments on `debian:latest` containers.
 | GUI giga-layer (one RUN: emacs-gtk + chromium + fonts + gs/poppler) | 1.18GB |
 | AUI homes: .claude 285 + .codex 301 + .gemini 122 + .grok 157 | 865MB |
 | Node 24 (/usr/local copy) | 212MB |
-| skewed-emacs repo copy (dot-files 77, docker/ 65 -- see dup below) | 147MB |
+| readymax repo copy (dot-files 77, docker/ 65 -- see dup below) | 147MB |
 | common apt layer (git, curl, ssh, libvterm, gnupg, ...) | 134MB |
 | Debian base | 87MB |
 | copilot-language-server (/usr/local/bin) | 67MB |

@@ -1,40 +1,43 @@
-# Standing Project Instructions for AI Clients
+# Standing Orders for a Cyborg Aboard
 
-Durable instructions for an AI agent (Claude Desktop, Claude Code, Codex,
-or any MCP-capable client) connected to a running Basilisk stack.
+Durable orders for a cyborg (Claude Desktop, Claude Code, Codex, or
+any craft that speaks MCP) calling on a raised Basilisk ship.
 
-Where to put them:
+Where to post them:
 
 - **Claude Desktop**: create a Project and paste everything below the
-  horizontal rule into the Project's custom instructions.
+  rule into the Project's custom instructions.
 - **Claude Code**: add it to your project's `CLAUDE.md`.
 - **Codex**: add it to `AGENTS.md`.
-- **Other clients**: wherever standing, every-session instructions live.
+- **Other craft**: wherever standing, every-session instructions go.
 
-Prefer a one-shot first message instead of standing instructions? Use
-[`mcp/opening-prompt.md`](../mcp/opening-prompt.md) — it walks a fresh
-session through the same bootstrap interactively.
+Prefer a single first hail to standing orders? Use
+[`mcp/opening-prompt.md`](https://github.com/gornskew/basilisk/blob/devo/mcp/opening-prompt.md)
+from the Basilisk clone — it walks a fresh session through the same
+boarding, one step at a time.
 
 > Note: this repository's own `CLAUDE.md` is for working **on**
-> skewed-emacs (development). This document is for **using** it. Keep
-> them separate.
+> Readymax (refitting the room). This scroll is for **using** it.
+> Keep the two apart.
 
 ---
 
-## At the start of each session
+## On boarding, every session
 
-1. **Learn buffer access first.** Call the skewed-emacs docs tool
-   (`get_docs` with `id="claude-md"`) and skim just enough to read
-   buffers safely — Buffer Operations and "How to access Emacs state".
-2. **Read the Dashboard** for environment status, services, and
-   available backends:
+1. **Learn to handle scrolls before touching one.** Ask the Captain's
+   education packet (the `get_docs` tool of the ready room's channel,
+   `id="claude-md"`) and read just enough to hold an open scroll
+   safely — the Buffer Operations section and "How to access Emacs
+   state".
+2. **Read the day-board** for the ship's state, the crew channels and
+   the residents answering:
 
    ```elisp
    (with-current-buffer "*dashboard*" (buffer-string))
    ```
 
-3. **Read the Daily Focus, if present** (org-mode agenda of
-   Must/Should/Could priorities):
+3. **Read the day's orders, if the Captain keeps them** (the org-mode
+   Daily Focus, Must/Should/Could):
 
    ```elisp
    (progn
@@ -42,49 +45,51 @@ session through the same bootstrap interactively.
      (with-current-buffer "*Org Agenda*" (buffer-string)))
    ```
 
-   Daily Focus is optional. If it errors or is empty, the user hasn't
-   set it up — skip it, and mention that `M-x skewed-daily-focus-init`
-   creates a starter setup.
-4. **Before editing files or using a Lisp backend, finish the training.**
-   Re-read the full skewed-emacs docs (editing patterns, paredit,
-   unbalanced-buffer detection), and read the `claude-md` docs of any
-   backend you'll work with (e.g. `gendl-ccl`).
-5. **Present options before diving in**: current state (which services
-   are healthy), suggested next steps (from priorities/task notes), and
-   any questions.
+   The orders are optional. If this errors or comes back empty, the
+   Captain has not set them up — skip it, and mention that
+   `M-x skewed-daily-focus-init` lays out a starter set.
+4. **Finish your education before editing a scroll or hailing a Lisp
+   resident.** Re-read the Captain's full packet (editing patterns,
+   paredit, how to tell an unbalanced scroll), and read the `claude-md`
+   packet of any resident you will work with (the bridge's, say).
+5. **Report before acting**: the state of the ship (which crew answer),
+   the next steps you propose (from the orders and the task notes),
+   and any questions.
 
-## Durable conventions (no doc re-read required)
+## Standing conventions (no re-reading required)
 
-### Shared-Emacs safety
+### One Captain, shared
 
-You share one live Emacs — current buffer, point, and window state —
-with an active human user.
+You share one live Emacs — the current scroll, point, and the window
+layout — with a biological who is working in it.
 
-- Target buffers explicitly:
+- Name the scroll you mean:
   `(with-current-buffer (find-file-noselect "/path/file") ...)` —
   never bare `find-file` / `switch-to-buffer`.
-- Preserve point with `(save-excursion ...)` around any motion.
-- For read-only access prefer
+- Keep point where you found it: `(save-excursion ...)` around any
+  motion.
+- To read only, prefer
   `(with-temp-buffer (insert-file-contents "/path/file") ...)`.
 - Never assume the "current buffer" is yours.
 
-### Paredit discipline (Lisp files)
+### Paredit discipline (Lisp scrolls)
 
-- Make sure `paredit-mode` is enabled in the buffer before editing.
-- Prefer structural edits; keep parens balanced at every step.
-- Run `(check-parens)` before `(save-buffer)`; if it signals, fix the
-  imbalance before saving.
+- Make sure `paredit-mode` is on in the scroll before editing.
+- Prefer structural edits; keep the parens balanced at every step.
+- Run `(check-parens)` before `(save-buffer)`; if it complains, mend
+  the imbalance before saving.
 
-### Discover backends from the Dashboard — never assume the set
+### Ask the day-board who is aboard — never assume the roster
 
-The Dashboard's "Lisply Backends" section is the source of truth. A
-vanilla install has three (skewed-emacs itself plus two free Gendl
-backends); overlays can add more. If it's unclear which backend a task
-targets, check the task's notes or ask the user.
+The day-board's crew channels are the source of truth. A standard rig
+carries three residents who answer the Lisply dialect (the Captain and
+the two free Gendl rooms, the bridge and the engine room); a stack
+pouch can add more. If it is unclear which resident a task is for,
+read the task's notes or ask the biological.
 
-### Session state lives in org, not in static docs
+### Session state lives in org, not in standing scrolls
 
-If Daily Focus is set up, per-task context (`:HOST:`, `:NOTES:`,
+If the day's orders are kept, per-task context (`:HOST:`, `:NOTES:`,
 LOGBOOK entries) lives in the org entries under `/projects/org/`
-in-container (`~/projects/org/` on the host). Read it from there;
-don't expect documentation to carry session-specific state.
+aboard (`~/projects/org/` on the dock). Read it there; do not expect
+a standing scroll to carry what changes from session to session.

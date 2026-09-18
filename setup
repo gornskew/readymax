@@ -390,9 +390,9 @@ if [ "$with_mcp" = "true" ]; then
                 else
                     echo "  (branch $_branch unavailable; leaving current checkout in place)"
                 fi
-            elif ! git clone --depth 1 --branch "$_branch" https://github.com/gornskew/lisply-mcp.git "$_mcp_dir" > /dev/null 2>&1; then
+            elif ! git clone --depth 1 --branch "$_branch" https://github.com/gornskew/cyborg-whisperer.git "$_mcp_dir" > /dev/null 2>&1; then
                 echo "  Branch $_branch not found in lisply-mcp; falling back to master."
-                git clone --depth 1 --branch master https://github.com/gornskew/lisply-mcp.git "$_mcp_dir" > /dev/null 2>&1 || echo "WARNING: failed to clone lisply-mcp; see docs/HOST_EMACS_MCP.md."
+                git clone --depth 1 --branch master https://github.com/gornskew/cyborg-whisperer.git "$_mcp_dir" > /dev/null 2>&1 || echo "WARNING: failed to clone lisply-mcp; see docs/HOST_EMACS_MCP.md."
             fi
             if [ -d "$_mcp_dir/scripts" ]; then
                 if command -v npm > /dev/null 2>&1; then
