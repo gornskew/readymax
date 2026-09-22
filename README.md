@@ -48,15 +48,10 @@ than conjuring a lifepod or ship's ready room to house him.
 
 ![Readymax Logo](img/skewed-colorful.png)
 
-## Why Readymax? The Inversion
+## How the Room Receives Cyborgs
 
-Elsewhere in the galaxy, the custom is to keep a cyborg *in* the
-room: wired into a single scroll, speaking only through it, one
-more fixture among the furnishings. The room is the world, and the
-cyborg lives in a bottle on a shelf.
-
-Readymax inverts the arrangement. This room keeps no cyborg; it
-*receives* them. The Protocol Officer hands each arrival the room's
+This room keeps no cyborg; it *receives* them. The Protocol Officer
+hands each arrival the room's
 channels, and with them the room itself joins the visiting cyborg's
 own kit: scrolls opened, incantations worked, scriveners set about
 their copying — at the visitor's initiative, under the Captain's
