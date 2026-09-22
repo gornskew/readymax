@@ -69,7 +69,7 @@ way, and offers a visiting cyborg the same reception — each
 resident working his own rune arrangement.
 
 And it matters not what vessel your cyborg arrives in: Claude
-Desktop, Claude Code, Cursor, Grok Build, Gemini CLI, Codex, LM
+Desktop, Claude Code, Grok Build, Gemini CLI, Codex, LM
 Studio, or any craft of your own that speaks MCP — the
 Muster-and-Conduct Protocol, in which a Protocol Officer musters each
 arriving cyborg and conducts it to the crew member it came to see.
