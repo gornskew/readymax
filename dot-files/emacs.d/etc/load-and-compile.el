@@ -144,6 +144,38 @@
 	    third-party-packages))
 
 
+;; A package archive can hand out a torn tarball: MELPA rewrites every
+;; tar in place on its build cycle, and a download that lands during
+;; the write gets a torso (job 17197, 2026-09-28: company's tar read
+;; one second after its mtime, 984,065 of 1,392,640 bytes).  use-package
+;; reports "Failed to install" and carries on, and the build limps to
+;; a failure somewhere unrelated.  Retry the form once after a pause;
+;; a second miss fails the build outright, which is the wanted outcome.
+;; The retry runs with mode hooks delayed: the first attempt already
+;; registered the form's :hook entries, which autoload a feature that
+;; package.el's autoload scrape (it switches to emacs-lisp-mode with
+;; hooks live) cannot load before the package is activated.
+
+(defun package-form-ensured-p (pkg)
+  "Whether use-package form PKG (a list) installs its package from an archive."
+  (let ((cell (memq :ensure (cl-rest pkg))))
+    (if cell (and (cl-second cell) t) use-package-always-ensure)))
+
+(defun eval-use-package-with-retry (pkg)
+  "Evaluate use-package form PKG; if its package did not install, once more."
+  (eval `(use-package ,@pkg))
+  (let ((name (cl-first pkg)))
+    (when (and (package-form-ensured-p pkg)
+               (not (package-installed-p name)))
+      (message "WARNING: %s did not install; retrying once in 10 seconds..." name)
+      (sleep-for 10)
+      (let ((delay (default-value 'delay-mode-hooks)))
+        (setq-default delay-mode-hooks t)
+        (unwind-protect (eval `(use-package ,@pkg))
+          (setq-default delay-mode-hooks delay)))
+      (unless (package-installed-p name)
+        (error "Package %s did not install after a retry" name)))))
+
 (defun setup-packages-and-customizations (&optional config-dir)
   "Install and load packages based on environment (Docker build,
 container, or daemon)."
@@ -207,7 +239,7 @@ container? %s"
 	      (eval `(use-package ,@pkg))
 	    (error (message "WARNING: use-package %s failed in sealed image: %s"
 			    (cl-first pkg) (error-message-string err))))
-	(eval `(use-package ,@pkg)))
+	(eval-use-package-with-retry pkg))
       (let ((float-time (float-time)))
 	(setq elapsed (- float-time curr-time))
 	(setq curr-time float-time))

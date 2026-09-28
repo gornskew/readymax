@@ -85,10 +85,17 @@ default:
     # cached, build speed unaffected.
     - docker image prune -f || true
 
+# One automatic retry on either build leg: a package archive can serve
+# a tarball mid-rewrite (the downstream's job 17197, 2026-09-28,
+# company's tar from MELPA), and the elisp retry in load-and-compile.el
+# is allowed to lose too; a fresh job gets the finished file.
 build-amd64:
   stage: build
   tags:
     - amd64
+  retry:
+    max: 1
+    when: script_failure
   script:
     - docker/build --all --push --skip-manifests --strict-index
 
@@ -96,6 +103,9 @@ build-arm64:
   stage: build
   tags:
     - arm64
+  retry:
+    max: 1
+    when: script_failure
   script:
     - docker/build --all --push --skip-manifests --strict-index
 
