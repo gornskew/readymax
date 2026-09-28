@@ -81,7 +81,9 @@
         ("urgent"       . ?u)
         ("website"      . ?w)
         ("skewed_emacs" . ?k)
-        ("infra"        . ?i)))
+        ("infra"        . ?i)
+        ;; the month's 3-5 project trees; Daily Focus filters on it
+        ("active"       . ?a)))
 
 ;; MoSCoW is a per-item judgement, never inherited: a :could: child
 ;; under a :should: parent otherwise carries both tags in the agenda
@@ -198,10 +200,25 @@
                        (if (my/org-has-urgent-inbox-p) (concat (skewed-icon :lightning) " Urgent (from Inbox)") ""))))
           (tags-todo "must"   ((org-agenda-files (my/org-agenda-files))
                                (org-agenda-overriding-header "Must Do")))
-          (tags-todo "should" ((org-agenda-files (my/org-agenda-files))
-                               (org-agenda-overriding-header "Should Do")))
-          (tags-todo "could"  ((org-agenda-files (my/org-agenda-files))
-                               (org-agenda-overriding-header "Could Do"))))
+          ;; Since the 2026-09-28 weekly review the Should and Could
+          ;; blocks show only the ACTIVE trees: the 3-5 project trees
+          ;; tagged :active: for the month (re-picked at the review),
+          ;; plus the inbox, whose #+FILETAGS carries the tag.  Must is
+          ;; never filtered.  "b" shows what this filter hides.
+          (tags-todo "+should+active"
+                     ((org-agenda-files (my/org-agenda-files))
+                      (org-agenda-overriding-header "Should Do (active trees)")))
+          (tags-todo "+could+active"
+                     ((org-agenda-files (my/org-agenda-files))
+                      (org-agenda-overriding-header "Could Do (active trees)"))))
+         ((org-agenda-tag-filter-preset '("-meta"))))
+        ("b" "Backlog outside the active trees"
+         ((tags-todo "+should-active"
+                     ((org-agenda-files (my/org-agenda-files))
+                      (org-agenda-overriding-header "Should, not active this month")))
+          (tags-todo "+could-active"
+                     ((org-agenda-files (my/org-agenda-files))
+                      (org-agenda-overriding-header "Could, not active this month"))))
          ((org-agenda-tag-filter-preset '("-meta"))))
         ("i" "Inbox Review"
          ((alltodo "" ((org-agenda-files ',(when my/org-future-file (list my/org-future-file)))
