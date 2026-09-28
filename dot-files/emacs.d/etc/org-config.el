@@ -83,6 +83,12 @@
         ("skewed_emacs" . ?k)
         ("infra"        . ?i)))
 
+;; MoSCoW is a per-item judgement, never inherited: a :could: child
+;; under a :should: parent otherwise carries both tags in the agenda
+;; and shows in both the Should and Could blocks (23 such items on
+;; 2026-09-28).  Project trees keep inheriting their topic tags.
+(setq org-tags-exclude-from-inheritance '("must" "should" "could"))
+
 ;; ============================================================================
 ;; Clocking
 ;; ============================================================================
