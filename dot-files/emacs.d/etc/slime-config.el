@@ -19,6 +19,11 @@
 			      "\\.sexpr\\'" "\\.sexps\\'"))
        (add-to-list 'auto-mode-alist (cons extension 'lisp-mode)))
      (slime-setup '(slime-fancy slime-banner slime-tramp))
+     ;; M-. on a Gendl object type lists its define-object and every
+     ;; define-object-amendment, the original first (etc/gendl-definitions.el).
+     (require 'gendl-definitions)
+     (when (eq slime-find-definitions-function 'slime-find-definitions-rpc)
+       (setq slime-find-definitions-function 'gendl-definitions-find))
      (add-hook 'slime-connected-hook 'set-slime-shortcuts)
      (add-hook 'slime-connected-hook 'customise-slime)
      ;;(add-hook 'slime-connected-hook 'load-and-or-start-gendl)
