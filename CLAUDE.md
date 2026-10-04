@@ -6,6 +6,11 @@ stack.  It is deliberately mixed-register: lore nouns are bound to
 their referents in parentheses at first use, then used freely;
 commands, identifiers, and warnings never take the voice.
 
+Contents: the primer and the file helpers · the downstream fork · the
+room and its neighbours · running the stack · keeping the daemon
+answering · git · editing · Lisp-side notes · webshot · long-running
+processes · showing the user a buffer.
+
 ## Before anything else: the primer and the file helpers
 
 **Work through the Captain, not a shell.**  Reading, searching and
@@ -18,26 +23,13 @@ user has open rather than underneath it.  Why it matters: a file
 changed underneath one of the daemon's buffers makes Emacs prompt, and
 a prompt stops every MCP call.  The short guide is
 `get_docs(id="primer")` (source:
-`dot-files/emacs.d/sideloaded/lisply-backend/PRIMER.md`); where this
-file's older lessons disagree with it, the primer is current.  The
-helpers live in `lisply-file-tools.el` beside the other lisply-backend
-sources, with ERT tests in `lisply-file-tools-test.el`; a new helper
-goes there, with a test, and into `lisply-help-groups`.
-
-## Overview
-
-This setup provides a complete Lisp development environment with:
-- **The ready room** (this repo's container, compose service
-  `ready-room`): the Captain (a long-running Emacs daemon with the
-  Readymax configuration) attended by the Protocol Officer (the
-  lisply-mcp layer that receives arriving agents)
-- **The Gendl rooms** (`bridge`, `engine-room`): 3D CAD/modeling
-  residents with Common Lisp REPLs, answering the same lisply dialect
-- **Network Integration**: the rooms share the ship's Docker network
-  (its name minted fresh at each raising, kept in `basilisk/.ship`),
-  which carries SLIME connections
-- **MCP Services**: every room exposes its resident via the Model
-  Context Protocol for external tool integration
+`dot-files/emacs.d/sideloaded/lisply-backend/PRIMER.md`); the editing
+reference behind it is `get_docs(id="claude-md")` (source:
+`dot-files/emacs.d/sideloaded/lisply-backend/CLAUDE.md`).  Where this
+file disagrees with the primer, the primer is current.  The helpers
+live in `lisply-file-tools.el` beside the other lisply-backend sources,
+with ERT tests in `lisply-file-tools-test.el`; a new helper goes there,
+with a test, and into `lisply-help-groups`.
 
 ## The downstream fork: every edit here has a Readymacs analog
 
@@ -54,914 +46,315 @@ carry a change down: the fork merges upstream only when chosen, and a
 session that leaves the two apart leaves the next one to find out
 which is right.
 
-## MCP Integration
+## The room and its neighbours
 
-The containers are now wrapped as MCP (Model Context Protocol) services, providing seamless integration with Claude Code and other MCP-enabled tools.
+- **The ready room** (this repo's container, compose service
+  `ready-room`): the Captain (a long-running Emacs daemon with the
+  Readymax configuration) attended by the Protocol Officer (the
+  lisply-mcp layer that receives arriving agents).  Reachable as
+  `ready-room:7080` from the other rooms; the gangway (web terminal)
+  on host port 6942.
+- **The Gendl rooms** (`bridge`, `engine-room`): Gendl on Clozure CL
+  and SBCL, answering the same lisply dialect.
+- **The guild workshops** (`guild-workshop`, SMP; `guild-workshop-2`,
+  non-SMP): licensed Genworks GDL on Allegro CL.  Not in the base
+  articles: a licensed user clones the supplemental repo beside
+  `basilisk/`, runs its `./install` (`BASILISK_DIR=` if the yard lives
+  elsewhere), and `./basilisk up` picks the overlay up.
 
-### Available MCP Services
+| Room (MCP server) | Lisp | HTTP | Swank |
+|---|---|---|---|
+| `ready-room` | Emacs Lisp | 7080 | -- |
+| `bridge` | Gendl, CCL | 9080 | 4200 |
+| `engine-room` | Gendl, SBCL | 9090 | 4210 |
+| `guild-workshop` (overlay) | GDL, Allegro SMP | 9098 | 4218 |
+| `guild-workshop-2` (overlay) | GDL, Allegro non-SMP | 9088 | 4208 |
 
-MCP server names are the ROOM slugs.  The containers themselves wear
-minted crew names that change at every full raising — read
-`basilisk/.muster` or `docker ps -f label=basilisk.module=<room>`
-fresh each session, never from memory.
+MCP server names are the room slugs (`mcp__ready-room__ready-room__lisp_eval`,
+`mcp__bridge__bridge__lisp_eval`, ...), each with `lisp_eval`,
+`ping_lisp`, `get_docs` and friends.  Every room mounts `~/projects` at
+`/projects` and joins the ship's network, whose name is minted fresh at
+each raising (`basilisk/.ship`, surfaced as `DOCKER_NETWORK_NAME` in
+`basilisk/.env`).  **Containers wear minted keeper names that change at
+every raising** -- look a room up by label
+(`docker ps -qf label=basilisk.module=<room>`) or in `basilisk/.muster`,
+never from memory.  The `*dashboard*` buffer shows current health, the
+backends aboard and their Swank ports.
 
-**The ready room (this repo, Emacs Lisp):**
-- **Service Name**: `mcp__ready-room__ready-room__lisp_eval`
-- **Purpose**: Evaluate Emacs Lisp code remotely
-- **Usage**: `mcp__ready-room__ready-room__lisp_eval(code="(+ 1 2 3)")`
+Each Gendl/GDL backend serves its own guide: `get_docs(id="claude-md")`
+on that room.  The MCP services allow arbitrary evaluation: run them
+only in trusted, containerized environments, never on an untrusted
+network.
 
-**Gendl rooms (included, free and open-source):**
-- `mcp__bridge__bridge__lisp_eval` — Gendl on Clozure CL (port 9080)
-- `mcp__engine-room__engine-room__lisp_eval` — Gendl on SBCL (port 9090)
+## Running the stack
 
-**Guild workshops (commercial Genworks GDL, via supplemental overlay repos):**
-- `mcp__guild-workshop__guild-workshop__lisp_eval` — GDL with NURBS, SMP (port 9098)
-- `mcp__guild-workshop-2__guild-workshop-2__lisp_eval` — non-SMP variant (port 9088)
-- These are not included here. Licensed users receive a supplemental
-  repo to clone as a sibling directory, then run its `./install` script to
-  add Docker Compose and MCP config overlays into the stack.
-
-**Ping Services:**
-- `mcp__ready-room__ready-room__ping_lisp` - Check Emacs availability
-- `mcp__bridge__bridge__ping_lisp` - Check Gendl CCL availability
-- `mcp__engine-room__engine-room__ping_lisp` - Check Gendl SBCL availability
-
-### MCP vs Raw HTTP
-
-**Previous Approach (Deprecated):**
-```bash
-# Raw HTTP calls (no longer recommended)
-curl -X POST http://localhost:7080/lisply/lisp-eval -d '{"code": "(+ 1 2 3)"}'  # only from inside container
-```
-
-**Current Approach (Recommended):**
-```python
-# Through MCP services (seamless with Claude Code)
-mcp__ready-room__ready-room__lisp_eval(code="(+ 1 2 3)")
-```
-
-
-### Verification Commands
-
-Check if workarounds are active:
-```bash
-# Test current environment via MCP
-mcp__ready-room__ready-room__lisp_eval(code='(list (getenv "SHELL") shell-file-name (getenv "PATH"))')
-
-# Test native compilation settings
-mcp__ready-room__ready-room__lisp_eval(code='native-comp-jit-compilation')
-
-# Test assembler accessibility
-mcp__ready-room__ready-room__lisp_eval(code='(shell-command-to-string "which as")')
-```
-
-## Quick Start
-
-### 1. Start the Environment
+The stack lives in the Basilisk repo, not this one:
 
 ```bash
-# The stack lives in the Basilisk repo, not this one.
 cd ~/projects/basilisk
-
-# Start the full container stack
-./basilisk up
-
-# Verify services are running via MCP
-mcp__ready-room__ready-room__ping_lisp()      # Should return "pong"
-mcp__bridge__bridge__ping_lisp()            # Should return "pong"
+./basilisk up                  # raise (a fresh raising mints a new ship and crew)
+./basilisk down                # stand down; removes the ship's network too
 ```
-
-### 2. Connect to Development Environment
 
 ```bash
-# Connect to Emacs in the ready room (the container's name is minted
-# per raising, so look it up by room label)
-docker exec -it $(docker ps -qf label=basilisk.module=ready-room | head -1) emacsclient -t
-
-# From within Emacs, connect to Gendl SLIME
-# M-x slime-connect RET bridge RET 4200 RET
-```
-
-## Container Details
-
-### The Ready Room (compose service `ready-room`, this repo's image)
-- **Base**: the Readymax Emacs configuration
-- **Network Name**: `ready-room` (accessible as `ready-room:7080` from
-  other containers; the container's own name is its keeper's minted
-  name — read it fresh from `basilisk/.muster`)
-- **Host Ports**: 
-- `6942` → `6942` (web terminal — the gangway)
-- **MCP Service**: Available via `mcp__ready-room__*` functions
-- **Mount**: `~/projects` → `/projects`
-
-### Gendl/GDL Containers
-
-**Included in the base articles** (free, open-source Gendl kernel):
-
-| Room (service) | Image | HTTP Port | Swank Port |
-|----------------|-------|-----------|------------|
-| `bridge` | `gornskew/gendl:devo-ccl` | 9080 | 4200 |
-| `engine-room` | `gornskew/gendl:devo-sbcl` | 9090 | 4210 |
-
-**Available via supplemental overlay repos** (licensed, commercial GDL with NURBS):
-
-| Room (service) | HTTP Port | Swank Port |
-|----------------|-----------|------------|
-| `guild-workshop` (SMP) | 9098 | 4218 |
-| `guild-workshop-2` (non-SMP) | 9088 | 4208 |
-
-Licensed users clone their supplemental repo as a sibling to `basilisk/`,
-run `./install` (which copies the overlay into the Basilisk checkout —
-override with `BASILISK_DIR=` if it lives elsewhere), then `./basilisk up`
-picks up the overlay automatically.
-
-All containers mount `~/projects` → `/projects` and join the ship's
-network, which wears the ship's minted name (kept in `basilisk/.ship`,
-surfaced as `DOCKER_NETWORK_NAME` in `basilisk/.env`).
-Check the Dashboard (`*dashboard*` buffer) for current service health.
-
-### Docker Network
-- **Network Name**: the ship's minted name (`basilisk/.ship`; legacy
-  hulls may still carry `skewed-network`)
-- **Purpose**: Enables container-to-container communication
-- **Key Benefit**: Allows SLIME connection from Skewed Emacs to Gendl Swank server
-
-## Development Workflow
-
-### 1. Basic SLIME Development
-```elisp
-;; In the ready room, after slime-connect to bridge:4200
-;; Load Quicklisp
-(load-quicklisp)
-
-;; Add project directories
-(pushnew "~/projects/gendl/demos/" ql:*local-project-directories* :test #'equalp)
-
-;; Enable development mode
-(setq gwl:*developing?* t)
-
-;; Load systems
-(ql:quickload :wire-world)
-(ql:quickload :bus)
-```
-
-### 2. MCP API Development  
-```python
-# Test Gendl MCP service
-result = mcp__bridge__bridge__lisp_eval(code="(+ 1 2 3)")
-
-# Test Emacs MCP service
-result = mcp__ready-room__ready-room__lisp_eval(code="(+ 1 2 3)")
-
-# Test connectivity
-gendl_status = mcp__bridge__bridge__ping_lisp()
-emacs_status = mcp__ready-room__ready-room__ping_lisp()
-```
-
-### 3. Monitoring Claude Code Activity
-With MCP services running, you can monitor what Claude Code or other agents are doing:
-
-```bash
-# Watch Emacs activities (rooms wear minted names; look up by label)
-docker logs -f $(docker ps -qf label=basilisk.module=ready-room | head -1)
-
-# Watch Gendl activities
-docker logs -f $(docker ps -qf label=basilisk.module=bridge | head -1)
-
-# Or from within Emacs, watch the *Messages* buffer for API calls
-```
-
-## MCP API Usage
-
-For detailed MCP API documentation, examples, and best practices, see:
-**`dot-files/emacs.d/sideloaded/lisply-backend/CLAUDE.md`**
-
-### Quick MCP API Reference
-```python
-# Basic evaluation
-mcp__ready-room__ready-room__lisp_eval(code="(+ 1 2 3)")
-
-# Read, search and edit files (the primer: get_docs(id="primer"))
-mcp__ready-room__ready-room__lisp_eval(code='(lisply-read "/path/to/file.lisp" 1 60)')
-mcp__ready-room__ready-room__lisp_eval(code='(lisply-grep "defun foo" "/projects/repo/" :glob "*.lisp")')
-mcp__ready-room__ready-room__lisp_eval(code='(lisply-replace "/path/to/file.lisp" "old text" "new text")')
-mcp__ready-room__ready-room__lisp_eval(code='(lisply-help)')
-
-# Test connectivity
-mcp__ready-room__ready-room__ping_lisp()
-```
-
-**⚠️ CRITICAL WARNING**: When using MCP file editing, you share the **global current buffer** with the user. Always use `with-current-buffer` patterns to avoid conflicts. See lisply-backend documentation for safe practices.
-
-## File Editing via MCP
-
-**Start with the primer** (`get_docs(id="primer")`) and the file
-helpers it describes.  For editing in depth, see:
-**`dot-files/emacs.d/sideloaded/lisply-backend/CLAUDE.md`**
-
-That documentation includes:
-- Detailed MCP API patterns
-- Paredit mode instructions for Lisp editing
-- Safe buffer operations vs string manipulation
-- Interactive prompt avoidance
-- Error recovery patterns
-- **Shared buffer footgun warnings**
-
-## Network Architecture
-
-```
-Host Machine
-├── MCP Services (via lisply-mcp wrapper)
-│   ├── mcp__ready-room__*       → ready-room:7080
-│   ├── mcp__bridge__*           → bridge:9080           (included)
-│   ├── mcp__engine-room__*      → engine-room:9090      (included)
-│   └── mcp__guild-workshop*__*  → guild-workshop*:9098/9088 (overlay)
-└── Host Ports: 6942 (the gangway / web terminal)
-
-Docker Network: <the ship's minted name> (basilisk/.ship)
-├── ready-room       (Emacs + MCP + gangway)          ── always present
-├── bridge           (CCL + Swank 4200)               ── always present
-├── engine-room      (SBCL + Swank 4210)              ── always present
-└── guild-workshop*  (Allegro CL + Swank 4218/4208)   ── overlay repos
-```
-
-## Commands Reference
-
-### Container Management
-```bash
-# The ship's network is created at ./basilisk up and removed at
-# ./basilisk down, named from basilisk/.ship -- no manual create.
-
-# List running containers (names are minted per raising)
-docker ps
-
-# Stop/remove a single room by its label rather than a remembered name
-docker stop $(docker ps -qf label=basilisk.module=ready-room)
-
-# Whole-stack operations go through the yard, not docker directly:
-#   cd ~/projects/basilisk && ./basilisk down
-
-# Remove network (name from basilisk/.ship, if a down left it standing)
-docker network rm $(cat ~/projects/basilisk/.ship | tr 'A-Z' 'a-z')
-```
-
-### Development Commands
-```bash
-# Connect to Emacs (or just use rmax from any host shell)
-docker exec -it $(docker ps -qf label=basilisk.module=ready-room | head -1) emacsclient -t
-
-# Connect to Gendl REPL directly
+RR=$(docker ps -qf label=basilisk.module=ready-room | head -1)
+docker exec -it "$RR" emacsclient -t        # or rmax from any host shell
+docker logs -f "$RR"                         # watch what agents are doing
 docker exec -it $(docker ps -qf label=basilisk.module=bridge | head -1) ccl
-
-# Check logs
-docker logs $(docker ps -qf label=basilisk.module=ready-room | head -1)
-docker logs $(docker ps -qf label=basilisk.module=bridge | head -1)
 ```
 
-### Testing Connectivity
-```python
-# Test MCP services
-emacs_status = mcp__ready-room__ready-room__ping_lisp()
-gendl_status = mcp__bridge__bridge__ping_lisp()
+From inside Emacs, `M-x slime-connect RET bridge RET 4200 RET` reaches
+the bridge's Swank.  When something does not answer: `docker ps` for
+health, the room's `docker logs`, `docker network ls` for the ship's
+network, and for SLIME, whether Swank listens on its port inside the
+room.
 
-# Test basic operations
-emacs_result = mcp__ready-room__ready-room__lisp_eval(code="(+ 1 2 3)")
-gendl_result = mcp__bridge__bridge__lisp_eval(code="(+ 1 2 3)")
-```
+## Keeping the daemon answering
 
-## Troubleshooting
+Everything an agent does runs on the Captain's single event loop.  Four
+things stop it, and while it is stopped every MCP call to the ready
+room -- `ping_lisp` included -- times out.
 
-### Common Issues
+**A prompt.**  Anything that can ask a question in the minibuffer waits
+for a person who is not there: "File changed on disk", a lock-file
+steal, a mode hook calling `slime-connect`, `revert-buffer` without
+NOCONFIRM (observed live with `revert-buffer-with-coding-system`).
+Before driving an interactive-capable command from `lisp_eval`, find
+its prompt paths (`yes-or-no-p`, `y-or-n-p`, `map-y-or-n-p`) and bind
+the documented suppressor or call the non-interactive variant
+(`(let ((revert-without-query '("."))) ...)`, `(revert-buffer t t t)`);
+if there is none, do not call it from an eval.  Never open a project
+file with `find-file-noselect` from an eval (2026-08-07: a `.gdl`
+file's mode hooks prompted and the transport went dark); read with
+`lisply-read` or `insert-file-contents`.  If calls start failing with
+connectivity errors, the daemon may be waiting on such a prompt: tell
+the user.
 
-1. **MCP services not responding**:
-   - Check if containers are running: `docker ps`
-   - Verify MCP wrapper is configured correctly
-   - Check container logs: `docker logs <container-name>`
+**A synchronous child process** (2026-07-26 incident).
+`shell-command-to-string`, `call-process` and `process-file` block the
+loop until the child exits -- timers, `with-timeout`, network filters
+and the lisply httpd all starve.  One `(shell-command-to-string "sleep
+60")` blacked out the transport for 60 s, and an unbounded `curl`
+against a stalled server is exactly as fatal.  The backend's pre-eval
+lint (`lisply-shell-guard.el`) refuses such payloads without a visible
+bound (`LISPLY-GUARD REFUSED`); use `(lisply-shell-bounded CMD SECS)`
+(default 25 s, returns `:exit-code`/`:output`/`:timed-out`) and keep it
+under 20 s, or `(lisply-shell-async CMD)` and poll
+`(lisply-shell-async-result TOKEN)`.  `curl` always gets `--max-time`;
+`ssh` gets both `-o ConnectTimeout=N` and a `timeout N` wrapper
+(ConnectTimeout does not bound the remote command).  The override is
+the comment `;; lisply:allow-unbounded`.
 
-2. **Containers not communicating**:
-   - Ensure both containers are on the same network: `docker network ls`
-   - Check container names: `docker ps --format "table {{.Names}}\t{{.Networks}}"`
+**Calling the room's own port.**  `(lisply-shell-bounded "curl
+http://localhost:7080/lisply/...")` deadlocks (2026-09-09): curl waits
+on the httpd, which runs on the loop waiting for curl.  Probe the
+room's own endpoints with `lisply-shell-async`, from another room, or
+from the host.
 
-3. **SLIME connection fails**:
-   - Verify Swank is running: `docker exec $(docker ps -qf label=basilisk.module=bridge | head -1) netstat -an | grep 4200`
-   - Check network connectivity from inside the ready room: `telnet bridge 4200`
+**A loop that does not advance** -- see the reference, section 6.
 
-4. **Mount issues**:
-   - Ensure `~/projects` exists on host
-   - Check permissions: `ls -la ~/projects`
+Time budgets.  The MCP layer drops an eval after about 30 s of socket
+silence; the claude.ai relay gives up at 35-40 s and reports a bare
+"Tool execution failed" (Claude Desktop waits about 240 s).  The eval
+still runs to the end.  Split long work into short calls and poll, and
+after any timeout check whether an edit half-applied
+(`buffer-modified-p`, git status) before retrying.
 
-### Reset Environment
+Multi-line string literals in a payload hung the backend twice on
+2026-08-11 (single-line `\n` equivalents went through); never
+root-caused, and later sessions (2026-10-04) sent multi-line strings
+throughout without trouble.  If a payload with real newlines times out
+for no visible reason, try the `\n` spelling before anything else.
+
+**Recovery (host side).**
+
 ```bash
-# Stop and remove everything (the stack lives in the Basilisk repo)
-cd ~/projects/basilisk
-./basilisk down
-
-# Recreate from scratch (a fresh raising mints a new ship and crew)
-./basilisk up
+RR=$(docker ps -qf label=basilisk.module=ready-room | head -1)
+docker exec "$RR" ps -ef --forest           # a stuck child under emacs?
+docker exec "$RR" pkill -f '<child pattern>' # transport returns at once
 ```
 
-## Integration with Claude Code
+With no child to kill, `docker exec "$RR" sh -c 'kill -USR2 $(pgrep -o
+emacs)'` and `docker logs "$RR"` show a backtrace of what the loop is
+doing.  Do not combine that with killing emacsclient processes: the
+pair killed the daemon once.  The last resort is
+`docker restart "$RR"` (back in about 20 s; then restart any
+Emacs-managed watchers, which die with the daemon).  The autoheal
+sidecar restarts an unhealthy room on its own in about 2 minutes, and
+the mcp-exec supervisor reconnects the wrappers about 30 s later; if
+calls still fail after that, the client has stopped routing to the
+server -- reconnect the session.  A session started while the rooms
+were restarting loses its transports for good: start a fresh one.
 
-This environment is designed to work seamlessly with Claude Code:
+## Git
 
-1. **MCP Service Access**: Claude Code can use MCP services directly without HTTP calls
-2. **File System Access**: Both containers mount `~/projects` for shared file access
-3. **Real-time Monitoring**: Use `docker exec` to connect to Emacs and watch Claude's activities
-4. **Development Feedback Loop**: Edit files, test with Claude, see results in real-time
-
-### Example Claude Code Workflow
-```python
-# Claude makes changes via MCP services
-result = mcp__bridge__bridge__lisp_eval(code='(ql:quickload :my-project)')
-
-# You can see the results in your SLIME session
-# And use Update! links in Gendl web interface for live reloading
-```
-
-## Important Notes
-
-### Security Considerations
-- MCP services allow arbitrary Lisp evaluation
-- Only use in trusted, containerized environments
-- Do not expose services to untrusted networks
-
-### Data Types
-- All results are returned as strings (using `format "%s"`)
-- Complex Lisp data structures maintain their textual representation
-- Boolean values: `t` for true, `nil` for false
-
-### Error Handling
-- Syntax errors and runtime errors are caught and returned in result
-- MCP services provide consistent error reporting
-
-## Related Documentation
-
-- **Gendl MCP Docs**: Use `bridge get_docs(id="claude-md")` or equivalent for each backend
-- **Main Gendl Guide**: `/projects/CLAUDE.md` (top-level project documentation)
-
-## Lessons Learned (March 2026 Session)
-
-### Minibuffer Prompts Can Hang the Daemon (August 2026)
-Commands that are prompt-capable will raise a minibuffer query when
-called programmatically, and the eval blocks until a human answers —
-with nobody at the keyboard this wedges the daemon and the MCP
-transport with it (same failure family as the org-clock
-dangling-clock prompt in org/CLAUDE.md). Observed live with
-`revert-buffer-with-coding-system`, which asked "Revert buffer from
-file...?" in the user's frame. Suppress the query explicitly:
-```elisp
-;; reverts
-(let ((revert-without-query '(".")))
-  (revert-buffer-with-coding-system 'utf-8-dos))
-;; or
-(revert-buffer :ignore-auto :noconfirm)
-```
-General rule: before driving any interactive-capable command from
-`lisp_eval`, find its prompt paths (`yes-or-no-p`, `y-or-n-p`,
-`map-y-or-n-p` in its source) and bind the documented suppressor, or
-call the non-interactive variant. If there is no suppressor, don't
-call it programmatically.
-
-### Reading SLIME REPL Buffers via MCP
-When reading `*slime-repl allegro<N>*` buffers from MCP:
-- **Use `(buffer-string)`** — this works reliably
-- **Do NOT use `(buffer-substring-no-properties ...)`** — returns empty strings for SLIME REPL buffers
-- **Send commands**: `(with-current-buffer "*slime-repl allegro<2>*" (goto-char (point-max)) (insert "(your-form)") (slime-repl-return))`
-- **Read SLDB debugger buffers**: `(with-current-buffer "*sldb allegro<2>/N*" (buffer-substring-no-properties (point-min) (min 2000 (point-max))))`
-- **Abort debugger**: `(with-current-buffer "*sldb allegro<2>/N*" (sldb-abort))`
-- **Avoid `sleep-for` between send and read** — timing is unreliable, just read the buffer and check for a prompt
-
-### File Creation Through Emacs When /projects/ Is Not Directly Writable
-Claude's scratch container cannot write to `/projects/`. Create files through Emacs:
-```elisp
-;; Write initial content
-(with-temp-buffer
-  (insert "file header...")
-  (write-region (point-min) (point-max) "/projects/path/to/new-file.lisp"))
-
-;; Append more content
-(with-temp-buffer
-  (insert "more content...")
-  (append-to-file (point-min) (point-max) "/projects/path/to/new-file.lisp"))
-```
-This avoids triple-escaping issues when content contains strings with quotes (e.g., JSON in CL).
-
-### Modern-Mode Allegro CL: Case Sensitivity
-The commercial GDL rooms (the guild workshops) run modern-mode Allegro CL with `(readtable-case *readtable*)` → `:preserve`.
-- Keywords are case-sensitive: `:email` ≠ `:EMAIL`
-- When interning strings as keywords, do NOT upcase: `(intern key :keyword)` not `(intern (string-upcase key) :keyword)`
-- This affects JSON parsing, property access, and any dynamic symbol creation
-
-### `kill-sexp` for Balanced Replacements
-The most reliable pattern for replacing a sexp in Emacs:
-```elisp
-(goto-char (point-min))
-(search-forward "(defun target-function")
-(beginning-of-line)
-(kill-sexp)
-(insert "(defun target-function () ...new balanced body...)")
-```
-This is safer than region-based deletion because `kill-sexp` guarantees structural correctness.
-
-### AllegroServe: Symbol Names to Know
-- `*response-method-not-allowed*` (NOT `*response-not-allowed*`)
-- Use `(do-external-symbols ...)` to discover available symbols when unsure
-- `gwl:with-all-servers` iterates over `gwl:*http-server*` and `gwl:*https-server*`
-- Use `gwl:*http-server*` not `net.aserve:*wserver*` (Franz commandeered the default for their web IDE)
-
-### `*print-readably*` in Error Handlers
-Allegro CL's `dumplisp` and build processes can produce conditions containing unprintable objects (byte arrays).
-Always bind `*print-readably*` to nil in error handlers:
-```lisp
-(handler-case (risky-operation)
-  (error (c)
-    (let ((*print-readably* nil))
-      (format t "Error: ~a" c))))
-```
-
-## Version History
-
-- **Initial Setup**: Basic container configuration
-- **Network Integration**: Added Docker network for container communication
-- **SLIME Integration**: Enabled seamless Emacs-to-Gendl SLIME connections
-- **HTTP API Setup**: Both containers expose HTTP APIs for external tool integration
-- **MCP Migration**: Transitioned from raw HTTP to MCP services for better integration
-
-
-## Development Lessons Learned
-
-**For detailed lessons learned including:**
-- **Shared current buffer footgun and solutions**
-- String escaping and code generation best practices
-- Interactive prompt handling
-- Successful MCP file editing workflows
-- Paredit mode workflows
-- Error recovery patterns
-
-**See: `dot-files/emacs.d/sideloaded/lisply-backend/CLAUDE.md`**
-
-### Key Takeaway: Shared Buffer State
-When using MCP file editing, remember that you **share the global current buffer** with the user. This was discovered during viewport menu development when buffer switching conflicts occurred. Always use explicit buffer targeting with `with-current-buffer` patterns.
-
-### Quick Reference: Safe Patterns
-```elisp
-;; BAD: Relies on global current buffer
-(search-forward "target")
-
-;; GOOD: Explicit buffer targeting
-(with-current-buffer "specific-file.lisp"
-  (search-forward "target"))
-```
-
-
-## Emacs-Native Tool Preference
-
-**Prefer Emacs native tools over shell commands:**
-
-| Task | Prefer | Avoid |
-|------|--------|-------|
-| File listing | `(dired-noselect "/path/")` | `(shell-command-to-string "ls")` |
-| Git status | `(magit-status)` or `(vc-dir)` | `(shell-command-to-string "git status")` |
-| File operations | `(rename-file)`, `(copy-file)` | `(shell-command "mv ...")` |
-| Search in files | `(grep-find)`, `(project-find-regexp)` | `(shell-command "grep ...")` |
-
-### Magit as git plumbing from batch elisp (learned 2026-08-13)
-
-Git history perusal (log, show, diff, blame) goes through magit's
-plumbing layer via `lisp_eval` — not host-side `git` commands:
+Through magit's plumbing from `lisp_eval`, not host-side `git` (the
+same rule as file operations):
 
 ```elisp
-;; One-time per session: only interactive commands are autoloaded;
-;; magit-git-output & friends need the full load.
-(require 'magit)
-
-;; Bind default-directory to the repo root (trailing slash), then:
-(let ((default-directory "/projects/cyclops/"))
-  (magit-git-output "show" "af5e39e" "--" "source/functions.lisp"))
+(progn
+  (require 'magit)    ; only the interactive commands are autoloaded
+  (let ((default-directory "/projects/cyclops/"))
+    (magit-git-output "show" "af5e39e" "--" "source/functions.lisp")))
 ```
 
-Useful plumbing calls, all honoring `default-directory`:
-- `(magit-git-output "log" "--oneline" "-10")` — full stdout as one string
-- `(magit-git-lines "diff" "--stat" "HEAD~3..")` — stdout as list of lines
-- `(magit-git-string "rev-parse" "HEAD")` — first line only
-- `(magit-rev-verify "some-branch")`, `(magit-get-current-branch)`
+- `magit-git-output` (all of stdout), `magit-git-lines` (a list of
+  lines), `magit-git-string` (the first line), `magit-rev-verify`,
+  `magit-get-current-branch`; all honour `default-directory` (the repo
+  root, with a trailing slash).  Raw output: no pager, no ANSI.
+- Prefer these to `(magit-status)` in an eval: status pops a buffer
+  the user shares.  Narrow big diffs with `-- <path>` rather than
+  filtering one giant string.
+- **Commits**: the container has no git identity and no ssh keys.
+  Write the message with `write-region`, then
+  `(magit-git-output "-c" "user.name=..." "-c" "user.email=..." "commit" "-F" FILE)`.
+  Pushes happen on the host.
 
-Notes:
-- Repos live under `/projects/` inside the container, so any repo the
-  host sees at `~/projects/foo` is `/projects/foo/` here.
-- `magit-git-output` returns the raw output — no pager, no ANSI, safe
-  for batch use. Prefer it over `(magit-status)` in non-interactive
-  evals (status pops a buffer the user shares).
-- For big diffs, narrow with `-- <path>` per invocation rather than
-  post-filtering one giant string.
+## Editing
 
-### Container shell commands from batch elisp (learned 2026-08-13)
+The primer and the reference cover the method; the points that are
+specific to working in this room:
 
-The container ships node (prefer it over host node for /projects JS —
-e.g. `node --check`).  The lisply guard refuses bare `shell-command`
-payloads (a synchronous child wedges the whole Emacs event loop), so
-run child processes with an explicit bound:
+- **Prefer Emacs to the shell** for everything with an Emacs form:
+  `lisply-grep` over `grep`, `rename-file` / `copy-file` /
+  `delete-file` over `mv` / `cp` / `rm`, `dired-noselect` over `ls`
+  (revert a dired buffer before trusting it).  Host-side line tools
+  are out of bounds for `/projects` files; a Basilisk yard's
+  `mcp/install-claude-code-config` installs a Claude Code hook
+  (`mcp/emacs-first-guard`) that refuses them.
+- **Paths**: the user's files are under `/projects/` in this room
+  (`~/projects/` on the host).  A cloud agent's own sandbox
+  (`/mnt/project`, `/home/claude`) is not the user's workspace: if you
+  are creating files there, you are working in the wrong place.
+- **New files** from an agent that cannot write `/projects` itself:
+  `write-region` from a temp buffer, which also avoids layers of shell
+  escaping.  `append-to-file` only to a file no buffer visits.
+- **Whole new Lisp files**: `lisply-write-sexp-file` (reference,
+  section 5), not a heredoc string of the whole file.
+- **When a structural edit will not come out right**, ask the user to
+  revert the file (`git checkout`) or to leave a placeholder comment
+  where the new code goes, and replace the placeholder with a
+  balanced form.
+- **Verify bulk edits by presence, with warnings visible** (2026-08-13
+  production incident).  A `remhash -> remhash-scrubbed` replace-all
+  glued 12 of 17 arglists (`(remhash-scrubbed fd*request-registry*)`)
+  and shipped to the production cyclops fleet, past two checks that
+  lied: an absence-grep whose exclusion pattern also matched the broken
+  lines, and `ql:quickload ... :silent t`, which hid the very warnings
+  that named every broken site.  So: grep the edited call sites and
+  READ the resulting lines; compile with warnings visible (never
+  `:silent` for a verification build; on Allegro capture compiler
+  output and scan for undefined-variable and arity warnings); prefer
+  whole-expression OLD/NEW strings to token splices, so whitespace is
+  never load-bearing; keep verification builds at zero warnings, so the
+  next real one is not scrolled past.
+- **Large tool results** that the client saved to a file are not to be
+  searched with host-side python or grep: ask again with a narrower
+  request, or work the text in an elisp temp buffer.  Content that
+  originated in the container's world is worked there.
 
-```elisp
-(lisply-shell-bounded "node --check /projects/apps/foo/static/foo.js" 30)
-;; => (:exit-code 0 :output "..." :timed-out nil)
-```
+## Lisp-side notes
 
-or `(lisply-shell-async CMD)` + `(lisply-shell-async-result TOKEN)`
-for long-running work.
+- **SLIME REPL buffers** (`*slime-repl allegro<N>*`): read them with
+  `(buffer-string)` -- `buffer-substring-no-properties` returns empty
+  strings there.  Send a form with `(goto-char (point-max))`, `insert`,
+  `(slime-repl-return)`; read and abort the debugger in
+  `*sldb allegro<N>/M*` with `buffer-substring-no-properties` and
+  `(sldb-abort)`.  Do not `sleep-for` between send and read; read the
+  buffer and look for the prompt.
+- **Modern-mode Allegro** (the guild workshops): `(readtable-case
+  *readtable*)` is `:preserve`, so keywords are case-sensitive (`:email`
+  ≠ `:EMAIL`); intern strings as keywords without upcasing.  This
+  bites JSON parsing and any dynamic symbol creation.
+- **AllegroServe names**: `*response-method-not-allowed*` (not
+  `*response-not-allowed*`); `gwl:with-all-servers` iterates over
+  `gwl:*http-server*` and `gwl:*https-server*`; use `gwl:*http-server*`,
+  not `net.aserve:*wserver*` (Franz took the default for their web
+  IDE).  `do-external-symbols` when unsure.
+- **`*print-readably*` in error handlers**: Allegro's `dumplisp` and
+  build processes can signal conditions holding unprintable objects;
+  bind `*print-readably*` to nil before printing a condition.
+- **LHTML**: GDL's `with-lhtml-string` takes both the old htmlgen form
+  `((:a :href "url") "Text")` and the native `(:a :href "url" "Text")`;
+  write new code in the native form.
+- **SLIME development in a Gendl room**: after `slime-connect`,
+  `(load-quicklisp)`, push project directories onto
+  `ql:*local-project-directories*`, `(setq gwl:*developing?* t)`, then
+  `ql:quickload` the systems.
 
-**Host-side line tools are out of bounds for /projects files**: even
-when an agent runs on the host with ~/projects mounted, sed/awk/grep-
-style edits and filters on project files go through the ready room's
-file helpers (`lisply-read`, `lisply-grep`, `lisply-replace`, the
-`lisply-form-*` family).  A Basilisk yard's
-`mcp/install-claude-code-config` installs a Claude Code hook
-(`mcp/emacs-first-guard`) that refuses them at the moment of action.
+## webshot and webshot-clip: page captures
 
-**Never open a project file with `find-file-noselect` from an eval**
-(see "NEVER find-file-noselect Project Source Files" below).  A
-buffer that is ALREADY open is a different matter: edit through it,
-reverting first if the file changed on disk, which is what the file
-helpers do for you:
-```elisp
-;; An already-open buffer: revert (no confirmation) if stale
-(let ((buf (find-buffer-visiting "/path/to/file")))
-  (when (and buf (not (verify-visited-file-modtime buf)))
-    (with-current-buffer buf (revert-buffer t t t))))
+Baked into every image (sources `docker/webshot`, `docker/webshot-clip`;
+node + Chrome DevTools Protocol, no puppeteer).  They resolve a browser
+at run time: Debian chromium in the gui/full images,
+chrome-headless-shell in the default ones (in -lite,
+`skewed-install headless-shell` provides it).
 
-;; Dired: refresh before reading
-(with-current-buffer (dired-noselect "/projects/gs/readymax/")
-  (revert-buffer)  ;; Same as pressing 'g' interactively
-  ...)
-```
-
-**Why this matters:**
-- Native Emacs tools integrate with the shared buffer state
-- Shell commands bypass Emacs's knowledge of file system state
-- Dired buffers can become stale; always `(revert-buffer)` before trusting contents
-
-
-## Critical Best Practices for Claude (Learned 2026-01-04)
-
-### File Path Confusion - Always Use MCP
-**WRONG**: Assuming files are in `/mnt/project` (Claude.ai container filesystem)
-**RIGHT**: Files in the user's projects are at `/projects/apps/...` and accessed via ready-room MCP
-
-Example:
-```elisp
-;; WRONG - trying to use local filesystem
-(with-temp-file "/mnt/project/assembly.lisp" ...)
-
-;; RIGHT - use MCP to access the user's environment
-(lisply-read "/projects/apps/tw-site-2025/source/assembly.lisp" 1 80)
-```
-
-**Rule**: If you find yourself creating files in `/home/claude/`, you're doing it wrong. Use ready-room MCP.
-
-### Minibuffer Blocking Issue
-**Symptom**: All MCP calls suddenly fail with connectivity errors
-**Cause**: Emacs is waiting for minibuffer input (e.g., "File changed on disk. Discard edits? (yes or no)")
-**Solution**: Alert the user that Emacs needs input before continuing
-
-### Event-Loop Blocking: Unbounded Child Processes (2026-07-26 Incident)
-**Symptom**: ready-room MCP goes totally dark mid-session — `lisp_eval` AND `ping_lisp` both time out; nothing recovers until the child process dies or the container restarts.
-**Cause**: ANY synchronous child process (`shell-command-to-string`, `call-process`, `process-file`) blocks the single Emacs event loop until the child exits. Timers, `with-timeout`, network filters, and the lisply httpd all starve. An unbounded `curl` (no `--max-time`) against a stalled server is exactly as fatal as `sleep-for`. Demonstrated live 2026-07-26: one `(shell-command-to-string "sleep 60")` blacked out the entire transport for 60 s.
-**Mandatory rules for every shell-out through lisp_eval**:
-- `curl` always gets `--max-time N`
-- generic commands get a `timeout(1)` wrapper: `(shell-command-to-string "timeout 30 ...")`
-- `ssh` gets BOTH `-o ConnectTimeout=N` AND a `timeout N` wrapper — ConnectTimeout does not bound the remote command
-- anything expected to run longer than ~25 s: never run synchronously — use the async helper (`lisply-shell-async` start-process + poll) or nohup + poll via separate calls
-- **Backend enforcement (L3)**: a pre-eval lint (`lisply-shell-guard.el`) now refuses unbounded shell payloads, returning a `LISPLY-GUARD REFUSED:` result. Prefer `(lisply-shell-bounded CMD &optional SECS)` (default 25 s, returns `:exit-code/:output/:timed-out` plist). Deliberate override: include the comment `;; lisply:allow-unbounded` in the payload.
-- **Guard durability**: as of the 2026-07-26 image rebuild, the guard (`lisply-shell-guard.el` + the `endpoints.el` lint) is baked into the image and survives all container restarts, including autoheal. Cheap sanity probe after any restart: `(fboundp 'lisply-shell-bounded)` should be `t` on a fresh boot with no re-sync.
-- **After an autoheal restart**: fully self-healing as of 2026-07-26. The container recovers in ~2 min and the mcp-exec supervise loop respawns all wrapper processes into the recovered container (~2.5 min wedge-to-restored, proven end-to-end). If calls STILL time out after that window, the residual cause is client-side: the Claude Desktop MCP client stops routing to a server after in-flight failures -- a claude.ai session reconnect resumes it (no wrapper or desktop restart needed).
-**Relay budget**: the claude.ai MCP relay times out responses at ~35–40 s (Claude Desktop wrapper: ~240 s). Longer evals EXECUTE but report a bare "Tool execution failed" — split work into short calls and poll.
-**Never curl the console's OWN lisply port from inside a `lisp_eval`** (2026-09-09): `(lisply-shell-bounded "curl http://localhost:7080/lisply/...")` deadlocks — curl waits for the httpd to answer, and the httpd runs on the event loop that is blocked waiting for curl. The bound does eventually fire, but the transport is dark until then. Probe the console's endpoints with `lisply-shell-async` (the child runs beside the loop; read its output on a later call), from another room, or from the host.
-**Recovery runbook (host side)**: the ready-room container wears a minted name, so resolve it first: `RR=$(docker ps -qf label=basilisk.module=ready-room | head -1)`. Then `docker exec $RR ps -ef --forest` → find the stuck child under emacs → `docker exec $RR pkill -f '<child pattern>'` → service restores instantly (verified: transport recovers the moment the child exits). If no child visible: `docker exec $RR sh -c 'kill -USR2 $(pgrep -o emacs)'` and read the backtrace from `docker logs $RR`; last resort is container restart.
-
-### Incremental Editing > Wholesale Replacement
-**WRONG**: Using `with-temp-file` to rewrite entire complex files
-```elisp
-(with-temp-file "/path/to/file.lisp"
-  (insert "entire new file..."))  ;; Often creates unbalanced parens!
-```
-
-**RIGHT**: Make targeted edits with structural navigation
-```elisp
-(with-current-buffer "file.lisp"
-  (when (fboundp 'paredit-mode) (paredit-mode 1))
-  (save-excursion
-    (goto-char (point-min))
-    (search-forward "string-to-find")
-    (search-backward "opening-quote")
-    (kill-sexp)
-    (insert "replacement"))
-  (check-parens)
-  (save-buffer))
-```
-
-### Wholesale Rewrite Done Safely — Build the S-Expression as Elisp Data
-
-The warning above is about the *heredoc-string* approach to wholesale rewrites.
-When the task genuinely is to author a new file or wholesale-replace one, there
-is a reliable alternative: **build the s-expression as elisp data and let
-Emacs serialize it.**
-
-An elisp quoted-list literal is balanced by construction — the elisp reader
-refuses to construct an unbalanced list, so syntactic correctness is guaranteed
-by the time you call the writer.  CL and elisp share enough surface syntax that
-the form round-trips cleanly (keywords, strings, Unicode all survive).
-
-```elisp
-(require 'lisply-sexp-write)
-
-(lisply-write-sexp-file
- "/projects/apps/my-app/source/widget.lisp"
- "my-package"
- '((define-object widget (base-html-page)
-     :computed-slots
-     ((title "Hello")
-      (body (with-lhtml-string ()
-              ((:h1 :class "text-2xl") "Hello, world")))))))
-```
-
-For when to use this vs `kill-sexp`/paredit, how to avoid MCP timeouts on very
-large forms by splitting into two calls (`setq` the body, then `lisply-write-
-sexp-file` with backtick/comma), and the `lisp_eval`-reads-one-top-level-form
-gotcha — see the backend doc:
-[`dot-files/emacs.d/sideloaded/lisply-backend/CLAUDE.md`](dot-files/emacs.d/sideloaded/lisply-backend/CLAUDE.md),
-section *Structural Authoring via Elisp Data — a Third Path*.
-
-
-### When Structural Editing Fails
-If you're stuck in unbalanced buffer hell:
-1. Ask the user to revert the file: `git checkout path/to/file`
-2. Ask the user to create a placeholder comment where you can insert balanced content
-3. Insert the content into the placeholder position
-
-Example workflow that works:
-```elisp
-;; The user creates placeholder in buffer:
-;;
-;; Insert balanced lhtml body here
-;;
-
-;; Claude inserts at that position:
-(goto-char (point-min))
-(search-forward ";; Insert balanced lhtml body here")
-(beginning-of-line)
-(kill-line 3)  ;; Remove comment
-(insert "balanced content...")
-```
-
-### LHTML Format (for GDL Web Projects)
-
-GDL uses `with-lhtml-string` for HTML generation. Two syntaxes exist:
-
-**OLD htmlgen compatibility format (extra parens):**
-```lisp
-((:a :href "url" :class "style") "Link Text")
-```
-
-**NEW lhtml native format (cleaner, preferred for new code):**
-```lisp
-(:a :href "url" :class "style" "Link Text")
-```
-
-Use the native format for new code in tw-site-2025 and similar projects.
-
-## Lessons Learned (2026-08-11 Session)
-
-### lisp_eval payloads: avoid literal multi-line strings
-Elisp string literals containing REAL newlines inside a `lisp_eval`
-payload hung the emacs backend twice (30s no-socket-activity timeout,
-edit never applied; single-line equivalents using `\n` escapes applied
-instantly).  Until root-caused: keep each `lisp_eval` payload on
-single lines and spell newlines as `\n` inside strings.  Also verify
-after any timeout whether the edit half-applied: check
-`buffer-modified-p` and git status before retrying.
-
-## Lessons Learned (2026-08-07 Session)
-
-### NEVER find-file-noselect Project Source Files from Batch Evals
-Opening a source file (e.g. `.gdl`) via `find-file-noselect` in an
-emacsclient eval can fire mode hooks that prompt in the minibuffer
-(slime-connect and friends) — the daemon blocks on the read and ALL
-lisply/emacsclient traffic goes dark.  For read-only checks use
-`(with-temp-buffer (insert-file-contents "/path") ...)` — no hooks run.
-Balanced-parens check without visiting:
-```elisp
-(with-temp-buffer
-  (insert-file-contents "/path/file.lisp")
-  (with-syntax-table lisp-mode-syntax-table (check-parens)))
-```
-Recovery when the daemon does block and no stuck child shows in
-`ps -ef --forest`: `docker restart $(docker ps -qf label=basilisk.module=ready-room | head -1)` self-heals in ~20 s
-(then restart any emacs-managed watcher processes).  Do NOT send
-SIGUSR2 + pkill of clients — that combination killed the daemon once.
-Full-stack restarts go through `./basilisk down && ./basilisk up`
-(use `up --daemon` from scripts to skip the interactive shell exec).
-
-### webshot: Headless-Browser Page Captures (2026-08-07+, all images 2026-08-11+)
-`webshot URL [out.png] [WxH] [--mobile] [--settle=MS] [--scale=N] [extra
-browser flags]` is baked into all images (source: `docker/webshot`; node
-+ CDP since 2026-08-15 -- see the addendum below).  It resolves a browser
-at runtime: Debian chromium in the gui/full images, chrome-headless-shell
-in the default images (in -lite, `skewed-install headless-shell` provides
-it).  **WxH is a REAL viewport**: it is applied via
-`Emulation.setDeviceMetricsOverride` before navigation, so page JS and
-CSS both see exactly the width you asked for.  `--mobile` additionally
-flags the viewport mobile and enables touch emulation.  Captures wait for
-the load event and then settle (3.5s default, `--settle=MS`) so x3dom/ajax
-finish; WebGL renders via SwiftShader (headless-shell needs
---enable-unsafe-swiftshader, which webshot adds itself), so 3D viewports
-appear in captures.  Cache-busting is now built in -- every run gets a
-throwaway profile and no disk cache.  For vhost-scoped pages, resolve the
-virtual host inside chromium:
 ```bash
-webshot "http://genworks.localhost/demo/staircase" /tmp/s.png 1440x2200 \
-  --host-resolver-rules="MAP genworks.localhost cyclops"
-```
-Host-side agents export binaries without `docker cp` via:
-`docker exec $(docker ps -qf label=basilisk.module=ready-room | head -1) base64 /tmp/s.png | base64 -d > local.png`
-— or skip that entirely by writing under `/projects` (see the 2026-08-14 addendum).
-
-`webshot-clip URL SELECTOR [out.png] [WxH] [pad] [--mobile]
-[--settle=MS] [--scale=N] [extra chromium flags]` (source:
-`docker/webshot-clip`; node + Chrome DevTools Protocol, no
-puppeteer) captures just the first element matching a CSS selector --
-hero images, a single card, a viewport region -- using
-captureBeyondViewport so below-the-fold elements render fully.  PAD
-(px) expands the clip on all sides.  WxH is a REAL viewport, same as
-webshot (fixed 2026-08-15; see the addendum below).  Exit codes: 1
-usage/bad args, 2 selector not found or zero-area, 3 capture failure,
-4 no browser.  Same `--host-resolver-rules`
-vhost flag as webshot.  Example (2026-08-09, used for the tw-site-2025
-demo hero images):
-```bash
-webshot-clip "http://genworks.localhost/demo/staircase" ".p-6.relative" \
-  /tmp/hero.png 1440x900 0 --host-resolver-rules="MAP genworks.localhost cyclops"
+webshot URL [out.png] [WxH] [--mobile] [--settle=MS] [--scale=N] [--no-viewport] [chromium flags]
+webshot-clip URL SELECTOR [out.png] [WxH] [pad] [--mobile] [--settle=MS] [--scale=N] [chromium flags]
 ```
 
-These chromium tools are framework-agnostic -- they snapshot ANY web
-page under development, not only Gendl/GDL-powered ones.  For
-Gendl/GDL GEOMETRY itself the lisply backends additionally carry
-native emitters (inline `render_png` MCP tool; standalone drawing
-system and `with-format` lenses emitting PDF/PNG/JPEG/SVG/DXF files at
-runtime, no browser involved) -- see "Geometry & Image Output
-Channels" in gendl/CLAUDE.md (bridge doc id `claude-gendl-md`).
-Keep both channels in mind: chromium for web-app UI iteration, native
-emitters for model iteration and runtime file deliverables.
+- **WxH is a real viewport**, set with `Emulation.setDeviceMetricsOverride`
+  before navigation, so page JS and CSS both see the width asked for;
+  `--mobile` also flags the viewport mobile and emulates touch.
+  (Before 2026-08-15 webshot was `chromium --screenshot --window-size`,
+  which gave a 500x701 viewport when asked for 390x844: the PNG looked
+  right and pure CSS mostly resolved, but load-time JS measured 500 px
+  and touch was never emulated.  JS-driven responsive layouts captured
+  before then deserve a second look.  `--no-viewport` reproduces the
+  old geometry; `docker/webshot-viewport-probe.html` shows what a
+  capture sees.)
+- Captures wait for the load event, then settle (3.5 s default) so
+  x3dom and ajax finish; WebGL renders through SwiftShader, so 3D
+  viewports appear.
+- Every run gets a throwaway profile, no disk cache and a DevTools port
+  of its own (port 0 + `DevToolsActivePort`), so a file you are editing
+  is never served stale and two runs never attach to each other's
+  browser.
+- `webshot-clip` captures the first element matching SELECTOR, below
+  the fold included (`captureBeyondViewport`), PAD px around it.  Exit
+  codes: 1 bad arguments, 2 selector not found or zero area, 3 capture
+  failure, 4 no browser.
+- **Virtual hosts**: resolve them inside chromium:
+  ```bash
+  webshot "http://genworks.localhost/demo/staircase" /projects/tmp-shots/s.png 1440x2200 \
+    --host-resolver-rules="MAP genworks.localhost cyclops"
+  ```
+- **Write captures under `/projects`** (`/projects/tmp-shots/` by
+  convention) and read them from the host's `~/projects/...`: no
+  `docker cp`, no base64 round trip.
+- Reach for these before hand-rolling `chromium --headless`.  They
+  capture any web page, not only Gendl's; for Gendl geometry itself the
+  Gendl rooms have native emitters (`render_png`, `with-format` to
+  PDF/PNG/SVG/DXF) -- "Geometry & Image Output Channels" in the bridge's
+  `get_docs(id="claude-gendl-md")`.
+- Still open: driving a real pointer or touch drag over CDP `Input`
+  events and asserting the resulting geometry (`/projects/tmp/split-drag-test.js`
+  is the start of it), to prove a page responds rather than only renders.
 
-#### Addendum (2026-08-14): output path + cache gotcha
-Missed `webshot`/`webshot-clip` entirely this session and hand-rolled
-raw `chromium --headless --screenshot=...` calls instead -- future
-sessions should reach for the wrapper first, it already solves the
-binary-resolution and vhost problems above.  Two things worth folding
-back in from the raw-chromium detour:
-- **Skip the base64 round-trip**: writing the screenshot straight to
-  a path under the /projects bind mount (e.g. `/projects/tmp-shots/`,
-  the existing convention) and then reading it via the equivalent
-  HOST path (found by checking what the container's /projects bind-
-  mounts FROM, e.g. `/home/<user>/projects/tmp-shots/...`) needs no
-  `docker cp` and no base64 step at all -- one write, one direct read.
-- **Cache gotcha, iterating on the SAME evolving page**: repeated
-  headless chromium invocations against a URL you're actively editing
-  CSS/JS for can silently serve a stale cached response even though
-  the server-side file (and its cache-busting `?v=` mtime) genuinely
-  changed -- confirmed by diffing the served CSS text directly against
-  what a screenshot rendered.  Force a truly clean fetch every time:
-  `--disk-cache-dir=/dev/null --user-data-dir=/tmp/chrome-fresh-$$`
-  (a fresh, unique profile dir per invocation).
+## Long-running dev processes
 
-#### Addendum (2026-08-15): WxH is a real viewport now (webshot is node + CDP)
-`webshot` was a bash wrapper around `chromium --headless
---screenshot=... --window-size=W,H`.  Headless chromium does not honor
-`--window-size` below roughly 500px: **asking for 390x844 gave the page a
-500x701 viewport.**  Measured with `docker/webshot-viewport-probe.html`
-(kept in-repo precisely so this stays verifiable):
+Watchers (the tailwind CSS watcher, for one) run as asynchronous Emacs
+processes, visible to the user and never blocking the loop:
 
-| | innerWidth | innerHeight | maxTouchPoints | matchMedia(max-width:480px) |
-|---|---|---|---|---|
-| old, requested 390x844 | 500 | 757 | 0 | **false** |
-| new, `390x844 --mobile` | **390** | **844** | **1** | **true** |
-
-Rewritten as node + CDP (the transport `webshot-clip` already used) so
-`Emulation.setDeviceMetricsOverride` sets the viewport *before*
-navigation.  The CLI contract is unchanged -- new options are FLAGS, not
-positionals, specifically so the `--host-resolver-rules` recipe above
-keeps working.  `--no-viewport` restores the old geometry for comparison.
-
-**Correct the folklore while you are here.**  The original bug report said
-"the CSS media queries never see 390px."  That is not quite what happened,
-and the difference decides what to re-check:
-- The old `--screenshot=` flag *did* resize the window for the capture, so
-  the PNG came out 390x844 and **pure-CSS media queries mostly resolved at
-  the right width in the final paint**.  That is exactly why the bug
-  survived so long -- the shots were dimensionally plausible and the CSS
-  looked right.
-- What never ran at 390px is **the page itself**.  All load-time JS
-  measured a 500px viewport, so anything JS-driven -- and any layout
-  derived from a load-time measurement -- was computed for the wrong
-  width, and touch was never emulated at all.  eyes-only, which does JS
-  layout, is the prime victim; a pure-CSS page was mostly fine.
-
-So: re-verify JS-driven responsive behavior at phone sizes, not every
-stylesheet ever written.  Verification recipe:
-```bash
-webshot file:///projects/gs/readymax/docker/webshot-viewport-probe.html \
-  /projects/tmp-shots/vp.png 390x844 --mobile
-```
-The probe prints innerWidth/innerHeight/touch points/matchMedia and colors
-a band for the phone (<=480), tablet (481-760) and desktop (>=761) ranges.
-
-**`webshot-clip` caught up the same day.**  It now takes the same
-`Emulation.setDeviceMetricsOverride` before navigation and the same
-`--mobile` / `--settle=` / `--scale=` / `--no-viewport` flags, verified
-with the probe below: `--no-viewport` reproduces 500x701 / touch 0 /
-`matchMedia(<=480)` false, the default gives 390x844 / touch 1 / true,
-and the clipped `#band` element flips from TABLET (481-760) to PHONE.
-The element's own geometry changes with it, which is why this mattered
-more for clips than for full pages -- a hero image cropped from a
-mis-laid-out page looks perfectly plausible on its own.
-
-Two other things came across from `webshot` in the same pass, both
-previously bugs here and not there:
-- **DevTools port 0 + `DevToolsActivePort`**, replacing a randomly
-  guessed port that could collide with a concurrent run and silently
-  attach to the WRONG browser -- screenshotting another job's page.
-- **Throwaway profile + `--disk-cache-dir=/dev/null`**, so a CSS/JS file
-  you are actively editing is never served stale.
-Plus one bug of its own: `process.exit()` inside the CDP body skipped the
-cleanup handler, so the selector-not-found path orphaned a whole headless
-chromium process tree and its profile directory in the container.  Error
-exits now throw with a code so the `finally` still runs.
-
-Still open: `/projects/tmp/split-drag-test.js` is the
-companion trick worth folding in -- CDP `Input` events to drive a real
-pointer/touch drag and assert the resulting geometry, i.e. proving a page
-RESPONDS rather than only renders.
-
-### Long-Running Dev Processes as Emacs-Managed Processes
-Watchers (e.g. the tailwind CSS watcher) run as async emacs processes —
-visible to the user, no event-loop blocking:
 ```elisp
 (start-process "tailwind-demos-watch" "*tailwind-demos-watch*"
                "sh" "-c" "cd /projects/apps/tailwind && exec npm run dev:demos")
 ```
-They die with the daemon/container — restart them after any restart.
-Node/npm live ONLY in the ready-room container, never in the Gendl/GDL
-rooms (those consume compiled artifacts from /projects).
 
-### Git Commits from Inside the Container
-No git identity or ssh keys exist in the container.  Commit with
-explicit identity flags; pushes must happen on the host:
-```bash
-git -c user.name="..." -c user.email="..." commit -m "..."
-```
+They die with the daemon: restart them after any restart.  Node and npm
+live only in the ready room, never in the Gendl or GDL rooms, which
+consume compiled artifacts from `/projects`; prefer the room's node to
+the host's for `/projects` JS (`(lisply-shell-bounded "node --check FILE" 15)`).
 
-## Verifying mechanical/bulk edits (2026-08-13 production incident)
+## Showing the user a buffer
 
-After any find/replace or bulk edit, verify by PRESENCE of the correct
-result, and compile with warnings VISIBLE.  A `remhash -> remhash-scrubbed`
-replace_all glued 12 of 17 arglists (`(remhash-scrubbed fd*request-registry*)`)
-and shipped to the production cyclops fleet, because two verifications
-lied:
-
-- an **absence-grep** whose exclusion pattern (`remhash-scrubbed `, with
-  trailing space) also matched the broken lines, so "no matches" read as
-  "clean" when it meant "all broken";
-- `ql:quickload ... :silent t`, which suppressed the very
-  undefined-variable / wrong-arity warnings that named every broken site.
-
-Rules: (a) grep the edited call sites and READ the resulting lines —
-verify presence of the right form, never absence of the mistake; (b)
-compile with warnings visible and read them (never `:silent` for a
-verification build — on ACL capture compiler output and scan for
-undefined-variable/arity warnings); (c) prefer whole-expression old/new
-strings over token-splice replacements so whitespace is never
-load-bearing.  Corollary: a build that emits warnings you routinely
-scroll past will hide the next real one — keep verification builds at
-zero warnings.
-
-### Inspecting MCP tool-result dumps (2026-08-13)
-
-When a large `lisp_eval`/`get_docs` result is persisted to
-`~/.claude/.../tool-results/*.json`, do NOT reach for host-side
-python/grep to search it.  Pull it back through the container instead —
-re-request `get_docs` with a narrower id, or fetch/search the text in an
-elisp temp-buffer.  General rule: once content originated in the
-container's world, keep working it there rather than shelling out on the
-host (same principle as the file-ops and syntax-check guidance above).
-
-## Raising a buffer in the user's live rmax session (2026-08-17)
-
-When a piece deserves reading in Emacs rather than chat scroll — a
-draft document, a review skeleton, a diff — put it in a buffer and
-raise it in the user's attached client frame.  An rmax session is an
-emacsclient frame on the shared Captain daemon, so
-anything done to a buffer via `lisp_eval` is already in the user's
-Emacs; the only trick is selecting THEIR frame, not the daemon's
-initial one:
+When something deserves reading in Emacs rather than in chat -- a
+draft, a review skeleton, a diff -- put it in a buffer and raise it in
+the user's attached client frame.  An rmax session is an emacsclient
+frame on the shared daemon, so the buffer is already in their Emacs;
+the trick is selecting THEIR frame, not the daemon's initial one:
 
 ```elisp
 (let ((buf (get-buffer-create "*name the user will recognize*")))
@@ -975,15 +368,10 @@ initial one:
     (goto-char (point-min))))
 ```
 
-- The daemon's own frame has `client` nil (`F1`, no tty); an attached
-  emacsclient frame has `client` set and a `tty` parameter.  Check
-  with `(frame-list)` + `frame-parameter` first; if no client frame
-  exists, just create the buffer and say so — the user can `C-x b` to
-  it after attaching.
-- With several client frames, `seq-find` takes the first; prefer the
-  one whose `tty` matches where the user says they are, or fall back
-  to telling them the buffer name.
-- Give buffers stable, greppable names (`*canon rebuild: ...*`) so a
-  later `C-x b` completes them easily.
-- First live use: a document-skeleton review during a 2026-08-17
-  session — worked on the first try.
+- The daemon's own frame has `client` nil; an attached emacsclient
+  frame has `client` set and a `tty` parameter.  If no client frame
+  exists, create the buffer and say so -- the user can `C-x b` to it
+  after attaching.
+- With several client frames, prefer the one whose `tty` matches where
+  the user says they are, or tell them the buffer name.
+- Give buffers stable, greppable names (`*canon rebuild: ...*`).

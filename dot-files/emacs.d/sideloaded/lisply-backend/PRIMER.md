@@ -141,4 +141,4 @@ paredit in depth.
 `ping_lisp` timing out with everything else means the daemon is
 blocked: a prompt, a stuck child process, or a loop.  You cannot fix
 that from `lisp_eval`.  Tell the person; the recovery runbook is in
-the main-claude-md reference ("Event-Loop Blocking").
+the main-claude-md reference ("Keeping the daemon answering").

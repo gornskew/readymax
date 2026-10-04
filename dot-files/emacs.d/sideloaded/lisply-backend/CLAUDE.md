@@ -2,468 +2,233 @@
 
 **Start with the primer** (`get_docs(id="primer")`).  It is the short
 guide, and where it and this file disagree, the primer is current.  This
-file is the long reference: buffer operations, paredit and structural
-editing in depth, recovering an unbalanced file, the lisply_search tool.
+file is the reference behind it, one topic per section:
 
-## The shared instance, in one paragraph
+1. [Evaluating code](#1-evaluating-code)
+2. [Reading and editing files](#2-reading-and-editing-files)
+3. [Structural editing of Lisp](#3-structural-editing-of-lisp)
+4. [Unbalanced files](#4-unbalanced-files)
+5. [Writing a whole Lisp file from data](#5-writing-a-whole-lisp-file-from-data)
+6. [Loops that cannot wedge the daemon](#6-loops-that-cannot-wedge-the-daemon)
+7. [GDL define-object helpers](#7-gdl-define-object-helpers)
+8. [Org buffers](#8-org-buffers)
+9. [SLIME and Swank](#9-slime-and-swank)
+10. [Working on this backend itself](#10-working-on-this-backend-itself)
+11. [The lisply_search tool](#11-the-lisply_search-tool)
 
-You share one live Emacs with a person: its current buffer, point and
-windows.  Never rely on the current buffer; name the one you mean with
-`with-current-buffer` and keep point with `save-excursion`.  Do not open
-project files with `find-file` or `find-file-noselect` from an eval:
-mode hooks and "changed on disk" both prompt, and a prompt stops every
-tool call until someone answers it.  Read, search and edit files with
-the file helpers (`(lisply-help)` lists them), which edit through a
-buffer the person already has open and otherwise leave no buffer
-behind.  Examples below that open a file with `find-file-noselect`
-predate the helpers: apply them to a buffer that is already open, or
-to a temp buffer filled with `insert-file-contents`.
+Examples are the elisp you pass as `lisp_eval`'s `code`.
 
-Tool names in the examples (`mcp__skewed_emacs__...`) are from before
-the rooms were renamed; read them as this server's `lisp_eval`.
+## 1. Evaluating code
 
----
+`lisp_eval` reads **one** top-level form and evaluates it in the
+daemon.  The result comes back printed with `%s`; anything the form
+prints to `standard-output` comes back as Stdout.
 
-## Basic MCP Usage Examples
+- **Only the first form runs.**  Later forms in the payload are
+  silently ignored -- there is no error, you just get the first form's
+  value.  Wrap several in `progn`.
+- **Read before eval.**  The whole form is read before any of it runs,
+  so a form naming a package or reader construct that an earlier part
+  of the same form defines fails at read time.  Load in one call, use
+  in the next.
+- **The guard.**  A payload mentioning `shell-command`, `call-process`,
+  `process-file` or `sleep-for` without a visible bound is refused with
+  `LISPLY-GUARD REFUSED`.  Use `(lisply-shell-bounded CMD SECS)` (under
+  20 s), or `(lisply-shell-async CMD)` and later
+  `(lisply-shell-async-result TOKEN)`.  `;; lisply:allow-unbounded` in
+  the payload overrides it, deliberately.
+- **Time.**  The transport drops a call after about 30 s without an
+  answer; the daemon keeps running it, single-threaded.  Split long work
+  into short calls.
 
-### 1. Simple Evaluation
-```python
-# Basic arithmetic
-mcp__skewed_emacs__skewed_emacs__lisp_eval(code="(+ 1 2 3)")
-# Returns: {"Result": "6", "Stdout": ""}
-
-# List operations  
-mcp__skewed_emacs__skewed_emacs__lisp_eval(code="(list 1 2 3)")
-# Returns: {"Result": "(1 2 3)", "Stdout": ""}
-```
-
-### 2. Buffer Operations
-```python
-# List all open buffers
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='(mapcar (lambda (buf) (buffer-name buf)) (buffer-list))'
-)
-
-# Get buffer contents
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='(with-current-buffer "*Messages*" (buffer-string))'
-)
-
-# Get current buffer info
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='(list :name (buffer-name) :file (buffer-file-name) :modified (buffer-modified-p))'
-)
-```
-
-### 3. File Operations  
-
-**⚠️ Prefer `with-temp-buffer` for reading files non-interactively:**
-
-`find-file-noselect` can trigger minibuffer prompts (e.g., "File is read-only on disk. Make buffer read-only, too?") that block MCP evaluation. Use `with-temp-buffer` + `insert-file-contents` when you only need to read:
-
-```python
-# Read file contents (NON-INTERACTIVE - preferred for MCP)
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='(with-temp-buffer (insert-file-contents "/path/to/file") (buffer-string))'
-)
-
-# Check if file exists
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='(file-exists-p "/path/to/file")'
-)
-
-# List directory contents
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='(directory-files "/path/to/directory")'
-)
-```
-
-**When you need the real buffer** (for mode-specific functions like org-mode), use `find-file-noselect` but be aware it may prompt the user.
-
-## CRITICAL: Safe Lisp Code Editing with Paredit
-
-**â ï¸ WARNING: Always enable paredit mode before editing Lisp files!**
-
-When editing any `.lisp`, `.el`, `.gendl`, or similar files, you MUST enable paredit mode first to prevent unbalanced parentheses that will break syntax.
-
-### Step 1: Always Enable Paredit First
-
-```python
-# REQUIRED: Enable paredit mode before any Lisp editing
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(with-current-buffer "file.el"
-               (when (fboundp 'paredit-mode)
-                 (paredit-mode 1)))'''
-)
-```
-
-### Step 2: Verify Parentheses Balance
-
-```python
-# REQUIRED: Check balance before and after edits
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(with-current-buffer "file.el"
-               (condition-case err
-                   (progn (check-parens) "Balanced")
-                 (error (format "Error: %s" err))))'''
-)
-```
-
-### Why Paredit Mode is Mandatory
-
-**Problem**: Without paredit mode, simple text operations can easily break parentheses balance:
-```elisp
-;; BAD: This can break syntax
-(replace-regexp-in-string "(old-function" "(new-function" code)
-```
-
-**Solution**: Paredit mode provides structural editing that maintains balance:
-```elisp
-;; GOOD: Structural editing with paredit
-(when (fboundp 'paredit-mode) (paredit-mode 1))
-(goto-char (point-min))
-(search-forward "(old-function")
-(backward-sexp)
-(forward-char)
-(paredit-kill-word)
-(insert "new-function")
-```
-
-### CRITICAL: Think in Structures, Not Lines
-
-**This is the most important paredit concept for LLM agents.**
-
-The fundamental mistake that leads to unbalanced buffers is **thinking in lines rather than structures**. Lisp code is not a sequence of lines—it's a tree of nested s-expressions. Paredit-mode enforces structural integrity, but only if you use structural operations.
-
-**❌ WRONG MENTAL MODEL (Line-Based):**
-> "I need to add two new let bindings. I'll insert text after line 15."
-
-This thinking leads to:
-```elisp
-;; Attempt to add bindings by inserting text after a line
-(search-forward "(backend-port (getf rule :port))")
-(end-of-line)
-(insert "\n            (target-path (getf rule :target-path))")
-(insert "\n            (rule-path (getf rule :path))")
-```
-
-**Result**: Broken s-expression structure. The let binding list is now malformed because you inserted text without considering the enclosing structure.
-
-**✅ CORRECT MENTAL MODEL (Structure-Based):**
-> "I need to add two sibling s-expressions to this let's binding list. The binding list is the second element of the let form."
-
-This thinking leads to:
-```elisp
-;; Navigate to the let form structurally
-(search-forward "(let ((")
-(backward-char 2)           ; Position on opening paren of let
-(down-list)                 ; Enter the let form
-(down-list)                 ; Enter the binding list
-(forward-sexp 2)            ; Skip past existing bindings
-;; Now positioned correctly to add sibling binding forms
-(insert "\n            ")
-(insert "(target-path (getf rule :target-path))")
-(insert "\n            ")
-(insert "(rule-path (getf rule :path))")
-```
-
-**The Key Questions to Ask Before Any Edit:**
-
-1. **What s-expression am I modifying?** (The binding list? A function call? A defun body?)
-2. **What structural relationship should the new code have?** (Sibling? Child? Replacement?)
-3. **Which paredit operations achieve that structural change?** (Slurp? Insert? Wrap?)
-
-**Concrete Example: Adding a Binding to `let`**
-
-Given:
-```lisp
-(let ((x 1)
-      (y 2))
-  body...)
-```
-
-Goal: Add `(z 3)` as a third binding.
-
-**Line-based thinking** says: "Insert `(z 3)` after line 2."  
-**Structural thinking** says: "Add a sibling form after `(y 2)` within the binding list."
+Shared state.  You share the daemon with a person: current buffer,
+point, windows, the kill ring.  Never rely on the current buffer: name
+the one you mean with `with-current-buffer` and wrap motion in
+`save-excursion`.
 
 ```elisp
-;; Structural approach
+(mapcar #'buffer-name (buffer-list))                    ; what is open
+(with-current-buffer "*Messages*" (buffer-string))      ; read a buffer
+(list emacs-version (fboundp 'paredit-mode))            ; state checks
+```
+
+## 2. Reading and editing files
+
+Use the file helpers; `(lisply-help)` lists them with their signatures.
+
+| Task | Helper |
+|---|---|
+| read lines N to M | `(lisply-read FILE N M)` |
+| search a tree | `(lisply-grep "PATTERN" DIR :glob "*.lisp")` |
+| exact-text edit | `(lisply-replace FILE OLD NEW)` (`:count N` for several) |
+| a top-level Lisp form | `lisply-form-get`, `-replace`, `-delete`, `-insert` |
+| balance check | `(lisply-check-parens FILE)` |
+
+They are bounded, check Lisp balance before and after (writing nothing
+if an edit would break it), go through the live buffer when one visits
+the file, refuse a buffer with unsaved edits, and otherwise leave no
+buffer behind.
+
+**When no helper fits**, the rule is: never open a project file with
+`find-file` or `find-file-noselect` from an eval -- mode hooks, lock
+files and "changed on disk" can all prompt, and a prompt stops every
+call until someone answers it.  Instead:
+
+```elisp
+;; Read without visiting: no hooks run.
+(with-temp-buffer
+  (insert-file-contents "/path/file")
+  (buffer-substring-no-properties (point-min) (min (point-max) 4000)))
+
+;; Edit a file NO buffer visits: temp buffer, then write it back.
+(let ((f "/path/file.txt"))
+  (unless (find-buffer-visiting f)
+    (with-temp-buffer
+      (insert-file-contents f)
+      (goto-char (point-min))
+      (while (search-forward "old" nil t) (replace-match "new" t t))
+      (write-region nil nil f nil 'silent))))
+
+;; Edit a file a buffer ALREADY visits: through that buffer, then save.
+(let ((buf (find-buffer-visiting "/path/file.txt")))
+  (with-current-buffer buf
+    (unless (verify-visited-file-modtime buf) (revert-buffer t t t))
+    (save-excursion
+      (goto-char (point-min))
+      (when (search-forward "old" nil t) (replace-match "new" t t)))
+    (save-buffer)))
+```
+
+Prefer buffer operations (search, `replace-match`, `kill-sexp`) to
+pulling the text into a string, rewriting it with
+`replace-regexp-in-string` and writing it out: the buffer route edits
+in place, keeps undo, and lets a Lisp mode check structure.
+
+`(buffer-size)` counts characters; `file-attribute-size` and `ls -l`
+count bytes.  In a file with multi-byte UTF-8 (`kṛṣṇa`, `→`, `—`) the
+two differ, which is not a sign of damage.
+
+## 3. Structural editing of Lisp
+
+The helpers in section 2 cover whole forms and exact text.  For finer
+edits inside a form, work structurally: in a temp buffer for a file no
+buffer visits, in the live buffer otherwise, with paredit on
+(`(when (fboundp 'paredit-mode) (paredit-mode 1))`) and a balance check
+before saving.
+
+### Think in structures, not lines
+
+Lisp source is a tree of s-expressions, not a list of lines.  The edits
+that break files come from line thinking: "insert this after line 15".
+Before any edit, ask: *which s-expression am I changing* (a binding
+list, a call, a defun body), *what relation should the new code have to
+it* (sibling, child, replacement), and *which structural move does that*.
+
+Adding `(z 3)` to `(let ((x 1) (y 2)) ...)` is "add a sibling after
+`(y 2)` inside the binding list", not "insert after line 2":
+
+```elisp
 (search-forward "(let ")
-(down-list)                    ; Into binding list
-(forward-sexp 2)               ; Past (x 1) and (y 2)
-(insert "\n      (z 3)")       ; Insert new sibling
+(down-list)            ; into the binding list
+(forward-sexp 2)       ; past (x 1) and (y 2)
+(insert "\n      (z 3)")
 ```
 
-**When Paredit Blocks You, STOP**
+When paredit refuses an operation, your model of the structure is
+wrong.  Do not turn paredit off or reach for a shell to force the edit
+through (a December 2025 session did both, and left a file that
+balanced but no longer meant anything); stop, reconsider the structure,
+and ask if it is still unclear.
 
-If paredit-mode prevents an operation, that's a signal that your mental model is wrong:
+### Footgun: `search-forward "(name"` does not leave you on the `(`
 
-1. **Don't disable paredit-mode** to force the edit through
-2. **Don't use shell commands** (sed, etc.) to bypass paredit
-3. **Do step back** and reconsider the structural operation you're attempting
-4. **Do ask for help** if you can't figure out the correct structural approach
-
-**Remember**: Paredit-mode is not an obstacle—it's a guardrail that catches incorrect thinking.
-
-### Safe Lisp Editing Workflow
-
-**Step-by-Step Safe Editing Pattern (Shared-Buffer-Safe):**
-```python
-# 1. Open file and enable paredit (SHARED-BUFFER-SAFE VERSION)
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(let ((buf (find-file-noselect "/path/to/file.el")))
-               (with-current-buffer buf
-                 (when (fboundp 'paredit-mode)
-                   (paredit-mode 1))
-                 "Ready for editing"))'''
-)
-
-# 2. Make edits using structural navigation (EXPLICIT BUFFER)
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(with-current-buffer "file.el"
-               (save-excursion
-                 (goto-char (point-min))
-                 (search-forward "(defun old-name")
-                 (backward-sexp)
-                 (forward-char)
-                 (forward-word)
-                 (paredit-kill-word)
-                 (insert "new-name")))'''
-)
-
-# 3. Verify balance before saving (BUFFER-SAFE)
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(with-current-buffer "file.el"
-               (condition-case err
-                   (progn (check-parens)
-                          (save-buffer)
-                          "File saved successfully")
-                 (error (format "Error: %s" err))))'''
-)
-```
-
-### Essential Paredit Functions
-
-**Basic Structural Movement:**
-```python
-# Move by complete expressions (safer than character movement)
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               (forward-sexp)    ; Move forward one s-expression
-               (backward-sexp)   ; Move backward one s-expression  
-               (up-list)         ; Move up one parentheses level
-               (down-list))      ; Move down one parentheses level'''
-)
-```
-
-**Safe Editing Operations:**
-```python
-# Guaranteed balanced operations
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               (paredit-wrap-round)        ; Wrap in parentheses
-               (paredit-splice-sexp)       ; Remove surrounding parens
-               (paredit-forward-slurp-sexp) ; Include next expression
-               (paredit-kill))             ; Delete safely to end'''
-)
-```
-
-## CRITICAL: Detecting and Handling Unbalanced Buffers
-
-**â ï¸ WARNING: LLM agents can accidentally circumvent paredit-mode guardrails!**
-
-### How Unbalanced States Occur
-
-**Two scenarios lead to unbalanced buffers:**
-
-1. **LLM Agent Circumvention (Agent's Fault):**
-   - The MCP `lisp_eval` tool allows arbitrary Elisp evaluation
-   - This includes running shell commands: `(shell-command "sed -i 's/foo/bar/' file.el")`
-   - External editors invoked via shell bypass paredit-mode completely
-   - **This has been observed in the field** - agents sometimes resort to shell-based editing
-   - Result: Paredit-mode enabled but buffer contains unbalanced code
-
-2. **External File Modification (Not Agent's Fault):**
-   - User edits file in external editor
-   - Emacs auto-reverts the buffer
-   - Paredit-mode remains enabled despite unbalanced content from disk
-   - Result: Same inconsistent state
-
-3. **LLM Bulk String Insertion (Agent's Fault, Even With Paredit Enabled):**
-   - The agent calls `(insert "...multi-line lisp code with parens...")` to add a big block
-   - Paredit-mode is enabled, but does NOT validate bulk string insertions
-   - Paredit's invariants protect against incremental editing (self-insert, kill-sexp,
-     paredit-* commands) — they do NOT cover opaque text drops
-   - The string can carry latent imbalance that paredit places verbatim into the buffer
-   - Result: same inconsistent state — paredit on, content unbalanced
-
-### Why This is Dangerous
-
-**Normal users CANNOT create this state:**
-- Paredit-mode prevents unbalanced edits through normal Emacs commands
-- Paredit-mode refuses to enable in an already-unbalanced buffer
-
-**But LLM agents CAN create this state:**
-- Shell commands bypass Emacs entirely: `(shell-command "sed ...")`
-- Direct file writes bypass buffer protections: `(write-region ... overwrite)`
-- String manipulation then write: `(with-temp-file ... (insert (replace-regexp-in-string ...)))`
-
-**This inconsistent state breaks all assumptions:**
-- Paredit-mode thinks it's safe to edit, but isn't
-- Structural navigation commands (`forward-sexp`) fail
-- Further edits can cascade into worse corruption
-- Syntax becomes unparseable
-
-### MANDATORY: Pre-Edit Balance Check
-
-**ALWAYS check balance BEFORE any editing or analysis of Lisp files:**
-
-```python
-# REQUIRED before any Lisp file operation
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(with-current-buffer "file.el"
-               (condition-case err
-                   (progn
-                     (check-parens)
-                     (list :status "BALANCED" :safe-to-edit t))
-                 (error (list :status "UNBALANCED"
-                             :safe-to-edit nil
-                             :error (error-message-string err)))))'''
-)
-```
-
-**If unbalanced detected:**
-1. â **STOP IMMEDIATELY** - Do not attempt any edits
-2. â **Report to user** with clear diagnostic information
-3. â **Back off** - Let user fix manually
-4. â **Do not try to fix it yourself** - This rarely goes well
-
-### Detection Pattern for Confusing States
-
-**Check for the impossible state (paredit-mode ON but unbalanced):**
-
-```python
-# Detect the confusing state
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(with-current-buffer "file.el"
-               (list :paredit-enabled paredit-mode
-                     :balanced (condition-case err
-                                   (progn (check-parens) t)
-                                 (error nil))
-                     :auto-reverted auto-revert-mode))'''
-)
-```
-
-**Diagnostic Results:**
-- `{:paredit-enabled t, :balanced nil}` â **CONFUSING STATE** - agent or external edit caused this
-- `{:paredit-enabled t, :balanced t}` â Safe to proceed
-- `{:paredit-enabled nil, :balanced nil}` â Expected for non-Lisp or damaged files
-
-### Best Practices to Avoid Creating Unbalanced States
-
-**â DO NOT use these methods for editing Lisp files:**
-```python
-# WRONG: Shell-based editing bypasses paredit
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='(shell-command "sed -i \"s/old/new/\" /path/to/file.el")'
-)
-
-# WRONG: String manipulation then write bypasses paredit
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(let ((content (with-temp-buffer
-                              (insert-file-contents "/path/to/file.el")
-                              (buffer-string))))
-                (with-temp-file "/path/to/file.el"
-                  (insert (replace-regexp-in-string "old" "new" content))))'''
-)
-
-# WRONG: Direct file write bypasses paredit
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='(write-region "(defun foo" nil "/path/to/file.el" append)'
-)
-```
-
-```python
-# WRONG: Bulk multi-line (insert "...") is NOT protected by paredit
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(with-current-buffer "file.lisp"
-               (when (fboundp 'paredit-mode) (paredit-mode 1))
-               (goto-char (point-max))
-               (insert "(define-object foo (bar)
-                          :computed-slots ((x (the y)))) "))'''  ;; opaque to paredit
-)
-```
-
-**✅ DO this instead for large multi-line block inserts — stage in a temp buffer first:**
-```python
-# RIGHT: Validate the block in isolation before committing it
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(let ((staging (generate-new-buffer " *staging*")))
-               (unwind-protect
-                   (progn
-                     (with-current-buffer staging
-                       (lisp-mode)
-                       (when (fboundp 'paredit-mode) (paredit-mode 1))
-                       (insert "(define-object foo (bar)
-                                  :computed-slots ((x (the y))))")
-                       (check-parens))   ;; raises if unbalanced — abort early
-                     ;; Only proceed if the staging buffer is balanced
-                     (with-current-buffer (find-file-noselect "/path/to/file.lisp")
-                       (save-excursion
-                         (goto-char (point-max))
-                         (insert-buffer-substring staging))
-                       (check-parens)
-                       (save-buffer)))
-                 (kill-buffer staging)))'''
-)
-```
-
-**Why staging works:** the temp buffer fails fast on a bad block before it touches the
-real file. The real buffer only ever receives a verified-balanced chunk via
-`insert-buffer-substring`. Even if paredit-mode wouldn't have caught the imbalance
-during the bulk insert, `check-parens` in the staging buffer will.
-
-**â DO use native Emacs buffer operations with paredit:**
-```python
-# RIGHT: Buffer-based editing with paredit protection
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(with-current-buffer (find-file-noselect "/path/to/file.el")
-               (save-excursion
-                 (when (fboundp 'paredit-mode) (paredit-mode 1))
-                 (goto-char (point-min))
-                 (search-forward "old")
-                 (paredit-kill-word)
-                 (insert "new")
-                 (check-parens)
-                 (save-buffer)))'''
-)
-```
-
-### Structural Authoring via Elisp Data — a Third Path
-
-When the task is **creating a new Lisp file from scratch** or wholesale-rewriting
-one, there is a more reliable option than either heredoc text generation OR
-in-place paredit surgery: **build the s-expression as elisp data and serialize
-it**.
-
-An elisp quoted-list literal is balanced by construction — the elisp reader
-will refuse to construct an unbalanced list, so by the time you reach the
-serialization step the form is already structurally correct.  Common Lisp
-shares enough surface syntax with elisp that the form round-trips cleanly:
-keywords stay keywords, strings stay strings, Unicode survives intact
-(`kṛṣṇa`, `→`, `←`, etc.).
-
-#### Usage
-
-The helper lives at
-`dot-files/emacs.d/sideloaded/lisply-backend/source/lisply-sexp-write.el`:
+After `(search-forward "(body-class")` point is past the `s` of
+`class`; `(backward-char)` lands on that `s`, and `forward-sexp` from
+there only walks to the end of the symbol.  Land on the paren with the
+match data:
 
 ```elisp
-(require 'lisply-sexp-write)
+(re-search-forward "(body-class\\_>")
+(goto-char (match-beginning 0))   ; on the (
+(forward-sexp)                    ; over the whole (body-class ...) form
+```
 
+The same family: after `(re-search-forward ":computed-slots ((")` point
+is INSIDE the first slot spec, not in the slot list; after
+`(re-search-forward "^(define-object foo")` point is inside the form,
+and `forward-sexp` moves over the next element, not the form.  Go to
+`(match-beginning 0)` before any structural navigation.  The commentary
+in `lisply-edit-helpers.el` works through all three.
+
+### Paredit, the commands that matter
+
+| Task | Command | Effect |
+|---|---|---|
+| pull the next form in | `paredit-forward-slurp-sexp` | `(a b) c` → `(a b c)` |
+| push the last form out | `paredit-forward-barf-sexp` | `(a b c)` → `(a b) c` |
+| pull the previous form in | `paredit-backward-slurp-sexp` | `a (b c)` → `(a b c)` |
+| wrap | `paredit-wrap-round` | `a` → `(a)` |
+| unwrap | `paredit-splice-sexp` | `(a b)` → `a b` |
+| kill to the end of the list | `paredit-kill` | `(a b c d)` → `(a b)` from `b` |
+| kill a word, balanced | `paredit-kill-word` | `(old-name x)` → `( x)` |
+| move over / into / out of | `forward-sexp`, `down-list`, `up-list` | |
+
+Do not edit Lisp with `delete-char`, `kill-line` or `replace-regexp`
+over parentheses; they are blind to structure.  An exact-text edit is
+different: renaming `(if c x)` to `(when c x)` needs no paredit,
+because `(lisply-replace FILE "(if c" "(when c")` takes the parenthesis
+out and puts it back, and the helper checks balance anyway.
+
+### Big inserts
+
+paredit protects incremental edits, not an `(insert "...")` of a whole
+block: a string can carry an imbalance straight into the buffer.  The
+form helpers check the text for you.  By hand, stage it first:
+
+```elisp
+(with-temp-buffer
+  (lisp-mode)
+  (insert block-text)
+  (check-parens)      ; signals before anything real is touched
+  block-text)
+```
+
+## 4. Unbalanced files
+
+`(lisply-check-parens FILE)` returns `t` or names the line where
+balance fails; the editing helpers refuse to touch a Lisp file that is
+already unbalanced.
+
+How a file gets there:
+
+1. **Edits that bypass Emacs** -- a shell `sed`, a string rewrite
+   written out with `write-region`.  (The Claude Code hook a Basilisk
+   yard installs refuses the shell forms.)
+2. **A bulk `insert` of an unbalanced string**, paredit on or not
+   (section 3, *Big inserts*).
+3. **A change on disk** that an auto-reverted buffer picked up.
+
+A person cannot normally produce "paredit on, buffer unbalanced";
+paredit refuses to turn on in an unbalanced buffer.  An agent can, by
+the routes above, and every structural command after that misbehaves.
+
+If you find an unbalanced file: **stop, do not try to repair it by
+guesswork, and report** -- the file, the line `lisply-check-parens`
+gives, and what last touched it -- then back off.  When the file is
+under git, `git diff` on it (through magit plumbing) usually shows the
+damage, and restoring it is the user's call.
+
+## 5. Writing a whole Lisp file from data
+
+For a new file, or a wholesale rewrite, build the code as elisp data and
+let `lisply-write-sexp-file` serialize it.  A quoted elisp list is
+balanced by construction (the reader will not build an unbalanced one),
+and Common Lisp shares enough surface syntax that the form round-trips:
+keywords, strings and Unicode survive.
+
+```elisp
 (lisply-write-sexp-file
- "/projects/apps/my-app/source/widget.lisp"
+ "/path/my-app/source/widget.lisp"
  "my-package"
  '((define-object widget (base-html-page)
      :computed-slots
@@ -474,1085 +239,260 @@ The helper lives at
      ((sub-widget :type 'other-widget)))))
 ```
 
-The function writes `(in-package :my-package)` at the top, pretty-prints each
-form via `pp` (with widened `fill-column` so attribute/value pairs stay
-together), restores `()` for known empty-arg-list idioms (`with-lhtml-string`,
-`with-cl-who-string`), breaks define-object section keywords (`:computed-slots`,
-`:objects`, etc.) onto their own lines, reindents under `lisp-mode`, runs
-`check-parens` as a safety net, and saves.
+It writes `(in-package :my-package)`, pretty-prints each form with a
+wide `fill-column`, restores `()` for the empty-argument idioms
+(`with-lhtml-string`, `with-cl-who-string`), puts each define-object
+section keyword on its own line, reindents under `lisp-mode`, checks
+balance and saves.
 
-`check-parens` here is redundant — the form was balanced when constructed —
-but it catches surprises and proves correctness to the caller.
+| Situation | Use |
+|---|---|
+| brand-new file, boilerplate (package defs, ASDF stubs) | `lisply-write-sexp-file` |
+| wholesale rewrite with no comments to keep | `lisply-write-sexp-file` |
+| a change inside an existing file | the form helpers, or section 3 |
+| comments inside the form, `#+`/`#-` reader conditionals | the form helpers (`pp` drops comments and may not keep reader macros) |
 
-#### When to use this vs paredit
-
-| Situation | Approach |
-|-----------|----------|
-| Brand-new source file | `lisply-write-sexp-file` |
-| Wholesale rewrite (no inline comments to preserve) | `lisply-write-sexp-file` |
-| Generating boilerplate (publishing setup, ASDF stubs, package defs) | `lisply-write-sexp-file` |
-| Localized change inside an existing file | `kill-sexp` + paredit |
-| Need to preserve inline `;;` comments inside the form | paredit (`pp` drops comments — it operates on the AST) |
-| Hand-authored reader macros (`#+nil`, `#-...`) | paredit (`pp` may not preserve) |
-
-#### Avoiding MCP timeouts on large forms
-
-A very large form passed as a single elisp literal in one `lisp_eval` call
-can exceed the MCP payload comfort zone and time out before completion.
-The pattern that has proven reliable: split into two calls.
+A very large form in one payload can run into the transport's time
+limit.  Split it: store the heavy part in a variable in one call, then
+splice it in with backquote in a small second call.
 
 ```elisp
-;; Call 1: store the heavy body in a variable.
-(progn
-  (defvar my-page-body nil)
-  (setq my-page-body
-        '((:main :class "max-w-3xl mx-auto")
-          ((:h1 :class "text-4xl") "Title")
-          ;; ... can be hundreds of lines ...
-          ))
-  (length my-page-body))   ; sanity check
-
-;; Call 2: small write call, splicing the body in via backtick/comma.
-(lisply-write-sexp-file
- "/path/file.lisp"
- "my-package"
- (list `(define-object foo (base-html-page)
-          :computed-slots
-          ((title "...")
-           (body (with-lhtml-string () ,my-page-body))))))
+;; call 1
+(progn (defvar my-page-body nil)
+       (setq my-page-body '((:main ...) ...))
+       (length my-page-body))
+;; call 2
+(lisply-write-sexp-file "/path/file.lisp" "my-package"
+  (list `(define-object foo (base-html-page)
+           :computed-slots ((body (with-lhtml-string () ,my-page-body))))))
 ```
 
-#### A footgun worth internalizing: `lisp_eval` reads ONE top-level form
+What can still go wrong is semantic, not syntactic: a symbol or package
+the Common Lisp side does not know when it loads the file.
 
-The lisply-backend `lisp_eval` endpoint reads exactly **one** top-level form
-per call.  Multiple top-level forms in the same payload silently evaluate
-only the first; later forms appear to disappear.
+## 6. Loops that cannot wedge the daemon
+
+Every loop in a payload runs synchronously on the daemon's one thread.
+A loop that stops making progress wedges the daemon and every MCP call
+until the stack is restarted -- `ping_lisp` goes dark too, and a signal
+does not always free it.
+
+Two field incidents:
+
+- **August 2026**: a blank-line collapser,
+  `(while (and (looking-at "^[ \t]*$") ...) (delete-region (line-beginning-position) (min (point-max) (1+ (line-end-position)))))`.
+  At the end of the buffer the `min` clamp made the delete zero-width,
+  the condition stayed true, and it spun for ever -- twice, in two
+  sessions, before anyone saw why.
+- **2026-10-04**: a `while (re-search-forward ...)` whose body ended on
+  `(forward-line 0)`, which moved point back before the match, so the
+  search found it again for ever.
+
+The rules:
+
+1. **Prove progress.**  Each pass must advance point or shrink the
+   buffer.  Zero-width deletes at `point-min`/`point-max` and moving
+   point backwards inside a search loop are the classic traps.
+2. **Tie the loop to a search.**  `(while (search-forward "x" nil t) ...)`
+   ends because each search advances or returns nil -- as long as the
+   body leaves point past the match (`replace-match` does).
+3. **Prefer built-ins** for whitespace work: `delete-blank-lines`,
+   `delete-trailing-whitespace`, `just-one-space`, `fixup-whitespace`;
+   and `keep-lines` / `flush-lines` to filter lines.
+4. **Bound what you cannot prove**: `(cl-loop repeat 1000 while COND do ...)`.
+   A wrong answer beats a wedged daemon.
+5. **Try the degenerate shapes** before a routine runs over many files:
+   the target at the end of the buffer, at the start, an empty file, no
+   trailing newline.
+
+After a hard restart, a dead process's `.#` lock file makes the next
+visit of that file ask whether to steal the lock -- another prompt.
+The file helpers do not lock; anything that visits a file should bind
+`create-lockfiles` to nil.
+
+## 7. GDL define-object helpers
+
+`lisply-edit-helpers` (loaded at boot) does the define-object edits
+that come up in refactors.  These take a BUFFER, not a file: use them
+in a temp buffer you write back, or in a buffer that already visits the
+file.  Each checks balance on entry and exit.
+
+| Function | Does |
+|---|---|
+| `lisply-insert-slot-spec` | insert a spec as the first entry of `:computed-slots`, `:input-slots`, `:objects`... |
+| `lisply-kill-named-slot` | remove a `(slot-name ...)` spec and its line |
+| `lisply-replace-parent-class` | swap the mixin list of `(define-object NAME (...) ...)` |
+| `lisply-add-keyword-to-object-spec` | add ` :keyword value` to a child spec |
+
+The GDL side -- when to use these, pseudo-inputs, the
+`(the landing-page ...)` idiom -- is in the Gendl lisply backend's own
+guide, `get_docs(id="claude-lisply-md")` on any Gendl backend.
+
+## 8. Org buffers
+
+Org functions (`org-end-of-subtree`, `org-entry-get`, `org-entry-put`,
+`org-map-entries`) need a buffer in `org-mode`; in a fundamental-mode
+temp buffer they warn or misbehave.
+
+- If a buffer already visits the org file, work in it and
+  `save-buffer`; never write the file underneath it.
+- To read an org file nobody has open, put the temp buffer in org mode
+  without its hooks: `(with-temp-buffer (insert-file-contents F)
+  (delay-mode-hooks (org-mode)) ...)`.
+- Find the files from Emacs rather than hard-coding them:
+  `org-directory`, `org-agenda-files`.
 
 ```elisp
-;; BAD — only the defvar runs; the smoke test silently disappears
-(defvar my-var ...)
-(my-test-call ...)        ; never executed; you see only my-var as the return
-
-;; GOOD
-(progn
-  (defvar my-var ...)
-  (my-test-call ...))
+;; Set a property on a heading in an open agenda file
+(let ((buf (find-buffer-visiting (car org-agenda-files))))
+  (with-current-buffer buf
+    (save-excursion
+      (goto-char (point-min))
+      (when (re-search-forward "^\\*+ .*My Task Heading" nil t)
+        (org-entry-put nil "HOST" "gendl-ccl")
+        (save-buffer)
+        (org-entry-properties nil 'standard)))))
 ```
 
-This is easy to miss because there is no error — you just get back the first
-form's return value and wonder where the rest went.
+Clocking from outside (`org-clock-in`) hangs the daemon if org decides
+to ask about a dangling clock: close open `CLOCK:` lines first and bind
+`org-clock-auto-clock-resolution` to nil around the call.
 
-#### `(buffer-size)` vs disk file size
+## 9. SLIME and Swank
 
-`(buffer-size)` returns the **character count**.  `(file-attributes ...)` and
-`ls -l` report **bytes**.  For files containing UTF-8 multi-byte characters
-(`kṛṣṇa`, `→`, `‘…’`, `—`), these differ — typically 5–10% bigger in bytes
-than chars.  If `ls` shows 8350 bytes but `(buffer-size)` shows 8332 chars,
-nothing is wrong; that is the expected multi-byte expansion.
-
-#### Why this is reliable
-
-The chain of guarantees:
-
-1. The elisp reader has already validated paren balance before your `lisp_eval`
-   call returns — you cannot pass an unbalanced literal in the first place.
-2. `pp` walks the AST and emits well-formed output for any data it accepts;
-   it cannot emit unbalanced text.
-3. The cosmetic post-processing (`nil → ()`, section-keyword newlines) uses
-   regex substitutions that do not change paren counts.
-4. `check-parens` catches anything that somehow got past 1–3 before saving.
-
-The failure modes that remain are:
-- The form, when read by the Common Lisp reader, references a symbol or
-  package that doesn't exist (e.g. `'pronunciation` before `define-object
-  pronunciation` has been loaded) — a runtime/load issue, not a syntax issue.
-- A docstring or string literal contains a Common Lisp reader macro sequence
-  that elisp's reader also recognises differently.  In practice this has not
-  come up.
-
-
-### When Rogue Editing Might Be Justified
-
-**Very rarely, shell-based editing might be necessary for:**
-- Bulk operations across hundreds of files where buffer operations are too slow
-- Files too large for Emacs to handle efficiently
-- Non-Lisp files where paredit doesn't apply
-
-**If you must use rogue editing methods:**
-1. â Document why native Emacs methods won't work
-2. â Use only on non-Lisp files, or
-3. â If on Lisp files, immediately verify balance afterward
-4. â Be prepared to detect and report any resulting imbalance
-
-### Recovery from Unbalanced State
-
-**If you detect an unbalanced buffer, report like this:**
-
-```
-â ï¸ UNBALANCED BUFFER DETECTED
-
-File: /path/to/file.el
-Status: Paredit-mode enabled but buffer is UNBALANCED
-Error: "Unbalanced parentheses" at position 2552
-
-Possible Causes:
-1. Shell-based editing bypassed paredit-mode
-2. External file modification while buffer was open
-3. String manipulation write bypassed paredit-mode
-
-Action Required:
-Please manually fix the unbalanced parentheses/quotes.
-I am backing off and will not attempt any edits.
-```
-
-### Summary: The Golden Rules
-
-1. **ALWAYS check balance** before editing or analyzing Lisp files
-2. **NEVER use shell commands** to edit Lisp files
-3. **NEVER use string manipulation + write** for Lisp files
-4. **ALWAYS use buffer operations** with paredit-mode enabled
-5. **If unbalanced detected**: Report clearly and back off immediately
-6. **If using rogue methods**: Double-check balance afterward
-7. **Remember**: Paredit-mode on + unbalanced = IMPOSSIBLE for humans, POSSIBLE for agents
-8. **Think structurally**: Ask "what s-expression am I modifying?" before any edit
-9. **If paredit blocks you**: STOP and reconsider your approach—don't force it
-10. **Every loop must provably make progress**: an elisp loop that doesn't terminate wedges Emacs and the MCP transport (see next section)
-
-## CRITICAL: Loop Termination — Do Not Wedge the Event Loop
-
-**⚠️ Every `while` loop in a `lisp_eval` payload runs synchronously in the
-Emacs event loop. A loop that fails to make progress wedges Emacs AND the
-MCP transport until the watchdog reaps it (or the stack is restarted).**
-
-### Field Incident (August 2026)
-
-An agent-written cleanup helper contained this blank-line collapser:
+The Gendl backends also run Swank (ports in the `*dashboard*` buffer's
+SWANK section), so you can reach them through SLIME from this Emacs as
+well as through their own `lisp_eval`.
 
 ```elisp
-;; BAD — can loop forever at end-of-buffer
-(while (and (looking-at "^[ \t]*$")
-            (save-excursion (forward-line -1) (looking-at "^[ \t]*$")))
-  (delete-region (line-beginning-position)
-                 (min (point-max) (1+ (line-end-position)))))
+(slime-connect "bridge" 4200)       ; host and port from the Dashboard
+(slime-eval '(+ 1 2 3))             ; => 6
 ```
 
-When the form being edited was the **last form in the file**, point ended
-up on a trailing blank line at `point-max`. There `line-beginning-position`
-equals `(min (point-max) (1+ (line-end-position)))`, so `delete-region`
-deleted **zero characters**, the `looking-at` conditions stayed true, and
-the loop spun forever. The same payload wedged the backend twice (across
-two sessions) before diagnosis, because the triggering file happened to
-have exactly that shape — and a red-herring stale lockfile prolonged the
-hunt.
+SLIME is the better road for debugger work, inspection and completion;
+the backend's own `lisp_eval` is simpler for plain evaluation.  A SLIME
+connection may be the person's own REPL session: check for an existing
+`*slime-repl ...*` buffer, treat it as theirs, and say so before
+driving it.
 
-### The Rules
+## 10. Working on this backend itself
 
-1. **Every loop must have a progress guarantee.** Before writing
-   `(while CONDITION (delete-region A B))`, prove that each iteration
-   strictly shrinks the buffer or advances point. Zero-width deletes at
-   buffer boundaries (`point-max`, `point-min`) are the classic trap:
-   clamping with `min`/`max` silently turns a delete into a no-op while
-   leaving the loop condition true.
-2. **Prefer built-ins with termination guarantees** for whitespace and
-   cleanup work: `delete-blank-lines`, `delete-trailing-whitespace`,
-   `just-one-space`, `fixup-whitespace`. They already handle the boundary
-   cases that hand-rolled loops get wrong.
-3. **Search-driven loops are safe by construction.**
-   `(while (search-forward "x" nil t) ...)` terminates because
-   `search-forward` either advances point or returns nil. Keep loop
-   conditions tied to a search result, not to a state predicate that the
-   loop body is responsible for falsifying.
-4. **When in doubt, bound it.** Wrap uncertain iteration in a hard cap,
-   e.g. `(cl-loop repeat 1000 while CONDITION do ...)`. A wrong result
-   beats a wedged Emacs.
-5. **Dry-run degenerate shapes first.** If a routine will run over many
-   files, test it on the boundary cases: target form at end of buffer, at
-   start of buffer, empty file, file with no trailing newline.
-
-### Recovery
-
-If a payload wedges the backend, the watchdog usually reaps the runaway
-eval within a minute or two (`ping_lisp` starts answering again). Unsaved
-buffer edits from the wedged call are lost; files on disk are untouched
-unless the payload had already reached its save/write step. After any hard
-restart, check for and remove stale `.#` lockfiles before re-opening the
-same files — a dead-process lock triggers a minibuffer steal/proceed
-prompt on the next `find-file-noselect`, which is itself another way to
-wedge the event loop.
-
-## PAREDIT COMMAND REFERENCE
-
-### Critical Paredit Commands for Structural Editing
-
-**🔥 MOST IMPORTANT: Slurping and Barfing**
-These are the core paredit operations that safely restructure code:
-
-```python
-# SLURP: Pull expressions into current parentheses group
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               ;; Forward slurp: (foo bar) baz -> (foo bar baz)
-               (paredit-forward-slurp-sexp)
-               ;; Backward slurp: foo (bar baz) -> (foo bar baz)  
-               (paredit-backward-slurp-sexp))'''
-)
-
-# BARF: Push expressions out of current parentheses group  
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               ;; Forward barf: (foo bar baz) -> (foo bar) baz
-               (paredit-forward-barf-sexp)
-               ;; Backward barf: (foo bar baz) -> foo (bar baz)
-               (paredit-backward-barf-sexp))'''
-)
-```
-
-**Essential Structural Operations:**
-```python
-# Wrapping and unwrapping
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               (paredit-wrap-round)        ; Wrap selection in ()
-               (paredit-wrap-square)       ; Wrap selection in []
-               (paredit-wrap-curly)        ; Wrap selection in {}
-               (paredit-splice-sexp))      ; Remove surrounding parens'''
-)
-
-# Safe deletion
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               (paredit-kill)              ; Kill to end of sexp
-               (paredit-kill-word)         ; Kill word maintaining balance
-               (paredit-backward-kill-word); Kill word backward
-               (paredit-splice-sexp-killing-backward)  ; Remove parens, kill backward
-               (paredit-splice-sexp-killing-forward))  ; Remove parens, kill forward'''
-)
-```
-
-**Navigation Commands:**
-```python
-# Structural movement (ALWAYS use these instead of character movement)
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               (paredit-forward)           ; Move forward over sexp
-               (paredit-backward)          ; Move backward over sexp
-               (paredit-forward-down)      ; Move down into sexp
-               (paredit-backward-up)       ; Move up out of sexp
-               (paredit-forward-up)        ; Move up and forward
-               (paredit-backward-down))    ; Move down and backward'''
-)
-```
-
-### Paredit Editing Workflow Examples
-
-**Example 1: Adding a parameter to a function call**
-```python
-# Start: (my-function arg1 arg2)
-# Goal:  (my-function new-arg arg1 arg2)
-
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               ;; 1. Position cursor after opening paren
-               (search-forward "(my-function")
-               (forward-char 1)  ; After the opening paren
-               ;; 2. Insert new parameter
-               (insert "new-arg ")
-               ;; Paredit automatically maintains balance!
-               "Parameter added safely")'''
-)
-```
-
-**Example 2: Restructuring nested expressions**
-```python
-# Start: (if condition (do-something arg1 arg2))
-# Goal:  (when condition (do-something arg1 arg2))
-
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               ;; 1. Position on 'if'
-               (search-forward "(if")
-               (forward-char 1)
-               ;; 2. Kill the word 'if'
-               (paredit-kill-word)
-               ;; 3. Insert 'when'
-               (insert "when")
-               "Converted if to when safely")'''
-)
-```
-
-**Example 3: Extracting an expression**
-```python
-# Start: (foo (bar baz) qux)
-# Goal:  (bar baz) (foo qux)
-
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               ;; 1. Position on (bar baz)
-               (search-forward "(bar")
-               (backward-char 1)  ; On opening paren of (bar baz)
-               ;; 2. Mark the expression
-               (mark-sexp)
-               ;; 3. Kill it
-               (paredit-kill)
-               ;; 4. Go to appropriate location and yank
-               (beginning-of-line)
-               (yank)
-               (insert " ")
-               "Expression extracted safely")'''
-)
-```
-
-### Common Paredit Mistakes to Avoid
-
-**❌ DON'T DO THESE:**
-```python
-# NEVER use these for Lisp editing:
-# - delete-char, delete-backward-char
-# - kill-line, kill-word  
-# - replace-string, replace-regexp on parentheses
-# - Manual parentheses insertion/deletion
-
-# WRONG: This breaks balance
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               (search-forward "(old-name")
-               (delete-char 10)  ; BAD: Can break parentheses
-               (insert "(new-name"))'''  # DANGEROUS
-)
-```
-
-**✅ DO THIS INSTEAD:**
-```python
-# RIGHT: Use paredit structural editing
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               (search-forward "(old-name")
-               (forward-char 1)  ; Move inside parentheses
-               (paredit-kill-word)  ; Safely remove 'old-name'
-               (insert "new-name"))'''  # Safe replacement
-)
-```
-
-**⚠️ FOOTGUN: `search-forward "(name"` does NOT land you on the `(`**
-
-A frequent mistake when removing or replacing an s-expression by its
-leading symbol:
+The running daemon loads the copy of Readymax baked into the image
+(`/home/emacs-user/skewed-emacs/`), not the git checkout in the
+workspace.  Edit the checkout (that is what persists and is committed),
+then load the edited file into the daemon to try it without a rebuild:
 
 ```elisp
-;; WRONG — after the search, point is BETWEEN the last char of `name'
-;; and whatever follows. `(backward-char)' lands you on the last char
-;; of the symbol, NOT on the opening paren. `forward-sexp' from inside
-;; a symbol just walks to its end — you never reach the value.
-(search-forward "(body-class")
-(backward-char)         ;; point is on the `s' of `class', not on `('
-(forward-sexp)          ;; walks to the end of `body-class', stops there
-(delete-region ...)     ;; ends up deleting characters of the symbol name
+(let ((load-path (cons "/path/to/checkout/dot-files/emacs.d/sideloaded/lisply-backend/source/"
+                       load-path)))
+  (load "/path/to/checkout/.../source/endpoints.el" nil t))
 ```
 
-Use `re-search-forward` and `match-beginning` instead:
-
-```elisp
-;; RIGHT — `match-beginning' lands on the `(' as intended.
-(re-search-forward "(body-class\\b")
-(goto-char (match-beginning 0))     ;; on the `('
-(forward-sexp)                       ;; walks over the entire (body-class ...) spec
-(delete-region (match-beginning 0) (point))
-```
-
-This is encapsulated by `lisply-kill-named-slot` in
-`lisply-edit-helpers.el` — see the helpers section below.
-
-### Quick Reference: Most Used Paredit Commands
-
-| Task | Command | Example |
-|------|---------|---------|
-| Add to group | `paredit-forward-slurp-sexp` | `(a b) c` → `(a b c)` |
-| Remove from group | `paredit-forward-barf-sexp` | `(a b c)` → `(a b) c` |
-| Wrap in parens | `paredit-wrap-round` | `a b` → `(a b)` |
-| Remove parens | `paredit-splice-sexp` | `(a b)` → `a b` |
-| Safe kill word | `paredit-kill-word` | `(old-name ...)` → `( ...)` |
-| Kill to end | `paredit-kill` | `(a b c d)` → `(a b)` |
-| Move by sexp | `forward-sexp` / `backward-sexp` | Navigate structures |
-
-### Learning Resources
-
-**Official Paredit Documentation:**
-- In Emacs: `C-h f paredit-mode` or `M-x describe-function paredit-mode`
-- Paredit cheat sheet: `paredit-cheatsheet` (if installed)
-- Tutorial: `paredit-tutorial` (interactive learning)
-
-**Key Concept: "Slurping and Barfing"**
-- **Slurp** = "eat" or "absorb" - pull expressions into the current parenthetical group
-- **Barf** = "spit out" - push expressions out of the current parenthetical group
-- These operations are the foundation of structural editing
-
-**Memory Aid:**
-- Think of parentheses as containers that can grow/shrink
-- Slurp = container gets bigger (eats more)
-- Barf = container gets smaller (spits out content)
-
-### Common Editing Patterns
-
-**Pattern 1: Safe Function Renaming**
-```python
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(defun safe-rename-function (filepath old-name new-name)
-               "Safely rename a function with paredit"
-               (with-current-buffer (find-file filepath)
-                 (when (fboundp 'paredit-mode) (paredit-mode 1))
-                 (save-excursion
-                   (goto-char (point-min))
-                   (when (search-forward (format "(defun %s" old-name) nil t)
-                     (backward-word)
-                     (paredit-kill-word)
-                     (insert new-name)
-                     (check-parens)))
-                 (save-buffer)))'''
-)
-```
-
-**Pattern 2: Safe Code Insertion**
-```python
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(defun safe-add-function (filepath new-function-code)
-               "Add new function with validation"
-               (with-current-buffer (find-file filepath)
-                 (when (fboundp 'paredit-mode) (paredit-mode 1))
-                 (save-excursion
-                   (goto-char (point-max))
-                   (unless (bolp) (insert "\n"))
-                   (insert "\n" new-function-code "\n")
-                   (check-parens))
-                 (when (buffer-modified-p) (save-buffer))))'''
-)
-```
-
-**Pattern 3: GDL `define-object` Refactors — `lisply-edit-helpers`**
-
-For structural edits of GDL `define-object` forms (removing a slot,
-swapping a parent class, adding a keyword to a child spec), the elisp
-module `lisply-edit-helpers` provides paren-balanced helpers built on
-paredit. It is loaded at boot (since 2026-10-04), with the whole-form
-and exact-text helpers of `lisply-file-tools`; `(lisply-help)` lists
-them all.
-
-The three exported functions are:
-
-| Function | Purpose |
-|----------|---------|
-| `lisply-kill-named-slot` | Remove a `(slot-name ...)` spec, line-clean |
-| `lisply-replace-parent-class` | Swap `(define-object foo (OLD)...)` parent |
-| `lisply-add-keyword-to-object-spec` | Insert ` keyword value` into a child spec |
-
-Each runs `check-parens` on entry and exit. Full GDL-side context — when
-to apply these patterns, what the underlying GDL semantics are, the
-pseudo-input warning behavior, the `(the landing-page ...)` idiom — lives
-in the Gendl lisply-backend CLAUDE.md, available via any Gendl backend's
-`get_docs` tool with `id="claude-lisply-md"`.
-
-Source: `/home/emacs-user/.emacs.d/sideloaded/lisply-backend/source/lisply-edit-helpers.el`
-(or, on the host side, `dot-files/emacs.d/sideloaded/lisply-backend/source/lisply-edit-helpers.el`).
-
-## SLIME/SWANK BACKDOOR: Alternative Backend Access 🚪🔌
-
-**Experimental Feature**: Claude can interact with SWANK-enabled Lisp backends through Emacs's Slime connection as an alternative to direct MCP connections.
-
-### Why Use Slime/Swank?
-
-The Slime/Swank pathway offers potential advantages:
-
-- **Mature error handling**: Slime has robust stack trace and debugger integration
-- **Better REPL state management**: Established continuation and context handling
-- **Rich inspection**: Swank provides comprehensive object introspection
-- **Debugger integration**: Access to Slime's interactive debugger
-- **Completion support**: Tab completion and symbol lookup via Swank
-
-### Available SWANK Services
-
-Check the Dashboard (*dashboard* buffer) for available SWANK services:
-
-```
-🍸 𝓢𝓦𝓐𝓝𝓚 Services (hosts and ports):
-    🖥  gendl-ccl on 4200
-    🏭 gendl-sbcl on 4210
-    🚀 genworks-gdl-smp on 4218
-    ✈  genworks-gdl-non-smp on 4208
-    🚀 genworks-gdl-enterprise-smp on 4218
-    ✈  genworks-gdl-enterprise-non-smp on 4208
-```
-
-### Connecting to SWANK Backends
-
-You can connect to any SWANK service listed in the Dashboard:
-
-```elisp
-;; Connect to a SWANK service
-(slime-connect "localhost" 4218)  ; Connect to genworks-gdl-enterprise-smp
-```
-
-This creates a `*slime-repl allegro*` buffer (or similar) that shares state with any existing user REPL session.
-
-### Evaluating Through Slime
-
-Once connected, use `slime-eval` to send expressions:
-
-```elisp
-;; Evaluate a form through Slime/Swank
-(slime-eval '(+ 1 2 3))  ; Returns 6
-
-;; More complex operations
-(slime-eval '(ql:quickload :cyclops))
-(slime-eval '(cyclops:start-proxy :port 19069 :debug? t))
-```
-
-### Shared REPL Considerations ⚠️
-
-**IMPORTANT**: SLIME REPLs may be shared with active user sessions!
-
-- **Check for existing REPLs**: Look for `*slime-repl allegro*` buffers
-- **Alert user before taking control**: If REPL exists, warn user it will be used
-- **Treat as read-only by default**: User may be actively working in that REPL
-- **Create private REPL if needed**: Consider establishing a dedicated background connection
-
-### When to Use Slime vs Direct MCP
-
-**Use Direct MCP (`genworks-gdl-enterprise-smp:lisp_eval`) when:**
-- Simple evaluations needed
-- No debugger interaction required  
-- Stateless operations
-- User is not actively using a REPL
-
-**Use Slime/Swank when:**
-- Complex debugging needed
-- Interactive development desired
-- Need symbol completion/inspection
-- Dealing with complex error conditions
-- Multiple related operations in sequence
-
-### Example: Hybrid Approach
-
-```elisp
-;; Use direct MCP for simple checks
-(genworks-gdl-enterprise-smp:lisp_eval 
-  :code "(list :packages (list-all-packages))")
-
-;; Switch to Slime for interactive debugging
-(when (and (error-detected?) (not (slime-connected-p)))
-  (slime-connect "localhost" 4218)
-  (slime-eval '(describe-error-in-detail)))
-```
-
-### Current Status
-
-**Experimental**: The Slime/Swank backdoor is being evaluated for:
-- Improved error handling for LLM agents
-- Better REPL state continuity
-- Enhanced debugging capabilities
-
-**Learnings welcome**: If you use the Slime backdoor, document what works well and what doesn't!
-
-## General File Editing Best Practices
-
-### Buffer Operations vs String Manipulation
-
-**Recommended: Buffer-Based Editing**
-```python
-# Efficient, native Emacs approach
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               (find-file "/path/to/file.js")
-               (with-current-buffer "file.js"
-                 (goto-char (point-min))
-                 (search-forward "old-code")
-                 (replace-match "new-code")
-                 (save-buffer)))'''
-)
-```
-
-**Discouraged: String Manipulation**
-```python
-# Less efficient, bypasses Emacs optimizations
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(let ((content (with-temp-buffer
-                             (insert-file-contents "/path/to/file.js")
-                             (buffer-string))))
-               (setq modified-content 
-                     (replace-regexp-in-string "old-code" "new-code" content))
-               (with-temp-file "/path/to/file.js"
-                 (insert modified-content)))'''
-)
-```
-
-### Why Buffer Operations Are Superior
-
-1. **Memory Efficiency**: Emacs C code manages buffers optimally
-2. **Incremental Changes**: Small targeted edits vs full file reprocessing  
-3. **Native Features**: Syntax highlighting, auto-formatting, language modes
-4. **Performance**: Optimized buffer operations vs slow string manipulation
-5. **Undo/Redo**: Built-in change tracking
-6. **Error Recovery**: Better state management
-
-### Safe File Editing Pattern for Automation (Shared-Buffer-Safe)
-
-```python
-# UPDATED: Avoid interactive prompts AND shared buffer conflicts
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(defun safe-edit-file-automated-shared-safe (filepath edit-function)
-               "Edit file safely for automated operations with shared buffer protection"
-               (let ((original-revert-without-query revert-without-query))
-                 (unwind-protect
-                     (progn
-                       ;; Avoid file conflict prompts
-                       (add-to-list 'revert-without-query (file-name-nondirectory filepath))
-                       ;; Revert existing buffer if needed
-                       (let ((buf (get-file-buffer filepath)))
-                         (when buf
-                           (with-current-buffer buf
-                             (revert-buffer t t t))))
-                       ;; SHARED-BUFFER-SAFE: Use find-file-noselect + explicit buffer
-                       (let ((buffer (find-file-noselect filepath)))
-                         (with-current-buffer buffer
-                           (funcall edit-function)
-                           (save-buffer)
-                           t)))
-                   ;; Cleanup
-                   (setq revert-without-query original-revert-without-query))))'''
-)
-```
-
-## Advanced Examples
-
-### Multi-File Operations
-```python
-# Process multiple files safely
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(progn
-               (defun process-lisp-files (directory pattern old-text new-text)
-                 "Process multiple Lisp files with paredit safety"
-                 (let ((files (directory-files-recursively directory pattern)))
-                   (dolist (file files)
-                     (when (string-match "\\.\\(el\\|lisp\\|gendl\\)$" file)
-                       (with-current-buffer (find-file file)
-                         (when (fboundp 'paredit-mode) (paredit-mode 1))
-                         (save-excursion
-                           (goto-char (point-min))
-                           (while (search-forward old-text nil t)
-                             (replace-match new-text)))
-                         (check-parens)
-                         (when (buffer-modified-p) (save-buffer)))))))
-               "Function defined")'''
-)
-```
-
-### Debugging and Recovery
-```python
-# Validate edits incrementally  
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(defun safe-edit-with-validation (filepath edit-function)
-               "Edit with automatic rollback on error"
-               (with-current-buffer (find-file filepath)
-                 (let ((original-content (buffer-string)))
-                   (condition-case err
-                       (progn
-                         (when (fboundp 'paredit-mode) (paredit-mode 1))
-                         (funcall edit-function)
-                         (check-parens)
-                         (save-buffer))
-                     (error
-                      ;; Restore on any error
-                      (delete-region (point-min) (point-max))
-                      (insert original-content)
-                      (signal (car err) (cdr err)))))))'''
-)
-```
-
-## Testing and Verification
-
-### Basic Connection Test
-```python
-# Test MCP service availability
-mcp__skewed_emacs__skewed_emacs__ping_lisp()
-# Should return: "pong"
-
-# Test basic evaluation
-mcp__skewed_emacs__skewed_emacs__lisp_eval(code="(+ 1 2 3)")
-# Should return: {"Result": "6", "Stdout": ""}
-```
-
-### Buffer State Verification
-```python
-# Check current Emacs state
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(list :current-buffer (buffer-name)
-                  :emacs-version emacs-version
-                  :paredit-available (fboundp 'paredit-mode)
-                  :active-buffers (length (buffer-list)))'''
-)
-```
-
-## Key Principles Summary
-
-### For All File Editing:
-1. **Use buffer operations** over string manipulation
-2. **Check buffer state** before and after edits  
-3. **Handle interactive prompts** with `revert-without-query`
-4. **Use `save-excursion`** to preserve cursor position
-5. **Wrap operations** in `condition-case` for error handling
-
-### For Lisp Code Editing (MANDATORY):
-1. **Always enable paredit mode first** - `(paredit-mode 1)`
-2. **Check parentheses balance** - `(check-parens)` before saving
-3. **Use structural navigation** - `forward-sexp`, `backward-sexp`  
-4. **Make small targeted changes** instead of large replacements
-5. **Use paredit functions** - `paredit-kill-word`, `paredit-wrap-round`
-6. **Validate syntax** before saving with error recovery
-7. **Test with `thing-at-point 'sexp`** to verify complete expressions
-
-### What NOT to Do:
-- Edit Lisp files without paredit mode
-- Use string replacement on parentheses  
-- Make large block replacements in Lisp code
-- Skip `check-parens` validation
-- Use `find-file` + `save-buffer` without prompt handling
-- Use `with-temp-buffer` then call org-mode functions (causes warnings)
-
-## Org-Mode Buffer Considerations
-
-When working with `.org` files, be careful about using `with-temp-buffer` combined with org functions:
-
-**â BAD: Causes warnings in *Warnings* buffer**
-```elisp
-(with-temp-buffer
-  (insert-file-contents "/path/to/file.org")
-  (org-end-of-subtree t)  ; ERROR: temp buffer is in fundamental-mode
-  ...)
-```
-
-**â GOOD: Use the actual org buffer**
-```elisp
-(with-current-buffer (find-file-noselect "/path/to/file.org")
-  (save-excursion
-    (goto-char (point-min))
-    (search-forward "some heading")
-    (org-end-of-subtree t)  ; Works: buffer is in org-mode
-    ...))
-```
-
-**Why this matters:** Org functions like `org-end-of-subtree`, `org-entry-get`, `org-map-entries`, etc. require the buffer to be in `org-mode`. Temp buffers default to `fundamental-mode`, causing `'org-element-at-point' cannot be used in non-Org buffer` warnings.
-
-**Simple rule:** 
-- For **reading** file contents only â `with-temp-buffer` + `insert-file-contents` is fine
-- For **org structural navigation** â use `find-file-noselect` and work in the real buffer
-
-### Finding Org Files: Use Emacs Variables
-
-**Don't hardcode org file paths.** Use Emacs's own variables:
-
-```elisp
-;; Find org directory and agenda files
-(list :org-directory org-directory
-      :org-agenda-files org-agenda-files)
-
-;; Read from the primary agenda file
-(with-temp-buffer 
-  (insert-file-contents (car org-agenda-files))
-  (buffer-string))
-```
-
-### Modifying Org Properties
-
-Use `org-entry-put` and `org-entry-get` for PROPERTIES drawer manipulation. These require the real org buffer:
-
-```elisp
-;; Add or update a property on a heading
-(with-current-buffer (find-file-noselect (car org-agenda-files))
-  (save-excursion
-    (goto-char (point-min))
-    (when (re-search-forward "My Task Heading" nil t)
-      (org-back-to-heading t)
-      (org-entry-put nil "HOST" "gendl-ccl")
-      (save-buffer)
-      ;; Return updated properties
-      (org-entry-properties nil 'standard))))
-
-;; Read a property
-(with-current-buffer (find-file-noselect (car org-agenda-files))
-  (save-excursion
-    (goto-char (point-min))
-    (when (re-search-forward "My Task Heading" nil t)
-      (org-entry-get nil "HOST"))))
-```
-
-**Note:** `find-file-noselect` may trigger user prompts. If modifying org files programmatically, ensure the user is aware.
-
-## Error Recovery
-
-If you encounter unbalanced parentheses:
-
-```python
-# Diagnose the problem
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(condition-case err
-                (check-parens)
-              (error (format "Balance error at: %s" err)))'''
-)
-
-# Restore from backup if available
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(when (file-exists-p "/path/to/file.el.backup")
-               (copy-file "/path/to/file.el.backup" "/path/to/file.el" t))'''
-)
-```
-
-## Integration Notes
-
-- **Container Environment**: Runs in Docker containers with shared networking
-- **MCP Protocol**: Direct integration without HTTP wrapper  
-- **File Access**: Mounted volumes provide access to host filesystem
-- **SLIME Integration**: Can connect to Gendl containers for Common Lisp development
-- **Development Mode**: Live reloading available in development environments
-
-### Dual-Path File Locations (skewed-emacs internal development only)
-
-**This only applies when hacking on skewed-emacs or lisply-mcp internals.**
-
-Normal projects (including tw-site-2025, gendl apps, etc.) live only under `/projects/` and don't have this complexity.
-
-**Two copies of skewed-emacs exist in the container:**
-
-| Path | Purpose | Persistence |
-|------|---------|-------------|
-| `/home/emacs-user/skewed-emacs/` | Container-internal copy. The running Emacs process loads from here. | Ephemeral (lost on rebuild) |
-| `/projects/skewed-emacs/` | Mounted from host. Source of truth for git. | Persistent |
-
-**For live skewed-emacs/lisply-mcp hacking, update BOTH paths:**
-
-```elisp
-;; Update both locations for immediate effect AND persistence
-(dolist (base '("/home/emacs-user/skewed-emacs/" 
-                "/projects/skewed-emacs/"))
-  (let ((filepath (concat base "path/to/file.el")))
-    (with-current-buffer (find-file-noselect filepath)
-      ;; ... make edits ...
-      (save-buffer))))
-```
-
-- **Container copy** → Changes take effect immediately (no rebuild needed)
-- **Mounted copy** → Changes persist across container rebuilds
-
-## Lessons Learned
-
-**Why Paredit Instructions Were Initially Missed:**
-
-The original document buried paredit instructions deep in the text (around line 432) and presented them as optional ("when available") rather than mandatory. The basic editing examples didn't mention paredit at all, leading to syntax errors when editing Lisp files.
-
-**Solution**: This updated guide makes paredit mode usage the first and most prominent instruction for any Lisp file editing, with clear warnings about the consequences of not using it.
-
-The key insight: **Structural editing is not optional for Lisp - it's essential for maintaining code integrity.**
-
-
-**Why Structural Thinking Matters (December 2025 Session):**
-
-During a Cyclops proxy development session, an LLM agent attempted to add new bindings to a `let` form by inserting text "after a line" rather than thinking about the structural operation of adding sibling s-expressions to a binding list. This resulted in:
-
-1. Malformed let bindings with mismatched parentheses
-2. Paredit-mode initially blocking the broken structure
-3. The agent **circumventing paredit** by disabling it (`(paredit-mode -1)`) to force through a "fix"
-4. A confusing state where `check-parens` showed balanced but the code was semantically broken
-
-**Root Cause**: The agent was thinking "insert text after line X" instead of "add sibling forms within the binding list structure."
-
-**Solution**: The agent should have:
-1. Identified the target structure (the let binding list)
-2. Navigated structurally (`down-list`, `forward-sexp`)
-3. Inserted complete, balanced forms as siblings
-4. **When paredit blocked the operation**: Stopped and asked for human review instead of disabling paredit
-
-**Key Takeaway**: When paredit-mode blocks an operation, treat it as a signal that your mental model is wrong—not as an obstacle to work around.
-
-
-## lisply_search Tool - Pre-processing Prompts with GDL Knowledge
-
-The `lisply_search` MCP tool provides lexical search over curated GDL/Gendl documentation and source code. The index is pre-built at Docker build time with snippets extracted and embedded, making it fully self-contained (no `/projects` mount needed at runtime for search).
-
-The tool was called `skewed_search` until 2026-09-09; that name and its
-endpoint were dropped on 2026-09-10.
-
-**How it matches and ranks (2026-09-10).** The query is split into
-index terms (`hidden-objects` → `hidden`, `objects`; stopwords such as
-"how", "the", "from" are ignored) and into *phrases* -- the hyphenated
-tokens kept whole. By default every term must appear in one snippet
-(`match_mode="all"`); when nothing holds every term the search retries
-with any-term matching and says so in `warning` (`match_fallback` is
-true), so a natural-language question still answers. Candidates are
-scored by IDF-weighted term coverage (rare terms count for more), term
-density, verbatim phrase hits, whether the snippet *defines* the queried
-name (`(define-object wall ...` outranks ten mentions of `wall`) and
-whether the file name carries it. Snippets are cut at top-level forms
-in Lisp files and at headings in Markdown/Org, so a hit is a whole
-`define-object` or section rather than the tail of one and the head of
-the next; each hit reports `match_line`, the first line holding a query
-term, and a snippet longer than `max_snippet_tokens` is excerpted from
-just above that line. There is no embedding model: `search_mode` other
-than `lexical` is answered lexically with a warning.
-
-### Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Docker Build Time                                      │
-│                                                         │
-│  Source files ──► lisply-search-build-index   │
-│       │                    │                            │
-│       ▼                    ▼                            │
-│  Pre-extract snippets → lisply-search-index.sexp (~30MB)   │
-│  (chunks begin at top-level forms / headings,           │
-│   packed to 24 lines, 1200 chars)                       │
-└─────────────────────────────────────────────────────────┘
-                         │
-                         │ baked into container image
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│  Runtime                                                │
-│                                                         │
-│  lisply_search query → inverted term index → snippets      │
-│                                                         │
-│  Index cached in memory with snippet-map for fast       │
-│  term-to-candidate lookup                               │
-└─────────────────────────────────────────────────────────┘
-```
-
-### When to Use lisply_search
-
-**Always search before**:
-- Writing `define-object` code (search for similar patterns)
-- Explaining GDL concepts (search for canonical documentation)
-- Debugging GDL issues (search for known patterns/solutions)
-- Creating new GDL projects (search "gendl-skel" or "project structure")
-
-### Available Sources
-
-The corpus a console searches has three tiers (2026-09-14; the
-contract is lisply-mcp's `CORPUS.md`, the single source of truth for
-the file format, the image label and the merge):
-
-1. **The baked index** -- `lisply-search-config.sexp` beside this file,
-   `:lisply-search-config` → `:sources`: `readymax` (this console's
-   own configuration and lisply backend) and `gendl` as a FALLBACK for
-   standalone use. Built into the image by `docker/build`; no private
-   repository is cloned for it.
-2. **Species corpora** -- each project builds its own corpus with the
+The image copy is replaced at the next rebuild.  Do not edit it as a
+way to make a change last.  New helpers go in `lisply-file-tools.el`,
+with an ERT test in `lisply-file-tools-test.el` and an entry in
+`lisply-help-groups`; run the tests in batch (`emacs --batch -L . -l
+lisply-file-tools.el -l lisply-file-tools-test.el -f
+ert-run-tests-batch-and-exit`, through `lisply-shell-async`).
+
+## 11. The lisply_search tool
+
+`lisply_search` is lexical search over curated Gendl/GDL source and
+documentation, this console's own configuration, and the Genworks
+training material.  Search before writing `define-object` code,
+explaining a GDL concept, or debugging GDL: the corpus usually holds a
+canonical example.  (It was `skewed_search` until 2026-09-09.)
+
+### How it matches and ranks
+
+The query is split into terms (`hidden-objects` → `hidden`, `objects`;
+stopwords such as "how", "the", "from" are dropped) and *phrases*, the
+hyphenated tokens kept whole.  By default every term must appear in one
+snippet (`match_mode="all"`); when nothing holds every term, the search
+retries with any-term matching and says so in `warning`
+(`match_fallback` true).  Candidates are scored by IDF-weighted term
+coverage (rare terms count for more), term density, verbatim phrase
+hits, whether the snippet *defines* the queried name (`(define-object
+wall ...` outranks ten mentions of `wall`) and whether the file name
+carries it.  Snippets are cut at top-level forms in Lisp and at
+headings in Markdown and Org, so a hit is a whole `define-object` or
+section.  Each hit reports `match_line`, the first line holding a query
+term; a snippet longer than `max_snippet_tokens` is excerpted from just
+above it.  There is no embedding model: a `search_mode` other than
+`lexical` is answered lexically, with a warning.
+
+### Sources
+
+The corpus has three tiers (the contract is lisply-mcp's `CORPUS.md`:
+file format, image label, merge):
+
+1. **The baked index** -- `lisply-search-config.sexp` beside this file
+   lists `readymax` (this console's configuration and lisply backend)
+   and `gendl` as a fallback for standalone use.  `docker/build` builds
+   it into the image; no private repository is cloned for it.
+2. **Project corpora** -- each project builds its own with the
    reference indexer (`lisply-index`, on the path in every Readymax
    image) and ships it in its image under the `lisply.corpus` label
-   (Gendl: `/opt/gendl/lisply-corpus/gendl.sexp`). The yard copies
-   the files out of the images aboard into the corpora directory.
-3. **Mount corpora** -- what the ship builds itself from `/projects`
+   (Gendl: `/opt/gendl/lisply-corpus/gendl.sexp`).  A Basilisk yard
+   copies them out of the images aboard into the corpora directory.
+3. **Workspace corpora** -- built at raise from the mounted workspace
    (the live demos, the training material, internal applications on
-   internal ships), declared in the ship's articles and written into
-   the same directory at raise.
+   internal ships) and written into the same directory.
 
-The console loads the baked index plus every `*.sexp` in the directory
-named by `LISPLY_SEARCH_CORPORA` (default `/lisply/corpora`), and a
-corpus there REPLACES a same-named baked source: aboard a ship the
-Gendl corpus is the Gendl actually flying, not the one this image was
-built with. The response's `sources` lists what is loaded and
-`corpora` names each file with its `generated_at`. Rebuild the baked
-index in a dev room with `M-x lisply-search-build-index`; a corpus
-file for any tree with `lisply-index --root DIR --name NAME --out
-FILE`.
+The console loads the baked index plus every `*.sexp` in
+`LISPLY_SEARCH_CORPORA` (default `/lisply/corpora`); a corpus there
+REPLACES a same-named baked source, so aboard a ship the Gendl corpus is
+the Gendl actually flying.  The response's `sources` lists what is
+loaded, and `corpora` names each file with its `generated_at`.
 
-**Distribution rule (2026-09-14).** The baked index ships inside a
-public Docker Hub image, so each source carries a `:distribution`,
-`:public` (the default) or `:internal`, and an image build indexes the
-public sources only, whatever its credential can read (`docker/build`
-and the Dockerfile build `:public`; `LISPLY_INDEX_DISTRIBUTION=all`, or
-`lisply-search-build-index` by hand, indexes everything present). The
-training material is public because it is served at genworks.dev under
-the AGPL; the rest of the private apps repository (invoicing,
-letterheads, the sites) is not, and no distributed index may reflect
-an internal application. Internal corpora reach a console only as
-mount corpora on internal ships.
+**Distribution.**  The baked index ships in a public Docker Hub image,
+so each source carries `:distribution` `:public` (the default) or
+`:internal`, and an image build indexes the public sources only
+(`LISPLY_INDEX_DISTRIBUTION=all`, or `lisply-search-build-index` by
+hand, indexes everything present).  The training material is public (it
+is served at genworks.dev under the AGPL); internal applications are
+not, and reach a console only as workspace corpora on internal ships.
+Minified files and vendored static trees are excluded
+(`:exclude-paths`), and every snippet is capped at the configured
+character budget.
 
-What is kept out (2026-09-14): `*.min.js`, `*.min.css`, and the
-vendored static trees (`**/3rdpty/**`, `**/static/plugins/**`) via the
-config's `:exclude-paths`, and every snippet is capped at the
-configured character budget whatever its line count -- a 15 KB
-one-line minified stylesheet used to top rankings with nothing readable
-in it.
+A source that cannot be fetched at build time is skipped with a
+`SOURCE MISSING` line; the build fails only if no index results (or
+with `--strict-index`).
 
-At build time a corpus that cannot be fetched is skipped with a
-`SOURCE MISSING` line and the index is built from the rest; the build
-fails only if no index results at all (or with `--strict-index`). At
-runtime the response's `sources` field lists what the index actually
-carries.
-
-### Search Patterns
-
-Common search queries for different tasks:
+### Queries
 
 ```
-# Section syntax for define-object
 lisply_search(query="define-object hidden-objects", k=5)
-
-# Web page patterns  
-lisply_search(query="base-html-page body computed-slots", k=3)
-
-# Creating new projects
-lisply_search(query="gendl-skel create project", k=3)
-
-# URL routing for non-root paths
-lisply_search(query="fixed-url-prefix", k=5)
-
-# Output formats (PDF, etc.)
-lisply_search(query="with-format pdf cad-output", k=5)
-
-# Mixin patterns
-lisply_search(query="base-html-div inner-html", k=5)
-```
-
-### Example Usage
-
-**Before writing GDL web code:**
-```python
 lisply_search(query="base-html-page computed-slots body", k=3)
-```
-
-**Broader matching (OR semantics):**
-```python
-lisply_search(query="base-html-page computed-slots body", k=3, match_mode="any")
-```
-
-**Broader matching with cap (OR semantics):**
-```python
 lisply_search(query="base-html-page computed-slots body", k=3, match_mode="any", any_max_candidates=800)
-```
-
-**Before explaining define-object sections:**
-```python
 lisply_search(query="hidden-objects pseudo-inputs", sources=["gendl"], k=5)
-```
-
-**Before walking a newcomer through the basics (the training material):**
-```python
 lisply_search(query="define-object first example", sources=["genworks-learn"], k=3)
+lisply_search(query="fixed-url-prefix", k=5)
+lisply_search(query="with-format pdf cad-output", k=5)
 ```
 
-### Tool Parameters
+`genworks-learn` (the training material) walks through the concepts in
+order and suits a newcomer; `gendl` is the engine's own source and
+documentation.  The more specific the query, the better the hits, and a
+hit's `path` says where it came from.
+
+### Parameters
 
 | Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `query` | string | (required) | Natural-language or keyword query |
-| `k` | integer | 8 | Max number of hits to return |
-| `sources` | array | all | Logical sources to restrict search |
-| `path_filters` | array | none | Repo-relative path prefixes or globs (`*` within a directory, `**` across), e.g. `geom-base/wire/*` |
-| `language` | string | none | Language hint (lisp, gdl, markdown) |
-| `match_mode` | string | `all` | `all` (AND; retried as `any` when nothing matches) or `any` (OR) |
-| `any_max_candidates` | integer | none | Max candidates when `match_mode="any"` |
-| `search_mode` | string | lexical | The only mode in this build; other values answered lexically with a warning |
-| `max_snippet_tokens` | integer | 512 | Soft cap for snippet length; longer snippets are excerpted from just above the first matching line |
-| `include_metadata` | boolean | true | Include metadata in hits |
+|---|---|---|---|
+| `query` | string | (required) | keywords or natural language |
+| `k` | integer | 8 | max hits |
+| `sources` | array | all | logical sources to restrict to |
+| `path_filters` | array | none | repo-relative prefixes or globs (`*` within a directory, `**` across), e.g. `geom-base/wire/*` |
+| `language` | string | none | hint: lisp, gdl, markdown |
+| `match_mode` | string | `all` | `all` (retried as `any` when nothing matches) or `any` |
+| `any_max_candidates` | integer | none | candidate cap for `any` |
+| `search_mode` | string | lexical | the only mode in this build |
+| `max_snippet_tokens` | integer | 512 | soft cap; longer snippets are excerpted above the first match |
+| `include_metadata` | boolean | true | include metadata in hits |
 
-### Response Format
+### Response
 
 ```json
 {
@@ -1564,57 +504,24 @@ lisply_search(query="define-object first example", sources=["genworks-learn"], k
   "phrases": ["define-object", "computed-slots"],
   "sources": ["readymax", "gendl", "demos"],
   "corpora": [{"corpus": "baked", "generated_at": "2026-09-14T14:51:02Z"},
-              {"corpus": "gendl", "generated_at": "2026-09-14T20:10:00Z"},
-              {"corpus": "demos", "generated_at": "2026-09-14T21:00:00Z"}],
+              {"corpus": "gendl", "generated_at": "2026-09-14T20:10:00Z"}],
   "total_candidates": 41,
   "warning": null,
   "hits": [
-    {
-      "id": "hit-001",
-      "score": 0.93,
-      "source": "genworks-learn",
-      "repo": "apps",
-      "path": "genworks-learn/t1/source/first-object.lisp",
-      "start_line": 11,
-      "end_line": 34,
-      "match_line": 11,
-      "excerpt_start_line": 11,
-      "snippet": "...(actual code/text)...",
-      "preview": "The first line holding a query term",
-      "metadata": {
-        "language": "lisp",
-        "section": "Optional section heading",
-        "tags": ["define", "object", "computed", "slots"]
-      }
-    }
+    {"id": "hit-001", "score": 0.93, "source": "genworks-learn", "repo": "apps",
+     "path": "genworks-learn/t1/source/first-object.lisp",
+     "start_line": 11, "end_line": 34, "match_line": 11, "excerpt_start_line": 11,
+     "snippet": "...", "preview": "the first line holding a query term",
+     "metadata": {"language": "lisp", "section": "...", "tags": ["define", "object"]}}
   ]
 }
 ```
 
-### Best Practices
+### Rebuilding the index
 
-1. **Search first, code second**: Before writing any GDL code, search for similar patterns
-2. **Use `genworks-learn` for guidance**: the training material walks through the concepts in order; `gendl` is the engine's own source and docs
-3. **Combine sources**: Use multiple sources for comprehensive results
-4. **Be specific**: More specific queries yield more relevant results
-5. **Check the path**: The `path` field tells you where the snippet came from for context
-
-### Configuration
-
-The search configuration is read from `lisply-search-config.sexp` at
-build time and a copy is embedded inside `lisply-search-index.sexp`, which
-is all the runtime consults.
-
-### Rebuilding the Index
-
-The index is built during the Docker build. To rebuild it inside a
-running console against the host-mounted `/projects` (every source
-already present there is used as-is, nothing is cloned):
-
-```elisp
-(lisply-search-build-index-with-clone)
-```
-
-This scans the configured sources, pre-extracts snippets into the index
-file, and logs a `SOURCE MISSING` line for any source it could not find.
-The runtime cache reloads on the next query when the file's mtime changes.
+The index is built during the image build, and a copy of the
+configuration is embedded in it.  To rebuild inside a running console
+against the mounted workspace (sources already present are used as they
+are; nothing is cloned): `(lisply-search-build-index-with-clone)`.  It
+logs `SOURCE MISSING` for any source it cannot find, and the runtime
+cache reloads on the next query once the file's mtime changes.
