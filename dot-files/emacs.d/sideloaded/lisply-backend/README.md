@@ -139,12 +139,20 @@ wraps it behind `lisply-enable-host-server` and the warning.
   that refuses an unbounded child process (see `CLAUDE.md`, *the
   guard*)
 - `source/lisply-shell-guard.el` — that guard, and
-  `lisply-shell-bounded` / `lisply-shell-async`, the sanctioned ways
+  `lisply-shell-bounded` / `lisply-shell-async`, the approved ways
   to run a child from an incantation
 - `source/lisply-search.el`, `lisply-search-config.sexp` — the chart
   locker: the index, and the list of what a casting packs into it
+- `source/lisply-file-tools.el` — the cyborg's hands for any scroll:
+  read, search, exact-text and whole-form edits, all bounded and
+  balance-checked, and `lisply-help`, which lists every helper aboard;
+  its tests are `source/lisply-file-tools-test.el`
 - `source/lisply-edit-helpers.el`, `source/lisply-sexp-write.el` —
-  helpers for cyborgs editing scrolls through the hatch
+  finer helpers for GDL `define-object` sections, and for writing a
+  whole Lisp scroll from s-expression data
+- `PRIMER.md` — the short guide a cyborg reads first
+  (`get_docs(id="primer")`); `INSTRUCTIONS.md` — its digest, handed
+  to every arriving cyborg at the greeting (`/lisply/instructions`)
 - `CLAUDE.md` — the education packet a cyborg is handed: how to read
   and edit scrolls safely in a room it shares with a biological, the
   shared-buffer footgun, paredit, the guard, and the search tool's

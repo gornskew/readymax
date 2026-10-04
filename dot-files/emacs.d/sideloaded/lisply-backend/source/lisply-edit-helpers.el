@@ -80,11 +80,9 @@
 ;;
 ;; Loading
 ;; -------
-;; Like `lisply-sexp-write', this is opt-in.  Add
-;;
-;;   (require 'lisply-edit-helpers)
-;;
-;; from your MCP `lisp_eval' calls when you need it.
+;; Loaded at boot with the lisply endpoints (since 2026-10-04; it was
+;; opt-in before), and listed by `lisply-help' with the rest of the
+;; toolkit in `lisply-file-tools'.
 
 ;;; Code:
 

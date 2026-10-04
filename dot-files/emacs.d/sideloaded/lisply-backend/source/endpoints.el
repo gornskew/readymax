@@ -15,6 +15,9 @@
 (require 'lisply-http-setup)
 (require 'lisply-search)
 (require 'lisply-shell-guard)
+(require 'lisply-file-tools)
+(require 'lisply-edit-helpers)
+(require 'lisply-sexp-write)
 
 ;; Resolve skewed-emacs root from the real path of ~/.emacs.d.
 (defun emacs-lisply--skewed-root ()
@@ -37,7 +40,7 @@
 
    ;; lisp_eval tool (generic name for consistent with Gendl)
    `(("name" . "lisp_eval")
-     ("description" . "Evaluate Emacs Lisp code")
+     ("description" . "Evaluate Emacs Lisp code in this server's long-running Emacs daemon.  Only the first top-level form is evaluated; wrap several in progn.  This is also the preferred way to read, search and edit workspace files: (lisply-read FILE START END), (lisply-grep PATTERN DIR), (lisply-replace FILE OLD NEW) and (lisply-form-replace FILE NAME TEXT) are bounded, balance-checked and safe for the person's open buffers; (lisply-help) lists them all and get_docs(id=\"primer\") is the short guide.")
      ("inputSchema" . (("type" . "object")
                        ("properties" . (("code" . (("type" . "string")
                                                  ("description" . "The Emacs Lisp code to evaluate")))
@@ -194,10 +197,14 @@
   "Handle docs/list endpoint for Lisply."
   (emacs-lisply-log "Handling docs/list request")
   (let* ((root (emacs-lisply--skewed-root))
+         (primer-path (expand-file-name "dot-files/emacs.d/sideloaded/lisply-backend/PRIMER.md" root))
          (claude-path (expand-file-name "dot-files/emacs.d/sideloaded/lisply-backend/CLAUDE.md" root))
          (main-path (expand-file-name "CLAUDE.md" root))
          (docs-list
           `(("docs" . [
+             (("id" . "primer")
+              ("description" . "READ FIRST: the short guide to working through this Emacs -- the file helpers, and the rules that keep the daemon answering")
+              ("path" . ,primer-path))
              (("id" . "claude-md")
               ("description" . "Skewed Emacs backend API and HTTP service documentation")
               ("path" . ,claude-path))
@@ -205,6 +212,28 @@
               ("description" . "Main Skewed Emacs development environment guide")
               ("path" . ,main-path))]))))
     (emacs-lisply-send-response docs-list)))
+
+;; The backend's own guidance, served to the MCP layer at initialize
+;; (lisply-mcp passes it on as the server's `instructions', which MCP
+;; clients put in the agent's system prompt) and as the primer doc.
+
+(defun emacs-lisply--insert-backend-doc (name)
+  "Insert the lisply-backend doc file NAME into the current buffer."
+  (let ((doc-path (expand-file-name (concat "dot-files/emacs.d/sideloaded/lisply-backend/" name)
+                                    (emacs-lisply--skewed-root))))
+    (if (file-exists-p doc-path)
+        (insert-file-contents doc-path)
+      (insert "Documentation file not found: " doc-path))))
+
+(defservlet* lisply/instructions text/markdown ()
+  "Handle the instructions endpoint: the backend's guidance for MCP initialize."
+  (emacs-lisply-log "Handling instructions request")
+  (emacs-lisply--insert-backend-doc "INSTRUCTIONS.md"))
+
+(defservlet* lisply/docs/primer text/markdown ()
+  "Handle primer documentation endpoint."
+  (emacs-lisply-log "Handling primer docs request")
+  (emacs-lisply--insert-backend-doc "PRIMER.md"))
 
 (defservlet* lisply/docs/claude-md text/markdown ()
   "Handle claude-md documentation endpoint."

@@ -24,11 +24,12 @@ boarding, one step at a time.
 
 ## On boarding, every session
 
-1. **Learn to handle scrolls before touching one.** Ask the Captain's
-   education packet (the `get_docs` tool of the ready room's channel,
-   `id="claude-md"`) and read just enough to hold an open scroll
-   safely — the Buffer Operations section and "How to access Emacs
-   state".
+1. **Learn to handle scrolls before touching one.** Read the Captain's
+   primer (the `get_docs` tool of the ready room's channel,
+   `id="primer"`): short, and it covers reading, searching and
+   editing every scroll aboard — Lisp or not — through the Captain's
+   own hands, `lisp_eval`, rather than a shell.  Then evaluate
+   `(lisply-help)` once, to see those hands.
 2. **Read the day-board** for the ship's state, the crew channels and
    the residents answering:
 
@@ -48,10 +49,10 @@ boarding, one step at a time.
    The orders are optional. If this errors or comes back empty, the
    Captain has not set them up — skip it, and mention that
    `M-x skewed-daily-focus-init` lays out a starter set.
-4. **Finish your education before editing a scroll or hailing a Lisp
-   resident.** Re-read the Captain's full packet (editing patterns,
-   paredit, how to tell an unbalanced scroll), and read the `claude-md`
-   packet of any resident you will work with (the bridge's, say).
+4. **Before hailing a Lisp resident**, read the `claude-md` packet of
+   any resident you will work with (the bridge's, say).  The Captain's
+   own longer packets (`claude-md`, `main-claude-md`) are references,
+   for when the primer does not cover the case.
 5. **Report before acting**: the state of the ship (which crew answer),
    the next steps you propose (from the orders and the task notes),
    and any questions.
@@ -63,21 +64,26 @@ boarding, one step at a time.
 You share one live Emacs — the current scroll, point, and the window
 layout — with a biological who is working in it.
 
-- Name the scroll you mean:
-  `(with-current-buffer (find-file-noselect "/path/file") ...)` —
-  never bare `find-file` / `switch-to-buffer`.
-- Keep point where you found it: `(save-excursion ...)` around any
-  motion.
-- To read only, prefer
-  `(with-temp-buffer (insert-file-contents "/path/file") ...)`.
+- Read, search and edit scrolls with the Captain's helpers —
+  `lisply-read`, `lisply-grep`, `lisply-replace`, `lisply-form-replace`
+  — not shell tools: they work through a scroll the biological has
+  open instead of underneath it, refuse an edit that would unbalance a
+  Lisp scroll, and never ask a question.  A question the Captain is
+  asked stops every channel aboard until someone answers it.
+- Never open a project scroll with `find-file` or `find-file-noselect`
+  from an eval (its mode hooks can ask questions); never bare
+  `switch-to-buffer`.
+- Name the scroll you mean, `(with-current-buffer BUF ...)`, and keep
+  point where you found it with `(save-excursion ...)`.
 - Never assume the "current buffer" is yours.
 
 ### Paredit discipline (Lisp scrolls)
 
-- Make sure `paredit-mode` is on in the scroll before editing.
-- Prefer structural edits; keep the parens balanced at every step.
-- Run `(check-parens)` before `(save-buffer)`; if it complains, mend
-  the imbalance before saving.
+- Prefer whole-form edits (`lisply-form-replace`, `lisply-form-insert`)
+  and exact-text ones (`lisply-replace`); both check the balance for
+  you and write nothing if it would break.
+- For finer structural work, paredit in a temp buffer, then
+  `(lisply-check-parens FILE)`.
 
 ### Ask the day-board who is aboard — never assume the roster
 

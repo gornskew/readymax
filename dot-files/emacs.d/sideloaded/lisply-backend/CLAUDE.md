@@ -1,99 +1,26 @@
-# Emacs Lisply Backend - Claude Usage Guide
+# Emacs Lisply Backend - Reference
 
-## ⚠️ CRITICAL WARNING: Shared Emacs Instance
+**Start with the primer** (`get_docs(id="primer")`).  It is the short
+guide, and where it and this file disagree, the primer is current.  This
+file is the long reference: buffer operations, paredit and structural
+editing in depth, recovering an unbalanced file, the lisply_search tool.
 
-**You are connected to a SHARED Emacs instance with an active user!**
+## The shared instance, in one paragraph
 
-### Key Risks and Safety Measures:
+You share one live Emacs with a person: its current buffer, point and
+windows.  Never rely on the current buffer; name the one you mean with
+`with-current-buffer` and keep point with `save-excursion`.  Do not open
+project files with `find-file` or `find-file-noselect` from an eval:
+mode hooks and "changed on disk" both prompt, and a prompt stops every
+tool call until someone answers it.  Read, search and edit files with
+the file helpers (`(lisply-help)` lists them), which edit through a
+buffer the person already has open and otherwise leave no buffer
+behind.  Examples below that open a file with `find-file-noselect`
+predate the helpers: apply them to a buffer that is already open, or
+to a temp buffer filled with `insert-file-contents`.
 
-1. **Shared Global Current Buffer**: You and the user share the same "current buffer" state
-   - When you do `(find-file "file.lisp")`, it changes the user's current buffer
-   - When the user switches buffers, it affects your operations
-   - **Solution**: ALWAYS use `(with-current-buffer "buffer-name" ...)` patterns
-
-2. **User Interference**: The user may switch buffers while you're working
-   - Your `(search-forward "text")` might search in the wrong buffer
-   - **Solution**: Use explicit buffer targeting for ALL operations
-
-3. **Cursor Position Conflicts**: Cursor movements affect both you and the user
-   - **Solution**: Use `(save-excursion ...)` to preserve positions
-
-### Safe MCP Patterns (REQUIRED):
-
-```elisp
-;; BAD: Relies on global state
-(find-file "/path/to/file.lisp")
-(search-forward "target")
-(insert "new-text")
-
-;; GOOD: Explicit buffer targeting
-(with-current-buffer (find-file-noselect "/path/to/file.lisp")
-  (save-excursion
-    (goto-char (point-min))
-    (search-forward "target")
-    (insert "new-text"))
-  (save-buffer))
-```
-
-**Always test operations with explicit buffer names, never rely on "current buffer"!**
-
----
-
-## Overview
-
-This Emacs Lisply Backend provides MCP (Model Context Protocol) integration that allows Claude to interact with a running Emacs instance by evaluating Emacs Lisp code. This enables powerful text processing, buffer manipulation, file operations, and access to the full Emacs ecosystem.
-
-## MCP Integration
-
-**Current Access Method**: Direct MCP services (not HTTP)
-- **Service Name**: `mcp__skewed-emacs__skewed-emacs__lisp_eval`
-- **Purpose**: Evaluate Emacs Lisp code remotely via MCP
-- **Usage**: `mcp__skewed-emacs__skewed-emacs__lisp_eval(code="(+ 1 2 3)")`
-
-**Legacy HTTP Access** (deprecated):
-- **URL**: `http://localhost:7081/lisply/lisp-eval` 
-- **Method**: POST with JSON body
-
-## Related Documentation
-- **Main Development Guide**: See `/projects/CLAUDE.md` for complete development workflow
-- **Gendl Integration**: MCP service `mcp__genworks-gdl-smp__genworks-gdl-smp__lisp_eval` for Gendl REPL
-- **Container Environment**: See `/projects/skewed-emacs/CLAUDE.md` for Docker setup
-
-## Shared Buffer Footgun Examples
-
-### The Problem We Discovered
-During viewport menu development, we encountered this exact issue:
-
-```elisp
-;; Claude executed this:
-(find-file "/projects/gendl/gwl-graphics/gwl/source/viewport-html-div.lisp")
-(search-forward "Test Menu")  ; This failed!
-
-;; Why it failed: User had switched to *claude* buffer in between!
-;; The search happened in the wrong buffer
-```
-
-### The Solution: Always Use Explicit Buffer Targeting
-
-```elisp
-;; SAFE: Works regardless of what user is doing
-(with-current-buffer (find-file-noselect "/path/to/file.lisp")
-  (goto-char (point-min))
-  (search-forward "target-text")
-  (point))  ; Returns position found
-```
-
-### Buffer State Verification
-
-```python
-# Always verify you're in the right buffer
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(with-current-buffer "viewport-html-div.lisp"
-               (list :buffer-name (buffer-name)
-                     :buffer-size (buffer-size)
-                     :buffer-file (buffer-file-name)))'''
-)
-```
+Tool names in the examples (`mcp__skewed_emacs__...`) are from before
+the rooms were renamed; read them as this server's `lisp_eval`.
 
 ---
 
@@ -1005,13 +932,9 @@ mcp__skewed_emacs__skewed_emacs__lisp_eval(
 For structural edits of GDL `define-object` forms (removing a slot,
 swapping a parent class, adding a keyword to a child spec), the elisp
 module `lisply-edit-helpers` provides paren-balanced helpers built on
-paredit. It is opt-in:
-
-```python
-mcp__skewed_emacs__skewed_emacs__lisp_eval(
-    code='''(require 'lisply-edit-helpers)'''
-)
-```
+paredit. It is loaded at boot (since 2026-10-04), with the whole-form
+and exact-text helpers of `lisply-file-tools`; `(lisply-help)` lists
+them all.
 
 The three exported functions are:
 

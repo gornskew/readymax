@@ -6,6 +6,24 @@ stack.  It is deliberately mixed-register: lore nouns are bound to
 their referents in parentheses at first use, then used freely;
 commands, identifiers, and warnings never take the voice.
 
+## Before anything else: the primer and the file helpers
+
+**Work through the Captain, not a shell.**  Reading, searching and
+editing workspace files -- Lisp or not -- goes through the ready room's
+`lisp_eval` and its file helpers: `(lisply-read FILE N M)`,
+`(lisply-grep PATTERN DIR)`, `(lisply-replace FILE OLD NEW)`,
+`(lisply-form-replace FILE NAME TEXT)`; `(lisply-help)` lists them all.
+They are bounded, check Lisp balance, and edit through a buffer the
+user has open rather than underneath it.  Why it matters: a file
+changed underneath one of the daemon's buffers makes Emacs prompt, and
+a prompt stops every MCP call.  The short guide is
+`get_docs(id="primer")` (source:
+`dot-files/emacs.d/sideloaded/lisply-backend/PRIMER.md`); where this
+file's older lessons disagree with it, the primer is current.  The
+helpers live in `lisply-file-tools.el` beside the other lisply-backend
+sources, with ERT tests in `lisply-file-tools-test.el`; a new helper
+goes there, with a test, and into `lisply-help-groups`.
+
 ## Overview
 
 This setup provides a complete Lisp development environment with:
@@ -223,8 +241,11 @@ For detailed MCP API documentation, examples, and best practices, see:
 # Basic evaluation
 mcp__ready-room__ready-room__lisp_eval(code="(+ 1 2 3)")
 
-# File editing (see lisply-backend docs for detailed patterns)
-mcp__ready-room__ready-room__lisp_eval(code='(find-file "/path/to/file.lisp")')
+# Read, search and edit files (the primer: get_docs(id="primer"))
+mcp__ready-room__ready-room__lisp_eval(code='(lisply-read "/path/to/file.lisp" 1 60)')
+mcp__ready-room__ready-room__lisp_eval(code='(lisply-grep "defun foo" "/projects/repo/" :glob "*.lisp")')
+mcp__ready-room__ready-room__lisp_eval(code='(lisply-replace "/path/to/file.lisp" "old text" "new text")')
+mcp__ready-room__ready-room__lisp_eval(code='(lisply-help)')
 
 # Test connectivity
 mcp__ready-room__ready-room__ping_lisp()
@@ -234,7 +255,8 @@ mcp__ready-room__ready-room__ping_lisp()
 
 ## File Editing via MCP
 
-**For comprehensive file editing documentation, see:**
+**Start with the primer** (`get_docs(id="primer")`) and the file
+helpers it describes.  For editing in depth, see:
 **`dot-files/emacs.d/sideloaded/lisply-backend/CLAUDE.md`**
 
 That documentation includes:
@@ -549,24 +571,27 @@ or `(lisply-shell-async CMD)` + `(lisply-shell-async-result TOKEN)`
 for long-running work.
 
 **Host-side line tools are out of bounds for /projects files**: even
-when an agent runs on the host with ~/projects
-mounted, sed/awk/grep-style edits and filters on project files go
-through the ready-room container -- either elisp temp-buffer edits
-(insert-file-contents + write-region, never find-file-noselect from
-batch evals) or a shell command run inside the container.  Host bash
-is a last resort and needs permission.
+when an agent runs on the host with ~/projects mounted, sed/awk/grep-
+style edits and filters on project files go through the ready room's
+file helpers (`lisply-read`, `lisply-grep`, `lisply-replace`, the
+`lisply-form-*` family).  A Basilisk yard's
+`mcp/install-claude-code-config` installs a Claude Code hook
+(`mcp/emacs-first-guard`) that refuses them at the moment of action.
 
-**Always refresh stale buffers before consulting:**
+**Never open a project file with `find-file-noselect` from an eval**
+(see "NEVER find-file-noselect Project Source Files" below).  A
+buffer that is ALREADY open is a different matter: edit through it,
+reverting first if the file changed on disk, which is what the file
+helpers do for you:
 ```elisp
+;; An already-open buffer: revert (no confirmation) if stale
+(let ((buf (find-buffer-visiting "/path/to/file")))
+  (when (and buf (not (verify-visited-file-modtime buf)))
+    (with-current-buffer buf (revert-buffer t t t))))
+
 ;; Dired: refresh before reading
 (with-current-buffer (dired-noselect "/projects/gs/readymax/")
   (revert-buffer)  ;; Same as pressing 'g' interactively
-  ...)
-
-;; File buffers: revert if file changed on disk
-(with-current-buffer (find-file-noselect "/path/to/file")
-  (when (not (verify-visited-file-modtime (current-buffer)))
-    (revert-buffer t t t))
   ...)
 ```
 
@@ -588,8 +613,7 @@ Example:
 (with-temp-file "/mnt/project/assembly.lisp" ...)
 
 ;; RIGHT - use MCP to access the user's environment
-(with-current-buffer (find-file-noselect "/projects/apps/tw-site-2025/source/assembly.lisp")
-  ...)
+(lisply-read "/projects/apps/tw-site-2025/source/assembly.lisp" 1 80)
 ```
 
 **Rule**: If you find yourself creating files in `/home/claude/`, you're doing it wrong. Use ready-room MCP.
