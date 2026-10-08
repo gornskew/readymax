@@ -96,7 +96,7 @@
   :exclude-paths ("**/elpa/**"
                   "**/*.min.js" "**/*.min.css"
                   "**/3rdpty/**" "**/static/plugins/**")
-  :extensions (:default (".lisp" ".lsp" ".cl" ".gdl" ".gendl" ".asd" ".isc"
+  :extensions (:default (".lisp" ".lsp" ".cl" ".gdl" ".gendl" ".asd" ".sexp" ".isc"
 				 ".md" ".markdown" ".org" ".txt" ".rst"
 				 ".el" ".js" ".ts" ".json" ".yml" ".yaml" ".html" ".css")
                :lisp (".lisp" ".lsp" ".cl" ".asd" ".el")

@@ -119,7 +119,7 @@ indexed as its own chunk rather than merged into the first form.")
 term list unless nothing else remains.")
 
 (defconst lisply-search--default-extensions
-  '(".lisp" ".lsp" ".cl" ".gdl" ".gendl" ".asd" ".isc"
+  '(".lisp" ".lsp" ".cl" ".gdl" ".gendl" ".asd" ".sexp" ".isc"
     ".md" ".markdown" ".org" ".txt" ".rst"
     ".el" ".js" ".ts" ".json" ".yml" ".yaml" ".html" ".css"))
 
