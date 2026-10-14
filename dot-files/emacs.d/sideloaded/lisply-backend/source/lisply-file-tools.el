@@ -54,6 +54,11 @@
   "Seconds `lisply-grep' lets its search run.
 Kept well under the MCP transport's 30 s eval limit.")
 
+(defvar lisply-edit-max-seconds 2
+  "Seconds `lisply--edit-file' gives `replace-buffer-contents' to merge an
+edit into a live buffer by minimal diff.  Past the budget the differing
+region is replaced wholesale, which moves markers inside it to its start.")
+
 (defvar lisply-help-groups
   '(("Read and search"
      lisply-read lisply-grep)
@@ -177,12 +182,48 @@ Return the coding system the text was read with."
       (goto-char (point-min))
       (funcall fn))))
 
+(defun lisply--diff-region (tmp live)
+  "Return (TMP-BEG TMP-END LIVE-BEG LIVE-END), the narrowest regions of
+TMP and LIVE outside of which their accessible texts agree.  A region may
+be empty (an insertion or a deletion); the comparison is exact."
+  (let* ((case-fold-search nil)
+         (tmin (with-current-buffer tmp (point-min)))
+         (tmax (with-current-buffer tmp (point-max)))
+         (lmin (with-current-buffer live (point-min)))
+         (lmax (with-current-buffer live (point-max)))
+         (shorter (min (- tmax tmin) (- lmax lmin)))
+         (r (compare-buffer-substrings tmp tmin tmax live lmin lmax))
+         (prefix (if (zerop r) shorter (min shorter (1- (abs r)))))
+         (limit (- shorter prefix))
+         (suffix 0)
+         (chunk 4096))
+    ;; The common suffix, compared a chunk at a time from the ends; it
+    ;; stops short of the prefix so the two never overlap.
+    (while (< suffix limit)
+      (let* ((n (min chunk (- limit suffix)))
+             (c (compare-buffer-substrings tmp (- tmax suffix n) (- tmax suffix)
+                                           live (- lmax suffix n) (- lmax suffix))))
+        (if (zerop c)
+            (setq suffix (+ suffix n))
+          ;; |c| is one past the first mismatch; the chunk agrees after it.
+          (setq suffix (+ suffix (- n (abs c)))
+                limit suffix))))
+    (list (+ tmin prefix) (- tmax suffix) (+ lmin prefix) (- lmax suffix))))
+
 (defun lisply--edit-file (file fn)
   "Edit FILE by calling FN at the start of a temp buffer holding its text.
 Return FN's value.  Nothing is written when FN leaves the text unmodified.
 A Lisp FILE must balance before FN runs and after, or nothing is
 written.  When a buffer visits FILE the new text goes into that buffer,
-which is then saved; otherwise the temp buffer is written to FILE."
+which is then saved; otherwise the temp buffer is written to FILE.
+
+The live buffer is changed only within the region that differs
+(`lisply--diff-region'), so point, overlays and markers outside the edit
+-- org's running clock among them -- stay where they are; within the
+region `replace-buffer-contents' keeps them as well as it can inside
+`lisply-edit-max-seconds'.  (Before this, a whole-buffer merge that ran
+past its budget replaced the whole text and moved every marker to
+position 1: a clock-out then wrote at the top of the file.)"
   (let* ((file (expand-file-name file))
          (lisp (lisply--lisp-file-p file)))
     (unless (file-writable-p file)
@@ -215,7 +256,11 @@ which is then saved; otherwise the temp buffer is written to FILE."
                         (make-backup-files nil))
                     (save-restriction
                       (widen)
-                      (replace-buffer-contents tmp 2))
+                      (let ((region (lisply--diff-region tmp live)))
+                        (narrow-to-region (nth 2 region) (nth 3 region))
+                        (with-current-buffer tmp
+                          (narrow-to-region (nth 0 region) (nth 1 region)))
+                        (replace-buffer-contents tmp lisply-edit-max-seconds)))
                     (save-buffer)))
               (let ((coding-system-for-write coding))
                 (write-region nil nil file nil 'silent))))

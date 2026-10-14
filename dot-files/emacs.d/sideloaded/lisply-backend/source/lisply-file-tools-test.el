@@ -134,6 +134,48 @@
       (should-error (lisply-replace f "2" "3"))
       (should (equal (lisply-file-tools-test--text f) "(defun alpha () 2)\n")))))
 
+(ert-deftest lisply-file-tools-diff-region ()
+  (cl-flet ((region (a b)
+              (with-temp-buffer
+                (insert a)
+                (let ((tmp (current-buffer)))
+                  (with-temp-buffer
+                    (insert b)
+                    (lisply--diff-region tmp (current-buffer)))))))
+    (should (equal (region "abc" "abc") '(4 4 4 4)))     ; identical
+    (should (equal (region "aXc" "aYc") '(2 3 2 3)))     ; replacement
+    (should (equal (region "abXc" "abc") '(3 4 3 3)))    ; insertion
+    (should (equal (region "ac" "abc") '(2 2 2 3)))      ; deletion
+    (should (equal (region "ab" "abc") '(3 3 3 4)))      ; one a prefix of the other
+    (should (equal (region "x" "y") '(1 2 1 2)))         ; nothing in common
+    (should (equal (region "aaa" "aa") '(3 4 3 3)))      ; prefix and suffix never overlap
+    (let ((big (make-string 20000 ?z)))                   ; past one chunk
+      (should (equal (region (concat big "Q" big) (concat big "R" big))
+                     '(20001 20002 20001 20002))))))
+
+(ert-deftest lisply-file-tools-live-edit-keeps-markers ()
+  ;; A marker outside the edited region survives even when the merge
+  ;; budget is zero and the differing region is replaced wholesale: the
+  ;; replacement is confined to that region (the org clock-marker case).
+  (lisply-file-tools-test--with-file (f "(defun alpha () 1)\n\n(defun omega () 9)\n")
+    (let* ((buf (find-file-noselect f))
+           (lisply-edit-max-seconds 0)
+           (after (with-current-buffer buf
+                    (goto-char (point-min)) (search-forward "omega") (point-marker)))
+           (before (with-current-buffer buf
+                     (goto-char (point-min)) (search-forward "alpha") (point-marker))))
+      (lisply-replace f "alpha () 1" "alpha () 22")
+      (should (equal (with-current-buffer buf (buffer-string))
+                     "(defun alpha () 22)\n\n(defun omega () 9)\n"))
+      (with-current-buffer buf
+        (should (equal (buffer-substring (- after 5) after) "omega")))
+      (lisply-replace f "omega () 9" "omega () 10")
+      (with-current-buffer buf
+        (should (equal (buffer-substring (- before 5) before) "alpha"))
+        (should (equal (buffer-substring (- after 5) after) "omega")))
+      (should (equal (lisply-file-tools-test--text f)
+                     "(defun alpha () 22)\n\n(defun omega () 10)\n")))))
+
 (ert-deftest lisply-file-tools-leaves-no-buffer ()
   (lisply-file-tools-test--with-file (f "(defun alpha () 1)\n")
     (let ((before (length (buffer-list))))
