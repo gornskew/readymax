@@ -306,6 +306,10 @@ SHELL ["/bin/bash", "-lc"]
 # skewed-install's apt-using modules (e.g. headless-shell libs on lite):
 # this is an explicitly trusted sandbox image, so emacs-user gets
 # passwordless sudo for in-container on-demand installs.
+# libharfbuzz-bin is hb-shape, HarfBuzz's command-line shaper: the
+# reference an OpenType shaping library's golden corpus is made with
+# (akshara's tests/golden/make-golden.sh, 2026-10-14); a few hundred KB
+# beside the libharfbuzz the browser already brings.
 RUN set -euxo pipefail; \
    apt-get update; \
    apt-get install -y --no-install-recommends \
@@ -314,6 +318,7 @@ RUN set -euxo pipefail; \
      libvterm-dev \
      gnupg \
      sudo \
+     libharfbuzz-bin \
    ; \
    rm -rf /var/lib/apt/lists/*; \
    echo "emacs-user ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/emacs-user; \
