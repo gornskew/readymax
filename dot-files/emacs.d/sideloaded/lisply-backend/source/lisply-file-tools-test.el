@@ -201,6 +201,23 @@
           (should (string-match-p "no matches" (lisply-grep "absent-word" dir))))
       (delete-directory dir t))))
 
+(ert-deftest lisply-file-tools-grep-refuses-emacs-alternation ()
+  (let ((dir (make-temp-file "lisply-ft-dir-" t)))
+    (unwind-protect
+        (progn
+          (with-temp-file (expand-file-name "a.txt" dir) (insert "needle\nhay\na|b\nc\\|d\n"))
+          (should-error (lisply-grep "needle\\|hay" dir) :type 'user-error)
+          (should-error (lisply-grep "\\|hay" dir) :type 'user-error)
+          (let ((both (lisply-grep "needle|hay" dir)))
+            (should (string-match-p "a.txt:1:needle" both))
+            (should (string-match-p "a.txt:2:hay" both)))
+          ;; FIXED takes the backslash-pipe literally, so no refusal.
+          (should (string-match-p "a.txt:4:c" (lisply-grep "c\\|d" dir :fixed t)))
+          (should (string-match-p "a.txt:3:a|b" (lisply-grep "a[|]b" dir)))
+          ;; An escaped backslash before a bare | is real alternation.
+          (should (string-match-p "a.txt:2:hay" (lisply-grep "x\\\\|hay" dir))))
+      (delete-directory dir t))))
+
 (ert-deftest lisply-file-tools-help-lists-toolkit ()
   (let ((help (lisply-help)))
     (dolist (sym '(lisply-read lisply-grep lisply-replace lisply-form-replace))

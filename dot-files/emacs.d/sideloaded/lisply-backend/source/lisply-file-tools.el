@@ -54,6 +54,12 @@
   "Seconds `lisply-grep' lets its search run.
 Kept well under the MCP transport's 30 s eval limit.")
 
+(defvar lisply-grep--emacs-alternation-regexp
+  "\\(?:\\`\\|[^\\]\\)\\(?:\\\\\\\\\\)*\\\\|"
+  "Matches a backslash-pipe -- an odd run of backslashes before `|' -- in a
+`lisply-grep' PATTERN.  That is Emacs regexp alternation; `grep -E' reads
+it as a literal pipe, so the search would quietly find nothing.")
+
 (defvar lisply-edit-max-seconds 2
   "Seconds `lisply--edit-file' gives `replace-buffer-contents' to merge an
 edit into a live buffer by minimal diff.  Past the budget the differing
@@ -304,7 +310,14 @@ a git work tree this is `git grep' over tracked and untracked files,
 honouring .gitignore; elsewhere it is `grep -r', skipping .git.  Paths
 are relative to DIR.  At most MAX hits come back, within
 `lisply-grep-timeout' seconds, and a trailer says when either cut the
-result short."
+result short.  A PATTERN holding Emacs-style \\| alternation is refused
+with a `user-error' rather than searched as a literal pipe: write a bare
+| to alternate, or [|] or FIXED for a literal pipe."
+  (when (and (not fixed)
+             (string-match-p lisply-grep--emacs-alternation-regexp pattern))
+    (user-error "lisply-grep: %s uses \\| -- grep -E reads that as a literal pipe, \
+not alternation; write a bare | to alternate, or [|] or :fixed t for a literal pipe"
+                pattern))
   (let* ((dir (file-name-as-directory (expand-file-name dir)))
          (default-directory dir)
          (git (locate-dominating-file dir ".git"))
