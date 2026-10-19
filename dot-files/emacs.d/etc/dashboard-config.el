@@ -347,7 +347,11 @@ backend with no crew name.  Callers pass
 choice is made in `skewed-dashboard-backend-kind'."
   (let* ((url (format "http://%s:%d/lisply/lisp-eval" host port))
          (url-request-method "POST")
-         (url-request-extra-headers '(("Content-Type" . "application/json")))
+         ;; the stack's lisply secret, when it has one (lisply-secret.el)
+         (url-request-extra-headers
+          (append '(("Content-Type" . "application/json"))
+                  (and (fboundp 'emacs-lisply-secret-headers)
+                       (emacs-lisply-secret-headers))))
          (url-request-data
           (encode-coding-string
            (json-encode (list (cons 'code code)))

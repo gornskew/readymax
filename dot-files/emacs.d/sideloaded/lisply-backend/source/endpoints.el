@@ -18,6 +18,7 @@
 (require 'lisply-file-tools)
 (require 'lisply-edit-helpers)
 (require 'lisply-sexp-write)
+(require 'lisply-secret)          ; the optional X-Lisply-Secret check
 
 ;; Resolve skewed-emacs root from the real path of ~/.emacs.d.
 (defun emacs-lisply--skewed-root ()

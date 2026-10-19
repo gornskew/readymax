@@ -117,6 +117,18 @@ Lisp restarts a Gendl room can offer — so an error is the whole story.
 > is the sandbox, and nothing valuable is stowed aboard unless you
 > mount it. On a host it is your machine.
 
+**A password on the hatch.** When the ship keeps a passphrase
+(aboard a Basilisk ship: `.secrets/lisply-secret` in the galaxy's
+projects directory), every path but `ping-lisp` answers only a caller
+who carries it in the `X-Lisply-Secret` header, and 403 to any other;
+the Officer carries it for every cyborg he admits (`--admin-secret-file`
+and `--admin-secret-header X-Lisply-Secret`). The Captain reads it from
+`emacs-lisply-secret`, else `GENDL_LISPLY_SECRET`, else the first line
+of the file named by `GENDL_LISPLY_SECRET_FILE` -- the names the Gendl
+rooms read, so the ship tells every room once -- and hears a changed
+passphrase at the next knock. A named file he cannot read keeps the
+hatch shut. With none of them set the hatch stands open, as before.
+
 Loading the hatch by hand, in any Emacs with `simple-httpd`
 installed (`M-x package-install RET simple-httpd RET`):
 
@@ -147,6 +159,8 @@ wraps it behind `lisply-enable-host-server` and the warning.
   read, search, exact-text and whole-form edits, all bounded and
   balance-checked, and `lisply-help`, which lists every helper aboard;
   its tests are `source/lisply-file-tools-test.el`
+- `source/lisply-secret.el` — the password on the hatch
+  (`X-Lisply-Secret`); its tests are `source/lisply-secret-test.el`
 - `source/lisply-edit-helpers.el`, `source/lisply-sexp-write.el` —
   finer helpers for GDL `define-object` sections, and for writing a
   whole Lisp scroll from s-expression data
