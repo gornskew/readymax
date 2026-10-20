@@ -201,20 +201,23 @@ be empty (an insertion or a deletion); the comparison is exact."
          (r (compare-buffer-substrings tmp tmin tmax live lmin lmax))
          (prefix (if (zerop r) shorter (min shorter (1- (abs r)))))
          (limit (- shorter prefix))
-         (suffix 0)
-         (chunk 4096))
-    ;; The common suffix, compared a chunk at a time from the ends; it
-    ;; stops short of the prefix so the two never overlap.
-    (while (< suffix limit)
-      (let* ((n (min chunk (- limit suffix)))
-             (c (compare-buffer-substrings tmp (- tmax suffix n) (- tmax suffix)
-                                           live (- lmax suffix n) (- lmax suffix))))
-        (if (zerop c)
-            (setq suffix (+ suffix n))
-          ;; |c| is one past the first mismatch; the chunk agrees after it.
-          (setq suffix (+ suffix (- n (abs c)))
-                limit suffix))))
-    (list (+ tmin prefix) (- tmax suffix) (+ lmin prefix) (- lmax suffix))))
+         (lo 0)
+         (hi limit))
+    ;; The common suffix, by bisection on its length: the last K
+    ;; characters agree for every K up to the answer and for none past
+    ;; it.  It stops short of the prefix so the two never overlap.
+    ;; (`compare-buffer-substrings' counts agreement from the START of
+    ;; what it is given, so the chunk compared from the ends before this
+    ;; said nothing about the suffix: with the edit in the last chunk
+    ;; the region came out one character wide, and an edit near the end
+    ;; of a file landed one character a call -- org/future.org's tail,
+    ;; 2026-10-15 and 2026-10-20.)
+    (while (< lo hi)
+      (let ((mid (/ (+ lo hi 1) 2)))
+        (if (zerop (compare-buffer-substrings tmp (- tmax mid) tmax live (- lmax mid) lmax))
+            (setq lo mid)
+          (setq hi (1- mid)))))
+    (list (+ tmin prefix) (- tmax lo) (+ lmin prefix) (- lmax lo))))
 
 (defun lisply--edit-file (file fn)
   "Edit FILE by calling FN at the start of a temp buffer holding its text.

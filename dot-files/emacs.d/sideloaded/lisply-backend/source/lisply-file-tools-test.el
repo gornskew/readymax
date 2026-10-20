@@ -134,6 +134,19 @@
       (should-error (lisply-replace f "2" "3"))
       (should (equal (lisply-file-tools-test--text f) "(defun alpha () 2)\n")))))
 
+(ert-deftest lisply-file-tools-live-edit-many-characters ()
+  ;; Through a live buffer, a replacement longer than one character near
+  ;; the end of the file lands whole (2026-10-20: it landed one character
+  ;; a call, the common suffix having been counted from the wrong end).
+  (lisply-file-tools-test--with-file (f "(defun alpha () (list 1 2 3))\n(defun omega () 9)\n")
+    (let ((buf (find-file-noselect f)))
+      (lisply-replace f "(list 1 2 3)" "(vector 10 20 30)")
+      (should (equal (with-current-buffer buf (buffer-string))
+                     "(defun alpha () (vector 10 20 30))\n(defun omega () 9)\n"))
+      (lisply-replace f "omega () 9" "omega () 'nine")
+      (should (equal (lisply-file-tools-test--text f)
+                     "(defun alpha () (vector 10 20 30))\n(defun omega () 'nine)\n")))))
+
 (ert-deftest lisply-file-tools-diff-region ()
   (cl-flet ((region (a b)
               (with-temp-buffer
@@ -149,6 +162,10 @@
     (should (equal (region "ab" "abc") '(3 3 3 4)))      ; one a prefix of the other
     (should (equal (region "x" "y") '(1 2 1 2)))         ; nothing in common
     (should (equal (region "aaa" "aa") '(3 4 3 3)))      ; prefix and suffix never overlap
+    ;; a many-character edit inside the last chunk: the suffix is what
+    ;; agrees at the END (2026-10-20, future.org's tail; the chunk compare
+    ;; before this counted agreement from the chunk's start and gave 1)
+    (should (equal (region "head wa19:15 EDT tail" "head watching tail") '(8 17 8 14)))
     (let ((big (make-string 20000 ?z)))                   ; past one chunk
       (should (equal (region (concat big "Q" big) (concat big "R" big))
                      '(20001 20002 20001 20002))))))
