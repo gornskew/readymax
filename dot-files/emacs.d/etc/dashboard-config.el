@@ -358,7 +358,11 @@ choice is made in `skewed-dashboard-backend-kind'."
            'utf-8))
          (url-request-timeout (or timeout 1))
          (inhibit-message t) (message-log-max nil) (url-show-status nil)
-         (url-automatic-caching nil))
+         (url-automatic-caching nil)
+         ;; Never a question from a dashboard probe: a 301 to https (a
+         ;; cyclops that terminates its own TLS) would otherwise be
+         ;; followed into an NSM prompt that a daemon cannot answer.
+         (nsm-noninteractive t) (url-max-redirections 0))
     (condition-case nil
         (let ((buffer (url-retrieve-synchronously url nil t url-request-timeout)))
           (when buffer
@@ -411,7 +415,9 @@ section) or on any failure."
              (url-request-extra-headers `(("X-Cyclops-Admin-Secret" . ,secret)))
              (url-request-timeout (or timeout 1))
              (inhibit-message t) (message-log-max nil) (url-show-status nil)
-             (url-automatic-caching nil))
+             (url-automatic-caching nil)
+             ;; As in skewed-dashboard-crew-name: no redirect, no NSM question.
+             (nsm-noninteractive t) (url-max-redirections 0))
         (condition-case nil
             (let ((buffer (url-retrieve-synchronously url nil t url-request-timeout)))
               (when buffer
@@ -628,7 +634,13 @@ Returns (:status OK|ERROR :time response-time-ms)."
         (url-show-status nil)           ; Don't show URL status
         (url-automatic-caching nil)     ; Disable caching
         (url-debug nil)
-        (url-http-attempt-keepalives nil))                ; Disable debug output
+        (url-http-attempt-keepalives nil)
+        ;; A 301 is a live answer; never follow it.  Shiva's cyclops
+        ;; redirects http to https, and following that into a certificate
+        ;; for another name raised an NSM question in the daemon (2026-10-21:
+        ;; the startup services refresh hung in read-event, and every
+        ;; emacsclient after it -- rmax included -- queued behind it).
+        (nsm-noninteractive t) (url-max-redirections 0))
     (condition-case err
         (let ((buffer (url-retrieve-synchronously url nil t url-request-timeout)))
           (if buffer
