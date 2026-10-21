@@ -28,7 +28,7 @@
 FROM debian:stable-slim AS node
 ARG DEBIAN_FRONTENT=noninteractive
 
-ARG NODE_VERSION=24.13.0
+ARG NODE_VERSION=24.22.1
 
 SHELL ["/bin/bash","-lc"]
 
