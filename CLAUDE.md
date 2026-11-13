@@ -205,10 +205,14 @@ same rule as file operations):
 - Prefer these to `(magit-status)` in an eval: status pops a buffer
   the user shares.  Narrow big diffs with `-- <path>` rather than
   filtering one giant string.
-- **Commits**: the container has no git identity and no ssh keys.
-  Write the message with `write-region`, then
-  `(magit-git-output "-c" "user.name=..." "-c" "user.email=..." "commit" "-F" FILE)`.
-  Pushes happen on the host.
+- **Commits**: the container has no global git identity and no ssh
+  keys; each repo's local git config pins the author, so pass no
+  `-c user.name/user.email` override.  Write the message with
+  `write-region`, ending in the `Co-Authored-By: Claude <model>
+  <noreply@anthropic.com>` trailer, then
+  `(magit-git-output "commit" "-F" FILE)`.  If `git config --local
+  user.name` is empty, set it first (the workspace CLAUDE.md has the
+  rule).  Pushes happen on the host.
 
 ## Editing
 
