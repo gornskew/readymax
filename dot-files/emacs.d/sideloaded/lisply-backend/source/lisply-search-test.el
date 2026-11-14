@@ -682,6 +682,28 @@ unset variable through as \"\" -- and a real file gives its trimmed text."
           (should (equal (lisply-search--embed-key) "k3y")))
       (delete-file file))))
 
+(ert-deftest lisply-search-embed-request-names-itself-and-never-prompts ()
+  "A query goes out as ONE input, with User-Agent lisply-search, non-interactive
+(a 401 must not prompt for credentials), bounded by the timeout, and with no
+Authorization header when there is no key."
+  (let ((seen nil)
+        (lisply-search-embed-url "http://embed.invalid/v1/embeddings")
+        (lisply-search-embed-key-file nil)
+        (lisply-search-embed-timeout 2))
+    (cl-letf (((symbol-function 'url-retrieve-synchronously)
+               (lambda (url _silent _cookies timeout)
+                 (setq seen (list :url url :timeout timeout :agent url-user-agent
+                                  :noninteractive url-request-noninteractive
+                                  :headers url-request-extra-headers
+                                  :body (json-parse-string url-request-data :object-type 'alist)))
+                 nil)))
+      (should-error (lisply-search--embed-request "Query: walls" "m"))
+      (should (equal (plist-get seen :agent) "lisply-search"))
+      (should (eq (plist-get seen :noninteractive) t))
+      (should (= (plist-get seen :timeout) 2))
+      (should-not (assoc "Authorization" (plist-get seen :headers)))
+      (should (equal (cdr (assq 'input (plist-get seen :body))) ["Query: walls"])))))
+
 (ert-deftest lisply-search-default-search-mode-applies ()
   "A request naming no search_mode gets `lisply-search-default-search-mode'."
   (lisply-search-test--with-corpora dir

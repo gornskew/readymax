@@ -1244,6 +1244,9 @@ the time.")
 (defconst lisply-search--embed-query-scale 2048
   "A unit query vector enters integer arithmetic as round(q * this).")
 
+(defconst lisply-search--embed-user-agent "lisply-search"
+  "The User-Agent of a query sent to the embedding server.")
+
 (defconst lisply-search--fusion-k 60
   "Reciprocal-rank fusion constant: rank R in one ranking scores 1/(K+R).")
 
@@ -1458,6 +1461,9 @@ credentials, and the wait is bounded by `lisply-search-embed-timeout'."
          (url-request-method "POST")
          (url-request-noninteractive t)
          (url-show-status nil)
+         ;; A recognisable client, so the server's operator can tell a
+         ;; search's queries from other load in the server's log.
+         (url-user-agent lisply-search--embed-user-agent)
          (url-request-extra-headers
           (cons '("Content-Type" . "application/json")
                 (and key (list (cons "Authorization" (concat "Bearer " key))))))
