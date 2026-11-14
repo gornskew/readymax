@@ -70,6 +70,10 @@ SNIPPETS is a list of (PATH TEXT); terms are extracted from TEXT."
   "Run BODY with INDEX installed as the live cache."
   (declare (indent 1))
   `(let* ((lisply-search-index-path "mock-index")
+          ;; No corpora directory: in a ready room /lisply/corpora is
+          ;; real, its files change the cache key, and the real index
+          ;; would replace the mock one.
+          (lisply-search-corpora-directory nil)
           (lisply-search--cache (lisply-search-test--with-mock-cache ,index)))
      ,@body))
 
@@ -172,12 +176,13 @@ matching and says so."
                         (lisply-search-test--paths prefix)))
       (should (= (length (plist-get none :hits)) 0)))))
 
-(ert-deftest lisply-search-search-mode-warns-when-not-lexical ()
-  "Any search_mode but lexical is answered lexically with a warning."
+(ert-deftest lisply-search-search-mode-warns-when-unknown ()
+  "A search_mode that is not lexical, semantic or hybrid is answered
+lexically with a warning; lexical itself warns of nothing."
   (lisply-search-test--with-index (lisply-search-test--build-mock-index 2 1)
-    (let ((result (lisply-search (list :query "define-object" :search-mode "semantic"))))
+    (let ((result (lisply-search (list :query "define-object" :search-mode "fuzzy"))))
       (should (eq (plist-get result :search-mode) :lexical))
-      (should (string-match-p "semantic" (plist-get result :warning))))
+      (should (string-match-p "fuzzy" (plist-get result :warning))))
     (should-not (plist-get (lisply-search (list :query "define-object" :search-mode "lexical"))
                            :warning))))
 
@@ -487,6 +492,192 @@ stylesheet."
                     "/projects/gw/gendl/gwl/static/gwl/gdlajax.js"
                     "/projects/gw/demos/demos-common/source/cad-export.lisp"))
       (should-not (lisply-search--path-excluded-p path excludes)))))
+
+;;;; Semantic and hybrid ranking (CORPUS.md section 7)
+
+(defun lisply-search-test--write-corpus (dir name checksum texts)
+  "Write a one-file-per-snippet corpus NAME with CHECKSUM into DIR; TEXTS
+are the snippets, one file each, in row order.  Returns the file."
+  (let ((file (expand-file-name (concat name ".sexp") dir)))
+    (lisply-search--write-sexp-file
+     (list :version 4 :generated-at "2026-11-14T00:00:00Z" :corpus name
+           :distribution :public :checksum checksum
+           :config '(:sources nil :extensions (:default (".lisp")) :exclude-paths ())
+           :files (cl-loop for text in texts for i from 0
+                           collect (list :path (format "/c/%s-%d.lisp" name i)
+                                         :source (intern (concat ":" name))
+                                         :repo name :repo-root "/c"
+                                         :snippets (list (list :snippet text
+                                                               :terms (delete-dups (lisply-search--extract-terms text))
+                                                               :start-line 0 :end-line 0)))))
+     file)
+    file))
+
+(defun lisply-search-test--write-companion (dir name checksum rows &optional generated-at)
+  "Write NAME's embeddings companion into DIR/embeddings: ROWS are lists of
+signed bytes, one per snippet, all the same length."
+  (let ((edir (expand-file-name "embeddings" dir))
+        (dims (length (car rows))))
+    (make-directory edir t)
+    (lisply-search--write-sexp-file
+     (list :version 1 :corpus name :corpus-checksum checksum
+           :corpus-generated-at (or generated-at "2026-11-14T00:00:00Z")
+           :model "test-model" :dims dims :rows (length rows) :dtype :int8 :scale 127.0
+           :query-prefix "Query: ")
+     (expand-file-name (concat name ".emb.sexp") edir))
+    (let ((coding-system-for-write 'binary))
+      (with-temp-file (expand-file-name (concat name ".i8") edir)
+        (set-buffer-multibyte nil)
+        (dolist (row rows)
+          (dolist (v row) (insert (logand v 255))))))))
+
+(defmacro lisply-search-test--with-corpora (dir &rest body)
+  "Run BODY with a fresh corpora directory bound to DIR and no baked index,
+an embedding server configured but never reached, and no outage."
+  (declare (indent 1))
+  `(let* ((,dir (make-temp-file "lisply-search-semantic" t))
+          (lisply-search-index-path (expand-file-name "absent.sexp" ,dir))
+          (lisply-search-corpora-directory ,dir)
+          (lisply-search--cache nil)
+          (lisply-search--embed-cache nil)
+          (lisply-search-embed-url "http://embed.invalid/v1/embeddings")
+          (lisply-search-embed-key-file nil)
+          (lisply-search-default-search-mode "lexical")
+          (lisply-search--embed-down-until 0)
+          (lisply-search--embed-outage nil))
+     (unwind-protect (progn ,@body)
+       (delete-directory ,dir t))))
+
+(ert-deftest lisply-search-identical-corpora-load-once ()
+  "Two files carrying the same corpus (name and checksum) -- two species
+aboard with the same Gendl -- load once, so no hit comes back twice."
+  (lisply-search-test--with-corpora dir
+    (lisply-search-test--write-corpus dir "gendl" "1-10" '("(define-object box-a ())"))
+    (copy-file (expand-file-name "gendl.sexp" dir) (expand-file-name "species-two-gendl.sexp" dir))
+    (let ((result (lisply-search (list :query "box-a" :k 5))))
+      (should (equal (lisply-search-test--paths result) '("gendl-0.lisp")))
+      (should (= (length (plist-get result :corpora)) 1)))))
+
+(ert-deftest lisply-search-embed-kernels-are-exact ()
+  "The int8 kernels give the plain dot products, negative bytes included,
+and are compiled even when this file is loaded as source."
+  (let* ((rows '((1 -2 3) (-128 0 127)))
+         (blob (apply #'unibyte-string (mapcar (lambda (v) (logand v 255)) (apply #'append rows))))
+         (q [5 7 -11])
+         (norms (lisply-search--embed-prepare blob 3 2 2)))
+    (should (equal (append (lisply-search--embed-scan blob 3 2 q 3) nil)
+                   (list (+ 5 -14 -33) (+ -640 0 -1397))))
+    (should (equal (append (lisply-search--embed-scan blob 3 2 q 2) nil)
+                   (list (+ 5 -14) -640)))
+    (should (= (lisply-search--embed-dot-row blob 3 1 q) (+ -640 0 -1397)))
+    (should (< (abs (- (aref norms 0) (sqrt 5.0))) 1e-9))
+    (dolist (fn '(lisply-search--embed-scan lisply-search--embed-dot-row lisply-search--embed-prepare))
+      (should (or (byte-code-function-p (symbol-function fn)) (subrp (symbol-function fn)))))))
+
+(ert-deftest lisply-search-semantic-ranks-by-meaning ()
+  "With a current companion, semantic ranks the nearest vector first even
+when the query shares no word with it, and hits carry their similarity."
+  (lisply-search-test--with-corpora dir
+    (lisply-search-test--write-corpus dir "demo" "3-30"
+                                      '("(defun alpha ())" "(defun beta ())" "(defun gamma ())"))
+    (lisply-search-test--write-companion dir "demo" "3-30"
+                                         '((127 0 0) (0 127 0) (90 90 0)))
+    (cl-letf (((symbol-function 'lisply-search--embed-request)
+               (lambda (text _model)
+                 (should (equal text "Query: second letter"))
+                 [0.0 1.0 0.0])))
+      (let ((result (lisply-search (list :query "second letter" :k 3 :search-mode "semantic"))))
+        (should (eq (plist-get result :search-mode) :semantic))
+        (should (null (plist-get result :warning)))
+        (should (equal (lisply-search-test--paths result)
+                       '("demo-1.lisp" "demo-2.lisp" "demo-0.lisp")))
+        (should (< (abs (- (plist-get (aref (plist-get result :hits) 0) :similarity) 1.0)) 0.01))
+        (should (equal (plist-get (aref (plist-get result :corpora) 0) :embeddings) "current"))))))
+
+(ert-deftest lisply-search-hybrid-fuses-both-rankings ()
+  "Hybrid puts first the snippet both rankings rank high: the keyword
+ranking's second and the meaning's first beats the keyword's first that
+the meaning ranks last."
+  (lisply-search-test--with-corpora dir
+    (lisply-search-test--write-corpus dir "demo" "3-30"
+                                      '("wall height wall" "wall" "(defun unrelated ())"))
+    (lisply-search-test--write-companion dir "demo" "3-30"
+                                         '((-127 0 0) (127 0 0) (0 127 0)))
+    (cl-letf (((symbol-function 'lisply-search--embed-request)
+               (lambda (_text _model) [1.0 0.0 0.0])))
+      (let* ((result (lisply-search (list :query "wall" :k 3 :search-mode "hybrid")))
+             (hits (append (plist-get result :hits) nil)))
+        (should (eq (plist-get result :search-mode) :hybrid))
+        ;; demo-1 is second lexically and first by meaning; demo-0 first
+        ;; lexically and last by meaning.
+        (should (equal (mapcar (lambda (h) (plist-get h :path)) hits)
+                       '("demo-1.lisp" "demo-0.lisp" "demo-2.lisp")))
+        ;; Second and first: 1/62 + 1/61 of the 2/61 a double first would score.
+        (should (< (abs (- (plist-get (car hits) :score) 0.992)) 0.001))))))
+
+(ert-deftest lisply-search-stale-or-missing-embeddings-answer-lexically ()
+  "A companion built from another version of the corpus is not used: the
+search is lexical, without a warning, and the corpus says why."
+  (lisply-search-test--with-corpora dir
+    (lisply-search-test--write-corpus dir "demo" "3-30" '("wall" "door" "roof"))
+    (lisply-search-test--write-companion dir "demo" "3-29" '((1 0) (0 1) (1 1)))
+    (cl-letf (((symbol-function 'lisply-search--embed-request)
+               (lambda (&rest _) (error "should not be asked"))))
+      (let ((result (lisply-search (list :query "wall" :search-mode "hybrid"))))
+        (should (eq (plist-get result :search-mode) :lexical))
+        (should (null (plist-get result :warning)))
+        (should (equal (lisply-search-test--paths result) '("demo-0.lisp")))
+        (should (string-prefix-p "stale" (plist-get (aref (plist-get result :corpora) 0) :embeddings)))))))
+
+(ert-deftest lisply-search-unreachable-server-falls-back-and-logs-once ()
+  "A server that does not answer: the search is lexical, the outage is
+logged once, and the server is not asked again until the retry time."
+  (lisply-search-test--with-corpora dir
+    (lisply-search-test--write-corpus dir "demo" "2-20" '("wall" "door"))
+    (lisply-search-test--write-companion dir "demo" "2-20" '((1 0) (0 1)))
+    (let ((asked 0) (logged nil))
+      (cl-letf (((symbol-function 'lisply-search--embed-request)
+                 (lambda (&rest _) (setq asked (1+ asked)) (error "no answer within 2 s")))
+                ((symbol-function 'lisply-search--log)
+                 (lambda (fmt &rest args) (push (apply #'format fmt args) logged))))
+        (dotimes (_ 3)
+          (let ((result (lisply-search (list :query "wall" :search-mode "semantic"))))
+            (should (eq (plist-get result :search-mode) :lexical))
+            (should (null (plist-get result :warning)))
+            (should (equal (lisply-search-test--paths result) '("demo-0.lisp")))))
+        (should (= asked 1))
+        (should (= (cl-count-if (lambda (m) (string-match-p "unavailable" m)) logged) 1))
+        ;; Once the rest is over and the server answers, it is used again.
+        (setq lisply-search--embed-down-until 0)
+        (cl-letf (((symbol-function 'lisply-search--embed-request) (lambda (&rest _) [0.0 1.0])))
+          (should (equal (lisply-search-test--paths
+                          (lisply-search (list :query "wall" :k 1 :search-mode "semantic")))
+                         '("demo-1.lisp")))
+          (should (null lisply-search--embed-outage)))))))
+
+(ert-deftest lisply-search-no-server-configured-is-plain-lexical ()
+  "With no embedding server configured, semantic is answered lexically and
+nothing is loaded or asked."
+  (lisply-search-test--with-corpora dir
+    (lisply-search-test--write-corpus dir "demo" "1-10" '("wall"))
+    (lisply-search-test--write-companion dir "demo" "1-10" '((1 0)))
+    (let ((lisply-search-embed-url nil))
+      (cl-letf (((symbol-function 'lisply-search--embed-request)
+                 (lambda (&rest _) (error "should not be asked"))))
+        (let ((result (lisply-search (list :query "wall" :search-mode "semantic"))))
+          (should (eq (plist-get result :search-mode) :lexical))
+          (should (null (plist-get result :warning)))
+          (should (null lisply-search--embed-cache)))))))
+
+(ert-deftest lisply-search-default-search-mode-applies ()
+  "A request naming no search_mode gets `lisply-search-default-search-mode'."
+  (lisply-search-test--with-corpora dir
+    (lisply-search-test--write-corpus dir "demo" "2-20" '("wall" "door"))
+    (lisply-search-test--write-companion dir "demo" "2-20" '((1 0) (0 1)))
+    (cl-letf (((symbol-function 'lisply-search--embed-request) (lambda (&rest _) [0.0 1.0])))
+      (should (eq (plist-get (lisply-search (list :query "wall")) :search-mode) :lexical))
+      (let ((lisply-search-default-search-mode "semantic"))
+        (should (eq (plist-get (lisply-search (list :query "wall")) :search-mode) :semantic))))))
 
 (provide 'lisply-search-test)
 ;;; lisply-search-test.el ends here

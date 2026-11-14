@@ -49,11 +49,12 @@
                                                    ("description" . "Not used in Emacs Lisp but kept for protocol compatibility")))))
                        ("required" . ["code"]))))
 
-   ;; lisply_search tool: lexical search over the corpus index baked into
-   ;; the image (lisply-search.el).  The tool was skewed_search until
+   ;; lisply_search tool: search over the corpus index baked into the
+   ;; image and the corpora aboard (lisply-search.el); lexical, or by
+   ;; meaning where the deployment provides embeddings.  The tool was skewed_search until
    ;; 2026-09-09; the alias was dropped on 2026-09-10.
    `(("name" . "lisply_search")
-     ("description" . "Search the indexed corpus: Gendl/GDL source and docs, the console's own configuration, and the Genworks training material.  Lexical: by default every query term must appear in one snippet; when nothing holds every term the search retries with any-term matching and says so in `warning'.  Hyphenated tokens such as hidden-objects are matched verbatim and ranked up, as is the snippet that DEFINES a queried name.  Each hit carries the file path, the snippet's line range, and match_line (the first line holding a query term).")
+     ("description" . "Search the indexed corpus: Gendl/GDL source and docs, the console's own configuration, and the Genworks training material.  Lexical: by default every query term must appear in one snippet; when nothing holds every term the search retries with any-term matching and says so in `warning'.  Hyphenated tokens such as hidden-objects are matched verbatim and ranked up, as is the snippet that DEFINES a queried name.  Each hit carries the file path, the snippet's line range, and match_line (the first line holding a query term).  search_mode semantic ranks by meaning and hybrid fuses both rankings, where the deployment provides an embedding server and embeddings for the corpus; otherwise the search is lexical, and the response's search_mode says which ranking was used.")
      ("inputSchema" . (("type" . "object")
                        ("properties" . (("query" . (("type" . "string")
                                                    ("description" . "Keyword or natural-language query; stopwords are ignored")))
@@ -72,7 +73,7 @@
                                        ("any_max_candidates" . (("type" . "integer")
                                                                 ("description" . "Cap on the candidates gathered in any mode")))
                                        ("search_mode" . (("type" . "string")
-                                                        ("description" . "lexical is the only mode in this build; any other value is answered lexically with a warning")))
+                                                        ("description" . "lexical (default), semantic (by meaning: plain-language questions) or hybrid (both rankings fused); semantic and hybrid fall back to lexical where no embeddings are available")))
                                        ("max_snippet_tokens" . (("type" . "integer")
                                                                 ("description" . "Soft cap for snippet length (default 512); a longer snippet is excerpted from just above its first matching line")))
                                        ("include_metadata" . (("type" . "boolean")

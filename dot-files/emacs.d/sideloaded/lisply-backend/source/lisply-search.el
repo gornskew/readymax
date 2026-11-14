@@ -32,8 +32,27 @@
 ;; by IDF-weighted term coverage, term density, verbatim phrase hits
 ;; (hyphenated query tokens such as `hidden-objects'), whether the
 ;; snippet DEFINES a queried name, and whether the file name carries one.
-;; There is no embedding model in this build: `search_mode' other than
-;; lexical is answered lexically with a warning rather than silently.
+;;
+;; Semantic and hybrid ranking (2026-11-14): `search_mode' semantic ranks
+;; snippets by meaning, hybrid fuses that ranking with the lexical one
+;; (reciprocal-rank fusion).  Both need two things the deployment
+;; provides: an embedding server (`lisply-search-embed-url', the key in
+;; the file `lisply-search-embed-key-file') to embed the query, and an
+;; embeddings companion beside each corpus, built from that corpus by
+;; the same model (lisply-mcp CORPUS.md, section 7).  The companion is
+;; int8, scored in fixnum arithmetic: a first pass over the leading
+;; dimensions of every row, then the best rows rescored at full width.
+;; When the server does not answer, or a corpus has no current
+;; companion, the search is answered lexically, as it always was: the
+;; response's `search_mode' says which ranking was used, the outage is
+;; logged once, and the server is not asked again for a while.  An
+;; unknown `search_mode' is still answered lexically with a warning.
+;; Lexical stays the default (`lisply-search-default-search-mode').
+;;
+;; The search results go to AI clients, and the companion is built from
+;; the corpus text, so a deployment embeds only corpora that may go to
+;; cloud AI.  CORPUS.md says so, and the reference indexer refuses an
+;; :internal corpus.
 ;;
 ;; Symbol prefix: lisply-search-- (avoiding global collisions)
 
@@ -41,6 +60,9 @@
 
 (require 'cl-lib)
 (require 'subr-x)
+;; Loaded here, not where it is used: the request binds url's special
+;; variables, which a lexical-binding file would otherwise bind lexically.
+(require 'url)
 
 ;;;; ============================================================
 ;;;; Customization
@@ -81,8 +103,48 @@ yard copied out of the species images aboard, and what it built from
 mounted source.  They are loaded beside the baked index, and a corpus
 here REPLACES a same-named source in the baked index -- the Gendl
 aboard outranks the Gendl the console was built with.  Set from
-LISPLY_SEARCH_CORPORA; a missing directory means no extra corpora."
+LISPLY_SEARCH_CORPORA; a missing directory means no extra corpora.
+Embeddings companions for those corpora live in its `embeddings'
+subdirectory (lisply-mcp CORPUS.md, section 7)."
   :type 'string
+  :group 'lisply-search)
+
+(defcustom lisply-search-default-search-mode
+  (or (getenv "LISPLY_SEARCH_MODE") "lexical")
+  "The ranking for a request that names no search_mode: lexical,
+semantic or hybrid.  Set from LISPLY_SEARCH_MODE.  Semantic and hybrid
+need `lisply-search-embed-url' and a current embeddings companion for the
+corpus; without them a search is answered lexically."
+  :type 'string
+  :group 'lisply-search)
+
+(defcustom lisply-search-embed-url (getenv "LISPLY_EMBED_URL")
+  "The embedding server that embeds queries for semantic and hybrid
+search: the full URL of an OpenAI-style embeddings endpoint (its
+/v1/embeddings).  Set from LISPLY_EMBED_URL; nil means keyword search
+only.  The deployment names the server; nothing here knows one."
+  :type '(choice (const :tag "None" nil) string)
+  :group 'lisply-search)
+
+(defcustom lisply-search-embed-key-file (getenv "LISPLY_EMBED_KEY_FILE")
+  "File holding the embedding server's bearer key, or nil for none.  Set
+from LISPLY_EMBED_KEY_FILE.  The key is read at each request and never
+logged; keep it in a mounted secret file, not in the environment."
+  :type '(choice (const :tag "None" nil) file)
+  :group 'lisply-search)
+
+(defcustom lisply-search-embed-timeout 2
+  "Seconds to wait for the embedding server before searching by keyword.
+The wait blocks this Emacs, so keep it short: a server that is not there
+(a laptop off its home network) costs this much once per
+`lisply-search-embed-retry-seconds'."
+  :type 'number
+  :group 'lisply-search)
+
+(defcustom lisply-search-embed-retry-seconds 300
+  "After the embedding server fails, search by keyword for this long
+before asking it again."
+  :type 'number
   :group 'lisply-search)
 
 ;;;; ============================================================
@@ -808,12 +870,26 @@ Returns a list of (PATH . MTIME); the list is the cache key."
 The first entry is the console's baked index when there is one; the
 rest are corpora from the corpora directory.  A corpus's sources
 replace same-named sources of the baked index (lisply-mcp CORPUS.md,
-section 5); corpora do not override each other.  The merged plist
-carries the baked index's :config (or the first corpus's) and a
-:corpora list describing every file loaded."
+section 5); corpora do not override each other.  A corpus identical to
+one already loaded -- the same :corpus and :checksum, as when two
+species aboard carry the same Gendl -- is loaded once: twice, every
+hit came back twice (2026-11-14).  The merged plist carries the baked
+index's :config (or the first corpus's), a :corpora list describing
+every file loaded, and :corpus-indexes, the (PATH . INDEX) of each
+corpus kept."
   (let* ((baked-p (and loaded (equal (caar loaded) lisply-search-index-path)))
          (baked (and baked-p (cdar loaded)))
-         (corpora (if baked-p (cdr loaded) loaded))
+         (corpora (let (seen kept)
+                    (dolist (entry (if baked-p (cdr loaded) loaded))
+                      (let* ((index (cdr entry))
+                             (id (and (plist-get index :checksum)
+                                      (list (plist-get index :corpus) (plist-get index :checksum)))))
+                        (if (and id (member id seen))
+                            (lisply-search--log "%s: the same corpus as one already loaded (%s, checksum %s); skipped"
+                                                (car entry) (car id) (cadr id))
+                          (when id (push id seen))
+                          (push entry kept))))
+                    (nreverse kept)))
          (corpus-sources nil)
          (files nil)
          (descriptions nil))
@@ -841,6 +917,7 @@ carries the baked index's :config (or the first corpus's) and a
     (list :version lisply-search--index-version
           :config (plist-get (or baked (cdar loaded)) :config)
           :corpora (nreverse descriptions)
+          :corpus-indexes corpora
           :files (lisply-search--to-vector (nreverse files)))))
 
 (defun lisply-search--load-index ()
@@ -870,6 +947,7 @@ nothing loadable exists."
                       :index index
                       :config (plist-get index :config)
                       :corpora (plist-get index :corpora)
+                      :corpus-indexes (plist-get index :corpus-indexes)
                       ;; The sources actually loaded: a :public build
                       ;; leaves :internal ones out, and a corpus from
                       ;; the directory may have replaced a baked one.
@@ -1146,6 +1224,408 @@ when it is longer than MAX-CHARS; `:match-line' and
 
 
 ;;;; ============================================================
+;;;; Semantic Ranking (embeddings companions, lisply-mcp CORPUS.md section 7)
+;;;; ============================================================
+
+(defconst lisply-search--embed-companion-version 1
+  "The embeddings companion format this file reads.")
+
+(defconst lisply-search--embed-prefix-dims 256
+  "Leading dimensions scored for every row in the first pass.  Embedding
+models trained for truncation (Matryoshka) rank nearly as well on their
+leading dimensions as on all of them: on a 9,397-snippet Gendl corpus,
+the first 256 of 1024 with the best 100 rescored at full width kept
+recall@10 at 0.995, the same as a full-width int8 scan, in a quarter of
+the time.")
+
+(defconst lisply-search--embed-rescore 100
+  "Rows per corpus rescored at full width after the first pass.")
+
+(defconst lisply-search--embed-query-scale 2048
+  "A unit query vector enters integer arithmetic as round(q * this).")
+
+(defconst lisply-search--fusion-k 60
+  "Reciprocal-rank fusion constant: rank R in one ranking scores 1/(K+R).")
+
+(defconst lisply-search--fusion-depth 50
+  "How far down each ranking hybrid fusion reads, and how many hits a
+semantic ranking gathers.")
+
+(defvar lisply-search--embed-cache nil
+  "The loaded embeddings companions: (:key KEY :companions LIST).")
+
+(defvar lisply-search--embed-down-until 0
+  "Until this time (a `float-time'), do not ask the embedding server.")
+
+(defvar lisply-search--embed-outage nil
+  "Why the embedding server last failed, while it is failing; nil when it
+answers.  The outage is logged when this goes from nil to a reason.")
+
+;;; The kernels: fixnum arithmetic over a unibyte string of int8 rows.
+;;; The companion's signed bytes are flipped to offset binary (XOR 128)
+;;; when loaded, so `aref' gives B = V + 128 and a dot product is
+;;; sum(B * Q) - 128 * sum(Q), with no sign test in the inner loop.
+
+(defun lisply-search--embed-prepare (blob dims rows prefix)
+  "Turn BLOB's signed bytes into offset binary in place, and return a
+vector of each row's norm over its first PREFIX dimensions.  BLOB is a
+unibyte string of ROWS x DIMS signed bytes, row-major."
+  (let ((norms (make-vector rows 1.0))
+        (n (* dims rows))
+        (i 0)
+        (off 0))
+    (while (< i n)
+      (aset blob i (logxor (aref blob i) 128))
+      (setq i (1+ i)))
+    (dotimes (r rows)
+      (let ((acc 0) (j 0))
+        (while (< j prefix)
+          (let ((v (- (aref blob (+ off j)) 128)))
+            (setq acc (+ acc (* v v))))
+          (setq j (1+ j)))
+        (aset norms r (sqrt (float (max acc 1)))))
+      (setq off (+ off dims)))
+    norms))
+
+(defun lisply-search--embed-scan (blob dims rows q n)
+  "The dot product of Q's first N components with the first N of every
+row of BLOB (offset binary, ROWS x DIMS), as a vector of integers."
+  (let ((scores (make-vector rows 0))
+        (qsum 0)
+        (off 0)
+        (j 0))
+    (while (< j n)
+      (setq qsum (+ qsum (aref q j))
+            j (1+ j)))
+    (setq qsum (* 128 qsum))
+    (dotimes (r rows)
+      (let ((acc 0) (j 0))
+        (while (< j n)
+          (setq acc (+ acc (* (aref blob (+ off j)) (aref q j)))
+                j (1+ j)))
+        (aset scores r (- acc qsum)))
+      (setq off (+ off dims)))
+    scores))
+
+(defun lisply-search--embed-dot-row (blob dims row q)
+  "The full-width dot product of Q with ROW of BLOB (offset binary)."
+  (let ((off (* row dims))
+        (acc 0)
+        (qsum 0)
+        (j 0))
+    (while (< j dims)
+      (let ((qj (aref q j)))
+        (setq acc (+ acc (* (aref blob (+ off j)) qj))
+              qsum (+ qsum qj)
+              j (1+ j))))
+    (- acc (* 128 qsum))))
+
+;; Ten million multiplications a query: compile the kernels even when
+;; this file is loaded as source (interpreted, the scan takes seconds).
+(dolist (fn '(lisply-search--embed-prepare
+              lisply-search--embed-scan
+              lisply-search--embed-dot-row))
+  (let ((def (symbol-function fn)))
+    (unless (or (byte-code-function-p def) (subrp def))
+      (byte-compile fn))))
+
+;;; Companions
+
+(defun lisply-search--embed-directory ()
+  "The directory of embeddings companions: `embeddings' in the corpora directory."
+  (and lisply-search-corpora-directory
+       (expand-file-name "embeddings" lisply-search-corpora-directory)))
+
+(defun lisply-search--embed-rows (index)
+  "The snippets of corpus INDEX in companion row order -- its files in
+order, each file's snippets in order -- as a vector of search candidates."
+  (let (rows)
+    (dolist (f (lisply-search--to-list (plist-get index :files)))
+      (dolist (s (lisply-search--to-list (plist-get f :snippets)))
+        (push (list :snippet s :file (plist-get f :path)
+                    :source (plist-get f :source) :entry f)
+              rows)))
+    (vconcat (nreverse rows))))
+
+(defun lisply-search--embed-read-blob (path)
+  "The bytes of PATH as a unibyte string."
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (let ((coding-system-for-read 'binary))
+      (insert-file-contents-literally path))
+    (buffer-string)))
+
+(defun lisply-search--embed-load-companion (index)
+  "The embeddings companion of corpus INDEX: a plist whose :status is
+\"current\" and which carries the vectors, or whose :status says why
+there is none to use (\"none\", \"stale: ...\", ...).  A companion is
+used only when it was built from this very corpus: its
+:corpus-checksum and :corpus-generated-at match the corpus's, and it
+has one row per snippet."
+  (let* ((name (plist-get index :corpus))
+         (dir (lisply-search--embed-directory))
+         (header-file (and name dir (expand-file-name (concat name ".emb.sexp") dir)))
+         (blob-file (and header-file (expand-file-name (concat name ".i8") dir)))
+         (header (and header-file (file-exists-p header-file)
+                      (condition-case nil
+                          (lisply-search--read-sexp-file header-file)
+                        (error nil))))
+         (dims (plist-get header :dims))
+         (rows (plist-get header :rows))
+         (status
+          (cond
+           ((not header) "none")
+           ((not (eql (plist-get header :version) lisply-search--embed-companion-version))
+            (format "unsupported companion version %s" (plist-get header :version)))
+           ((not (eq (plist-get header :dtype) :int8))
+            (format "unsupported dtype %s" (plist-get header :dtype)))
+           ((not (and (plist-get index :checksum)
+                      (equal (plist-get header :corpus-checksum) (plist-get index :checksum))
+                      (equal (plist-get header :corpus-generated-at) (plist-get index :generated-at))))
+            "stale: built from another version of the corpus")
+           ((not (and (natnump dims) (> dims 0) (natnump rows)
+                      (= rows (lisply-search--count-snippets index))))
+            "stale: the row count differs from the corpus's snippets")
+           ((not (and (file-exists-p blob-file)
+                      (= (file-attribute-size (file-attributes blob-file)) (* rows dims))))
+            "the vectors are missing or the wrong size")
+           (t "current"))))
+    (if (not (equal status "current"))
+        (list :corpus name :status status)
+      (let ((blob (lisply-search--embed-read-blob blob-file))
+            (prefix (min dims lisply-search--embed-prefix-dims)))
+        (list :corpus name
+              :status status
+              :source (intern (concat ":" name))
+              :model (plist-get header :model)
+              :query-prefix (or (plist-get header :query-prefix) "")
+              :dims dims
+              :rows rows
+              :scale (float (or (plist-get header :scale) 127))
+              :prefix prefix
+              :norms (lisply-search--embed-prepare blob dims rows prefix)
+              :blob blob
+              :candidates (lisply-search--embed-rows index))))))
+
+(defun lisply-search--embed-state (cache)
+  "The embeddings companions of the corpora in CACHE, loaded on first use
+and kept until the index or a companion file changes."
+  (let* ((dir (lisply-search--embed-directory))
+         (key (cons (plist-get cache :key)
+                    (and dir (file-directory-p dir)
+                         (mapcar (lambda (p)
+                                   (cons p (file-attribute-modification-time (file-attributes p))))
+                                 (directory-files dir t "\\.\\(?:emb\\.sexp\\|i8\\)\\'"))))))
+    (unless (and lisply-search--embed-cache
+                 (equal (plist-get lisply-search--embed-cache :key) key))
+      (let ((companions (mapcar (lambda (entry) (lisply-search--embed-load-companion (cdr entry)))
+                                (plist-get cache :corpus-indexes))))
+        (lisply-search--log "Embeddings: %s"
+                            (if companions
+                                (mapconcat (lambda (c) (format "%s %s" (plist-get c :corpus) (plist-get c :status)))
+                                           companions ", ")
+                              "no corpora"))
+        (setq lisply-search--embed-cache (list :key key :companions companions))))
+    (plist-get lisply-search--embed-cache :companions)))
+
+;;; The query
+
+(defun lisply-search--embed-ready-p ()
+  "Non-nil when an embedding server is configured and not resting after a failure."
+  (and (stringp lisply-search-embed-url)
+       (not (string-empty-p lisply-search-embed-url))
+       (>= (float-time) lisply-search--embed-down-until)))
+
+(defun lisply-search--embed-key ()
+  "The bearer key from `lisply-search-embed-key-file', or nil."
+  (and lisply-search-embed-key-file
+       (file-readable-p lisply-search-embed-key-file)
+       (with-temp-buffer
+         (insert-file-contents lisply-search-embed-key-file)
+         (string-trim (buffer-string)))))
+
+(defun lisply-search--embed-request (text model)
+  "Ask the embedding server for TEXT's vector; return it (a vector of
+numbers) or signal an error.  Never prompts: with
+`url-request-noninteractive' a 401 is an error, not a request for
+credentials, and the wait is bounded by `lisply-search-embed-timeout'."
+  (let* ((key (lisply-search--embed-key))
+         (url-request-method "POST")
+         (url-request-noninteractive t)
+         (url-show-status nil)
+         (url-request-extra-headers
+          (cons '("Content-Type" . "application/json")
+                (and key (list (cons "Authorization" (concat "Bearer " key))))))
+         (url-request-data (json-serialize (list (cons 'model (or model ""))
+                                                 (cons 'input (vector text)))))
+         (buffer (url-retrieve-synchronously lisply-search-embed-url t t
+                                             lisply-search-embed-timeout)))
+    (unless buffer
+      (error "no answer within %s s" lisply-search-embed-timeout))
+    (unwind-protect
+        (with-current-buffer buffer
+          (let ((status (bound-and-true-p url-http-response-status)))
+            (unless (eql status 200)
+              (error "HTTP status %s" status)))
+          (goto-char (point-min))
+          (unless (re-search-forward "\r?\n\r?\n" nil t)
+            (error "no response body"))
+          (let* ((json (json-parse-buffer :object-type 'alist :array-type 'array))
+                 (data (cdr (assq 'data json)))
+                 (vec (and (vectorp data) (> (length data) 0)
+                           (cdr (assq 'embedding (aref data 0))))))
+            (unless (and (vectorp vec) (> (length vec) 0))
+              (error "no embedding in the answer"))
+            vec))
+      (let ((kill-buffer-query-functions nil))
+        (kill-buffer buffer)))))
+
+(defun lisply-search--embed-unavailable (reason)
+  "Note that the embedding server failed for REASON and return nil.  The
+outage is logged once, when it begins, and the server is not asked
+again for `lisply-search-embed-retry-seconds'."
+  (unless lisply-search--embed-outage
+    (lisply-search--log "embedding server unavailable (%s); searching by keyword until it answers"
+                        reason))
+  (setq lisply-search--embed-outage reason
+        lisply-search--embed-down-until (+ (float-time) lisply-search-embed-retry-seconds))
+  nil)
+
+(defun lisply-search--embed-query (query prefix model)
+  "QUERY, behind PREFIX, embedded by MODEL: a unit vector as integers
+scaled by `lisply-search--embed-query-scale', or nil when the server
+cannot be used now."
+  (when (lisply-search--embed-ready-p)
+    (condition-case err
+        (let* ((vec (lisply-search--embed-request (concat prefix query) model))
+               (norm (sqrt (cl-reduce #'+ vec :key (lambda (x) (* x x)))))
+               (q (make-vector (length vec) 0)))
+          (when (zerop norm)
+            (error "a zero vector"))
+          (dotimes (i (length vec))
+            (aset q i (round (* lisply-search--embed-query-scale (/ (aref vec i) norm)))))
+          (when lisply-search--embed-outage
+            (lisply-search--log "embedding server answering again")
+            (setq lisply-search--embed-outage nil))
+          q)
+      (error (lisply-search--embed-unavailable (error-message-string err))))))
+
+;;; Ranking
+
+(defun lisply-search--semantic-rank-companion (companion q extensions excludes path-filters)
+  "Rank COMPANION's rows against the query vector Q: the first pass over
+the leading dimensions, then the best rows that pass EXTENSIONS,
+EXCLUDES and PATH-FILTERS rescored at full width.  Returns a list of
+(SIMILARITY . CANDIDATE), the similarity an estimate of the cosine."
+  (let* ((blob (plist-get companion :blob))
+         (dims (plist-get companion :dims))
+         (rows (plist-get companion :rows))
+         (norms (plist-get companion :norms))
+         (candidates (plist-get companion :candidates))
+         (scale (* (plist-get companion :scale) lisply-search--embed-query-scale))
+         (coarse (lisply-search--embed-scan blob dims rows q (plist-get companion :prefix)))
+         (order nil)
+         (picked nil)
+         (count 0))
+    (dotimes (r rows)
+      (push (cons (/ (aref coarse r) (aref norms r)) r) order))
+    (setq order (nreverse (sort order #'car-less-than-car)))
+    (while (and order (< count lisply-search--embed-rescore))
+      (let* ((r (cdar order))
+             (c (aref candidates r)))
+        (when (lisply-search--candidate-matches-p c (list (plist-get c :source))
+                                                  extensions excludes path-filters)
+          (push (cons (/ (lisply-search--embed-dot-row blob dims r q) scale) c) picked)
+          (setq count (1+ count))))
+      (setq order (cdr order)))
+    picked))
+
+(defun lisply-search--semantic-ranking (query cache sources extensions excludes path-filters limit)
+  "Rank the snippets of SOURCES by meaning: a list of (SIMILARITY .
+CANDIDATE), best first, at most LIMIT long, from the current companions
+of CACHE's corpora, filtered by EXTENSIONS, EXCLUDES and PATH-FILTERS.
+Returns :unavailable when no server is configured or answering, or no
+searched corpus has a current companion."
+  (if (not (lisply-search--embed-ready-p))
+      :unavailable
+    (let ((vectors nil)
+          (ranked nil)
+          (used nil))
+      (dolist (c (lisply-search--embed-state cache))
+        (when (and (equal (plist-get c :status) "current")
+                   (memq (plist-get c :source) sources))
+          (let* ((qkey (cons (plist-get c :query-prefix) (plist-get c :model)))
+                 (q (if (assoc qkey vectors)
+                        (cdr (assoc qkey vectors))
+                      (let ((v (lisply-search--embed-query query (car qkey) (cdr qkey))))
+                        (push (cons qkey v) vectors)
+                        v))))
+            (when (and q (= (length q) (plist-get c :dims)))
+              (setq used t
+                    ranked (nconc (lisply-search--semantic-rank-companion
+                                   c q extensions excludes path-filters)
+                                  ranked))))))
+      (if (not used)
+          :unavailable
+        (let ((sorted (nreverse (sort ranked #'car-less-than-car))))
+          (cl-subseq sorted 0 (min limit (length sorted))))))))
+
+(defun lisply-search--fuse-rankings (lexical semantic)
+  "Reciprocal-rank fusion of LEXICAL and SEMANTIC, each a list of
+(SCORE . CANDIDATE) best first, each read `lisply-search--fusion-depth'
+deep.  A snippet scores the sum of 1/(K + rank) over the rankings it
+appears in (K is `lisply-search--fusion-k'), scaled so that first in
+both is 1.  Returns (SCORE CANDIDATE SIMILARITY) lists, best first;
+SIMILARITY is nil for a snippet only the lexical ranking found."
+  (let ((table (make-hash-table :test 'eq))
+        (cells nil)
+        (top (/ 2.0 (+ lisply-search--fusion-k 1))))
+    (dolist (ranking (list (cons nil lexical) (cons t semantic)))
+      (let ((rank 0))
+        (dolist (entry (cdr ranking))
+          (when (< rank lisply-search--fusion-depth)
+            (setq rank (1+ rank))
+            (let* ((key (plist-get (cdr entry) :snippet))
+                   (cell (or (gethash key table)
+                             (let ((new (list 0.0 (cdr entry) nil)))
+                               (puthash key new table)
+                               (push new cells)
+                               new))))
+              (setcar cell (+ (car cell) (/ 1.0 (+ lisply-search--fusion-k rank))))
+              (when (car ranking)
+                (setcar (cddr cell) (car entry))))))))
+    (dolist (cell cells)
+      (setcar cell (/ (car cell) top)))
+    (sort (nreverse cells)
+          (lambda (a b)
+            (or (> (car a) (car b))
+                (and (= (car a) (car b))
+                     (string< (lisply-search--display-path (cadr a))
+                              (lisply-search--display-path (cadr b)))))))))
+
+(defun lisply-search--parse-search-mode (mode)
+  "MODE as :lexical, :semantic or :hybrid; nil when MODE is absent or
+empty; the symbol `unknown' for anything else."
+  (when mode
+    (let ((name (string-remove-prefix ":" (downcase (format "%s" mode)))))
+      (cond ((string-empty-p name) nil)
+            ((member name '("lexical" "semantic" "hybrid")) (intern (concat ":" name)))
+            (t 'unknown)))))
+
+(defun lisply-search--corpora-report (cache companions)
+  "CACHE's corpora for the response; with COMPANIONS loaded, each corpus
+also says whether its embeddings are current, and why not."
+  (lisply-search--to-vector
+   (mapcar (lambda (d)
+             (let ((c (and companions
+                           (cl-find (plist-get d :corpus) companions
+                                    :key (lambda (c) (plist-get c :corpus)) :test #'equal))))
+               (append (list :corpus (plist-get d :corpus)
+                             :generated-at (plist-get d :generated-at))
+                       (and c (list :embeddings (plist-get c :status))))))
+           (plist-get cache :corpora))))
+
+;;;; ============================================================
 ;;;; Main Search API
 ;;;; ============================================================
 
@@ -1153,9 +1633,12 @@ when it is longer than MAX-CHARS; `:match-line' and
   "Execute search with PARAMS plist.
 PARAMS: (:query Q :k K :sources [S...] :language L :path-filters [P...]
 :match-mode :all|:any :any-max-candidates N :max-snippet-tokens N
-:search-mode M :include-metadata BOOL).
-Returns plist: (:query Q :search-mode :lexical :match-mode M
-:match-fallback BOOL :sources [S...] :hits [H...] :warning W)."
+:search-mode lexical|semantic|hybrid :include-metadata BOOL).
+Returns plist: (:query Q :search-mode M :match-mode M :match-fallback BOOL
+:sources [S...] :corpora [C...] :hits [H...] :warning W).  The response's
+:search-mode is the ranking actually used: semantic or hybrid asked for
+when no embedding server answers, or no searched corpus has a current
+embeddings companion, is answered lexically."
   (cl-destructuring-bind (&key query k max-snippet-tokens match-mode
                                any-max-candidates language sources
                                path-filters search-mode
@@ -1176,6 +1659,7 @@ Returns plist: (:query Q :search-mode :lexical :match-mode M
            (config (and cache (plist-get cache :config)))
            (snippet-map (and cache (plist-get cache :snippet-map)))
            (snippet-count (or (and cache (plist-get cache :snippet-count)) 0))
+           (mode (lisply-search--parse-search-mode search-mode))
            warnings)
       (cond
        ((not cache)
@@ -1184,11 +1668,15 @@ Returns plist: (:query Q :search-mode :lexical :match-mode M
        ((not snippet-map)
         (list :error "Index has no snippet map"))
        (t
-        (when (and search-mode
-                   (not (member (downcase (format "%s" search-mode)) '("lexical" ":lexical"))))
-          (push (format "search_mode %s is not available in this build; answered lexically"
+        (when (eq mode 'unknown)
+          (push (format "search_mode %s is not one of lexical, semantic, hybrid; answered lexically"
                         search-mode)
-                warnings))
+                warnings)
+          (setq mode :lexical))
+        (unless mode
+          (setq mode (let ((default (lisply-search--parse-search-mode
+                                     lisply-search-default-search-mode)))
+                       (if (memq default '(:lexical :semantic :hybrid)) default :lexical))))
         ;; Determine which sources to search
         (let* ((all-sources (or (plist-get cache :present-sources)
                                 (mapcar (lambda (s) (plist-get s :name))
@@ -1212,17 +1700,29 @@ Returns plist: (:query Q :search-mode :lexical :match-mode M
                (phrases (cdr parsed))
                (idfs (lisply-search--idf-table terms snippet-map snippet-count))
                (max-chars (* max-tokens 4))
-               (fallback nil))
+               (fallback nil)
+               ;; Meaning first: when it cannot be had, the search is
+               ;; lexical, with nothing to say about it but search_mode.
+               (semantic (when (memq mode '(:semantic :hybrid))
+                           (lisply-search--semantic-ranking
+                            query cache sources extensions excludes path-filters
+                            (max k lisply-search--fusion-depth))))
+               (effective (if (and (memq mode '(:semantic :hybrid))
+                                   (not (eq semantic :unavailable)))
+                              mode
+                            :lexical)))
           (when unknown
             (push (format "Unknown sources ignored: %s"
                           (mapconcat (lambda (s) (substring (symbol-name s) 1))
                                      unknown ", "))
                   warnings))
           ;; Filter, score, rank
-          (let* ((candidates (lisply-search--filter-candidates
-                              snippet-map terms sources extensions excludes
-                              match-mode any-max-candidates path-filters))
-                 (candidates (if (and (null candidates)
+          (let* ((candidates (unless (eq effective :semantic)
+                               (lisply-search--filter-candidates
+                                snippet-map terms sources extensions excludes
+                                match-mode any-max-candidates path-filters)))
+                 (candidates (if (and (not (eq effective :semantic))
+                                      (null candidates)
                                       (eq match-mode :all)
                                       (> (length terms) 1))
                                  ;; Nothing holds every term: rank by any term instead.
@@ -1244,25 +1744,32 @@ Returns plist: (:query Q :search-mode :lexical :match-mode M
                                             (and (= (car a) (car b))
                                                  (string< (lisply-search--display-path (cdr a))
                                                           (lisply-search--display-path (cdr b))))))))
-                 (top-k (cl-subseq sorted 0 (min k (length sorted))))
-                 (final (cl-loop for (score . c) in top-k
+                 ;; (SCORE CANDIDATE SIMILARITY), best first.
+                 (ranked (pcase effective
+                           (:semantic (mapcar (lambda (e) (list (car e) (cdr e) (car e))) semantic))
+                           (:hybrid (lisply-search--fuse-rankings sorted semantic))
+                           (_ (mapcar (lambda (e) (list (car e) (cdr e) nil)) sorted))))
+                 (top-k (cl-subseq ranked 0 (min k (length ranked))))
+                 (final (cl-loop for (score c similarity) in top-k
                                  for i from 1
-                                 collect (lisply-search--format-hit
-                                          c score terms phrases i include-metadata max-chars))))
+                                 collect (let ((hit (lisply-search--format-hit
+                                                     c score terms phrases i include-metadata max-chars)))
+                                           (if similarity
+                                               (append hit (list :similarity
+                                                                 (/ (fround (* similarity 1000.0)) 1000.0)))
+                                             hit)))))
             (ignore explicit-mode)
             (list :query query
-                  :search-mode :lexical
+                  :search-mode effective
                   :match-mode match-mode
                   :match-fallback fallback
                   :terms (lisply-search--to-vector terms)
                   :phrases (lisply-search--to-vector phrases)
                   :sources (lisply-search--to-vector sources)
-                  :corpora (lisply-search--to-vector
-                            (mapcar (lambda (d)
-                                      (list :corpus (plist-get d :corpus)
-                                            :generated-at (plist-get d :generated-at)))
-                                    (plist-get cache :corpora)))
-                  :total-candidates (length candidates)
+                  :corpora (lisply-search--corpora-report
+                            cache (and (memq mode '(:semantic :hybrid))
+                                       (plist-get lisply-search--embed-cache :companions)))
+                  :total-candidates (if (eq effective :lexical) (length candidates) (length ranked))
                   :hits (lisply-search--to-vector final)
                   :warning (when warnings (string-join (nreverse warnings) "; "))
                   :known-sources (when unknown

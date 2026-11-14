@@ -397,7 +397,7 @@ ert-run-tests-batch-and-exit`, through `lisply-shell-async`).
 
 ## 11. The lisply_search tool
 
-`lisply_search` is lexical search over curated Gendl/GDL source and
+`lisply_search` searches curated Gendl/GDL source and
 documentation, this console's own configuration, and the Genworks
 training material.  Search before writing `define-object` code,
 explaining a GDL concept, or debugging GDL: the corpus usually holds a
@@ -418,8 +418,41 @@ carries it.  Snippets are cut at top-level forms in Lisp and at
 headings in Markdown and Org, so a hit is a whole `define-object` or
 section.  Each hit reports `match_line`, the first line holding a query
 term; a snippet longer than `max_snippet_tokens` is excerpted from just
-above it.  There is no embedding model: a `search_mode` other than
-`lexical` is answered lexically, with a warning.
+above it.
+
+### Searching by meaning: `search_mode`
+
+`search_mode` picks the ranking.  `lexical` (the default) is the term
+matching above.  `semantic` ranks snippets by meaning, so a question in
+plain words ("how do I make a sequence of children whose count comes from
+an input?") finds the passage that answers it without sharing its
+words.  `hybrid` fuses the two rankings (reciprocal-rank fusion): a
+snippet both rank high comes first, and a term the corpus spells exactly
+still counts.  Hits ranked by meaning carry `similarity` (an estimate of
+the cosine); a hybrid hit's `score` is its fused rank, 1 for first in
+both rankings.
+
+Semantic and hybrid need two things the deployment provides: an
+embedding server for the query (`LISPLY_EMBED_URL`, the full URL of an
+OpenAI-style `/v1/embeddings`; its bearer key in the file named by
+`LISPLY_EMBED_KEY_FILE`) and an embeddings companion for each corpus,
+built from that corpus by the same model (lisply-mcp `CORPUS.md`,
+section 7; `lisply-index --embed-corpus` builds one).  When either is
+missing -- no server configured, a server that does not answer (a laptop
+off its home network), or a companion built from another version of the
+corpus -- the search is answered lexically, exactly as before.  The
+response's `search_mode` names the ranking actually used, and its
+`corpora` entries carry `embeddings` (`current`, `none`, or why not).
+The outage is logged once, and the server is not asked again for
+`lisply-search-embed-retry-seconds` (300).  A `search_mode` that is none
+of the three is answered lexically, with a warning.
+`LISPLY_SEARCH_MODE` sets the default for requests that name none.
+
+Cost: a query is embedded once (about 0.15 s on a local GPU server), and
+the corpus's int8 vectors are scanned in this Emacs: the leading 256
+dimensions of every row, then the best 100 rows at full width.  Only
+corpora that may go to cloud AI are embedded -- the results reach AI
+clients, and the companion is made from the corpus text.
 
 ### Sources
 
@@ -470,6 +503,7 @@ lisply_search(query="hidden-objects pseudo-inputs", sources=["gendl"], k=5)
 lisply_search(query="define-object first example", sources=["genworks-learn"], k=3)
 lisply_search(query="fixed-url-prefix", k=5)
 lisply_search(query="with-format pdf cad-output", k=5)
+lisply_search(query="write a 3D model out as STEP or STL", k=5, search_mode="hybrid")
 ```
 
 `genworks-learn` (the training material) walks through the concepts in
@@ -488,7 +522,7 @@ hit's `path` says where it came from.
 | `language` | string | none | hint: lisp, gdl, markdown |
 | `match_mode` | string | `all` | `all` (retried as `any` when nothing matches) or `any` |
 | `any_max_candidates` | integer | none | candidate cap for `any` |
-| `search_mode` | string | lexical | the only mode in this build |
+| `search_mode` | string | `lexical` | `lexical`, `semantic` or `hybrid`; see above (`LISPLY_SEARCH_MODE` sets the default) |
 | `max_snippet_tokens` | integer | 512 | soft cap; longer snippets are excerpted above the first match |
 | `include_metadata` | boolean | true | include metadata in hits |
 
