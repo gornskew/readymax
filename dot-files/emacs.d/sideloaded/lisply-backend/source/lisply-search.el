@@ -1437,12 +1437,17 @@ and kept until the index or a companion file changes."
        (>= (float-time) lisply-search--embed-down-until)))
 
 (defun lisply-search--embed-key ()
-  "The bearer key from `lisply-search-embed-key-file', or nil."
-  (and lisply-search-embed-key-file
-       (file-readable-p lisply-search-embed-key-file)
-       (with-temp-buffer
-         (insert-file-contents lisply-search-embed-key-file)
-         (string-trim (buffer-string)))))
+  "The bearer key from `lisply-search-embed-key-file', or nil.  An empty
+name counts as none: a deployment passes an unset variable through as
+\"\", and `file-readable-p' of \"\" asks about the current directory."
+  (let ((file lisply-search-embed-key-file))
+    (and (stringp file)
+         (not (string-empty-p file))
+         (file-regular-p file)
+         (file-readable-p file)
+         (with-temp-buffer
+           (insert-file-contents file)
+           (string-trim (buffer-string))))))
 
 (defun lisply-search--embed-request (text model)
   "Ask the embedding server for TEXT's vector; return it (a vector of

@@ -669,6 +669,19 @@ nothing is loaded or asked."
           (should (null (plist-get result :warning)))
           (should (null lisply-search--embed-cache)))))))
 
+(ert-deftest lisply-search-embed-key-file-empty-or-missing-is-none ()
+  "An empty or missing key file name gives no key -- a deployment passes an
+unset variable through as \"\" -- and a real file gives its trimmed text."
+  (dolist (name (list nil "" "/nonexistent/key" temporary-file-directory))
+    (let ((lisply-search-embed-key-file name))
+      (should (null (lisply-search--embed-key)))))
+  (let ((file (make-temp-file "lisply-search-key")))
+    (unwind-protect
+        (let ((lisply-search-embed-key-file file))
+          (with-temp-file file (insert "  k3y\n"))
+          (should (equal (lisply-search--embed-key) "k3y")))
+      (delete-file file))))
+
 (ert-deftest lisply-search-default-search-mode-applies ()
   "A request naming no search_mode gets `lisply-search-default-search-mode'."
   (lisply-search-test--with-corpora dir
