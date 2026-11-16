@@ -42,7 +42,10 @@ Falls back to hardcoded container names if services.json not available."
       (let ((services (skewed-get-swank-services)))
         (if services
             (mapcar (lambda (svc)
-                      (let ((lisp-impl (plist-get svc :lisp-impl))
+                      ;; "" when a service declares no :lisp-impl: a nil here
+                      ;; makes string-match-p signal, the condition-case below
+                      ;; swallows it, and the whole SWANK list comes up empty
+                      (let ((lisp-impl (or (plist-get svc :lisp-impl) ""))
                             (name (plist-get svc :name)))
                         (list :host (plist-get svc :swank-host)
                               :port (plist-get svc :swank-port)
