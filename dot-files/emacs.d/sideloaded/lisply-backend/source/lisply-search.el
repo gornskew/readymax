@@ -60,9 +60,11 @@
 
 (require 'cl-lib)
 (require 'subr-x)
-;; Loaded here, not where it is used: the request binds url's special
-;; variables, which a lexical-binding file would otherwise bind lexically.
+;; Loaded here, not where they are used: the request binds url's special
+;; variables (url-http-attempt-keepalives among them), which a
+;; lexical-binding file would otherwise bind lexically.
 (require 'url)
+(require 'url-http)
 
 ;;;; ============================================================
 ;;;; Customization
@@ -1358,13 +1360,29 @@ order, each file's snippets in order -- as a vector of search candidates."
       (insert-file-contents-literally path))
     (buffer-string)))
 
+(defun lisply-search--embed-content-digest (candidates)
+  "SHA-256 of exactly what a companion embeds for CANDIDATES (in row
+order): each row's document text -- its path relative to the repo
+root, a newline, its snippet -- as UTF-8 followed by one NUL byte.  The
+reference indexer computes the same (CORPUS.md, section 7)."
+  (secure-hash 'sha256
+               (encode-coding-string
+                (mapconcat (lambda (c)
+                             (concat (lisply-search--display-path c) "\n"
+                                     (or (plist-get (plist-get c :snippet) :snippet) "")
+                                     "\0"))
+                           candidates "")
+                'utf-8)))
+
 (defun lisply-search--embed-load-companion (index)
   "The embeddings companion of corpus INDEX: a plist whose :status is
 \"current\" and which carries the vectors, or whose :status says why
-there is none to use (\"none\", \"stale: ...\", ...).  A companion is
-used only when it was built from this very corpus: its
-:corpus-checksum and :corpus-generated-at match the corpus's, and it
-has one row per snippet."
+there is none to use (\"none\", \"stale: ...\", ...).  A companion is used
+only when it was built from this very text: its :content-sha256 is the
+digest of the corpus's rows (`lisply-search--embed-content-digest'), so
+a corpus rebuilt with the same text keeps its companion.  A companion
+from before content digests is matched by the corpus's :checksum and
+:generated-at instead.  Either way it has one row per snippet."
   (let* ((name (plist-get index :corpus))
          (dir (lisply-search--embed-directory))
          (header-file (and name dir (expand-file-name (concat name ".emb.sexp") dir)))
@@ -1373,8 +1391,10 @@ has one row per snippet."
                       (condition-case nil
                           (lisply-search--read-sexp-file header-file)
                         (error nil))))
+         (candidates (and header (lisply-search--embed-rows index)))
          (dims (plist-get header :dims))
          (rows (plist-get header :rows))
+         (content (plist-get header :content-sha256))
          (status
           (cond
            ((not header) "none")
@@ -1382,13 +1402,15 @@ has one row per snippet."
             (format "unsupported companion version %s" (plist-get header :version)))
            ((not (eq (plist-get header :dtype) :int8))
             (format "unsupported dtype %s" (plist-get header :dtype)))
-           ((not (and (plist-get index :checksum)
-                      (equal (plist-get header :corpus-checksum) (plist-get index :checksum))
-                      (equal (plist-get header :corpus-generated-at) (plist-get index :generated-at))))
-            "stale: built from another version of the corpus")
            ((not (and (natnump dims) (> dims 0) (natnump rows)
-                      (= rows (lisply-search--count-snippets index))))
+                      (= rows (length candidates))))
             "stale: the row count differs from the corpus's snippets")
+           ((if content
+                (not (equal content (lisply-search--embed-content-digest candidates)))
+              (not (and (plist-get index :checksum)
+                        (equal (plist-get header :corpus-checksum) (plist-get index :checksum))
+                        (equal (plist-get header :corpus-generated-at) (plist-get index :generated-at)))))
+            "stale: built from another version of the corpus")
            ((not (and (file-exists-p blob-file)
                       (= (file-attribute-size (file-attributes blob-file)) (* rows dims))))
             "the vectors are missing or the wrong size")
@@ -1408,7 +1430,7 @@ has one row per snippet."
               :prefix prefix
               :norms (lisply-search--embed-prepare blob dims rows prefix)
               :blob blob
-              :candidates (lisply-search--embed-rows index))))))
+              :candidates candidates)))))
 
 (defun lisply-search--embed-state (cache)
   "The embeddings companions of the corpora in CACHE, loaded on first use
@@ -1464,6 +1486,10 @@ credentials, and the wait is bounded by `lisply-search-embed-timeout'."
          ;; A recognisable client, so the server's operator can tell a
          ;; search's queries from other load in the server's log.
          (url-user-agent lisply-search--embed-user-agent)
+         ;; A fresh connection for every query (Ruling 207d): a reused
+         ;; keep-alive connection once lost an answer the server had sent
+         ;; (2026-11-16), and on a LAN a new one costs about a millisecond.
+         (url-http-attempt-keepalives nil)
          (url-request-extra-headers
           (cons '("Content-Type" . "application/json")
                 (and key (list (cons "Authorization" (concat "Bearer " key))))))

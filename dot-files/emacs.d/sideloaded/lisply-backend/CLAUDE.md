@@ -436,11 +436,15 @@ Semantic and hybrid need two things the deployment provides: an
 embedding server for the query (`LISPLY_EMBED_URL`, the full URL of an
 OpenAI-style `/v1/embeddings`; its bearer key in the file named by
 `LISPLY_EMBED_KEY_FILE`) and an embeddings companion for each corpus,
-built from that corpus by the same model (lisply-mcp `CORPUS.md`,
-section 7; `lisply-index --embed-corpus` builds one).  When either is
-missing -- no server configured, a server that does not answer (a laptop
-off its home network), or a companion built from another version of the
-corpus -- the search is answered lexically, exactly as before.  The
+built from that corpus's text by the same model (lisply-mcp
+`CORPUS.md`, section 7; `lisply-index --embed-corpus` builds one, and
+rebuilds only the rows whose text changed).  A companion is matched to
+the corpus by a digest of the text it embedded, so a corpus rebuilt
+with the same text keeps it.  When either is missing -- no server
+configured, a server that does not answer (a laptop off its home
+network), or a companion built from other text -- the search is
+answered lexically, exactly as before.  Each query opens a fresh
+connection to the server.  The
 response's `search_mode` names the ranking actually used, and its
 `corpora` entries carry `embeddings` (`current`, `none`, or why not).
 The outage is logged once, and the server is not asked again for

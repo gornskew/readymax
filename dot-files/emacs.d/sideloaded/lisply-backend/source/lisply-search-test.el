@@ -684,8 +684,8 @@ unset variable through as \"\" -- and a real file gives its trimmed text."
 
 (ert-deftest lisply-search-embed-request-names-itself-and-never-prompts ()
   "A query goes out as ONE input, with User-Agent lisply-search, non-interactive
-(a 401 must not prompt for credentials), bounded by the timeout, and with no
-Authorization header when there is no key."
+(a 401 must not prompt for credentials), on a fresh connection, bounded by the
+timeout, and with no Authorization header when there is no key."
   (let ((seen nil)
         (lisply-search-embed-url "http://embed.invalid/v1/embeddings")
         (lisply-search-embed-key-file nil)
@@ -693,6 +693,7 @@ Authorization header when there is no key."
     (cl-letf (((symbol-function 'url-retrieve-synchronously)
                (lambda (url _silent _cookies timeout)
                  (setq seen (list :url url :timeout timeout :agent url-user-agent
+                                  :keepalives url-http-attempt-keepalives
                                   :noninteractive url-request-noninteractive
                                   :headers url-request-extra-headers
                                   :body (json-parse-string url-request-data :object-type 'alist)))
@@ -700,9 +701,61 @@ Authorization header when there is no key."
       (should-error (lisply-search--embed-request "Query: walls" "m"))
       (should (equal (plist-get seen :agent) "lisply-search"))
       (should (eq (plist-get seen :noninteractive) t))
+      (should (null (plist-get seen :keepalives)))   ; a fresh connection per query
       (should (= (plist-get seen :timeout) 2))
       (should-not (assoc "Authorization" (plist-get seen :headers)))
       (should (equal (cdr (assq 'input (plist-get seen :body))) ["Query: walls"])))))
+
+(defun lisply-search-test--corpus-digest (file)
+  "The content digest of the corpus in FILE, as this file computes it."
+  (lisply-search--embed-content-digest
+   (lisply-search--embed-rows (lisply-search--read-sexp-file file))))
+
+(ert-deftest lisply-search-companion-follows-the-text-not-the-build ()
+  "A companion with a content digest stays current when its corpus is rebuilt
+with the same text (a new :generated-at and :checksum), and goes stale when
+the text changes (CORPUS.md section 7)."
+  (lisply-search-test--with-corpora dir
+    (let ((corpus (lisply-search-test--write-corpus dir "demo" "2-20" '("wall" "door"))))
+      (lisply-search-test--write-companion dir "demo" "0-0" '((1 0) (0 1)) "1999-01-01T00:00:00Z")
+      ;; The header as the indexer writes it: the digest of the embedded text.
+      (let* ((hfile (expand-file-name "embeddings/demo.emb.sexp" dir))
+             (header (lisply-search--read-sexp-file hfile)))
+        (lisply-search--write-sexp-file
+         (append header (list :content-sha256 (lisply-search-test--corpus-digest corpus))) hfile))
+      (let ((state (lisply-search--embed-state (lisply-search--load-index))))
+        (should (equal (plist-get (car state) :status) "current")))
+      ;; Same text, another build: still current.
+      (lisply-search-test--write-corpus dir "demo" "9-99" '("wall" "door"))
+      (let ((state (lisply-search--embed-state (lisply-search--load-index))))
+        (should (equal (plist-get (car state) :status) "current")))
+      ;; Changed text: stale.
+      (lisply-search-test--write-corpus dir "demo" "9-99" '("wall" "window"))
+      (let ((state (lisply-search--embed-state (lisply-search--load-index))))
+        (should (string-prefix-p "stale" (plist-get (car state) :status)))))))
+
+(ert-deftest lisply-search-content-digest-matches-the-reference-indexer ()
+  "This file and lisply-mcp's lisply-index.js compute the same content digest
+for the same corpus, non-ASCII text included.  Skipped where node or the
+indexer is absent."
+  (let* ((node (executable-find "node"))
+         (script (cl-find-if #'file-exists-p
+                             (delq nil (list (getenv "LISPLY_INDEX_JS")
+                                             "/home/emacs-user/lisply-mcp/scripts/lisply-index.js"
+                                             "/projects/gs/lisply-mcp/scripts/lisply-index.js")))))
+    (unless (and node script) (ert-skip "no node or no reference indexer"))
+    (with-temp-buffer
+      (unless (zerop (call-process node nil t nil "-e" "process.exit(typeof require(process.argv[1]).contentDigest === 'function' ? 0 : 1)" script))
+        (ert-skip "this indexer predates content digests")))
+    (lisply-search-test--with-corpora dir
+      (let ((corpus (lisply-search-test--write-corpus dir "demo" "3-30"
+                                                      '("(define-object naïve-box (box))" "© 2026 ▓▓" "plain"))))
+        (with-temp-buffer
+          (should (zerop (call-process node nil t nil "-e"
+                                       "const m = require(process.argv[1]); const fs = require('fs'); process.stdout.write(m.contentDigest(m.corpusRows(m.readSexp(fs.readFileSync(process.argv[2], 'utf8')))))"
+                                       script corpus)))
+          (should (equal (string-trim (buffer-string))
+                         (lisply-search-test--corpus-digest corpus))))))))
 
 (ert-deftest lisply-search-default-search-mode-applies ()
   "A request naming no search_mode gets `lisply-search-default-search-mode'."
