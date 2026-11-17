@@ -287,6 +287,11 @@
            ("\\.sexpr\\'" . lisp-mode)
            ("\\.sexps\\'" . lisp-mode))
     :hook (lisp-mode . (lambda () (require 'slime-config))))
+   (gendl-doc-fold
+    :ensure nil
+    :defer t
+    :load-path ,(lambda () (get-config-path "etc"))
+    :commands (gendl-doc-fold-mode gendl-doc-fold-show gendl-doc-fold-toggle-style))
    (lisply-config
     :ensure nil
     :defer nil
