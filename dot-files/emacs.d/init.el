@@ -249,6 +249,12 @@
     :ensure nil
     :defer nil
     :load-path ,(lambda () (get-config-path "etc")))
+   ;; The opt-in newcomer setting.  Loading it changes nothing: it
+   ;; reads its switch (SKEWED_EMACS_NEWCOMER) as each frame is made.
+   (skewed-newcomer
+    :ensure nil
+    :defer nil
+    :load-path ,(lambda () (get-config-path "etc")))
    (skewed-install-config
     :ensure nil
     :defer t
