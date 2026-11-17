@@ -484,6 +484,9 @@ gendl-ccl/4200.")
   (interactive)
   (line-number-mode -1))
 
+;; No key is bound to this.  In a daemon that several people share, a
+;; two-key chord that stops Emacs for everyone is too easy to hit: call
+;; it by name, M-x server-shutdown.
 (defun server-shutdown ()
   "Save buffers, quit, and shutdown server."
   (interactive)
@@ -526,8 +529,7 @@ gendl-ccl/4200.")
   (global-set-key "\M-=" 'just-one-space)
   (global-set-key "\C-x\C-b" 'electric-buffer-list)
   ;;(global-set-key (kbd "C-x &") 'cycle-slime-repl-buffers)
-  (global-set-key (kbd "C-c M-q") 'unfill-paragraph)
-  (global-set-key (kbd "C-c x") 'server-shutdown))
+  (global-set-key (kbd "C-c M-q") 'unfill-paragraph))
 
 (defun enable-mouse ()
   "Enable mouse interaction in terminal mode."
