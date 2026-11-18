@@ -237,9 +237,82 @@
 
 (ert-deftest lisply-file-tools-help-lists-toolkit ()
   (let ((help (lisply-help)))
-    (dolist (sym '(lisply-read lisply-grep lisply-replace lisply-form-replace))
+    (dolist (sym '(lisply-read lisply-grep lisply-replace lisply-form-replace lisply-gendl-check))
       (should (string-match-p (symbol-name sym) help))))
   (should (string-match-p "exactly COUNT times" (lisply-help 'lisply-replace))))
+
+(defmacro lisply-file-tools-test--with-room (spec &rest body)
+  "Run BODY with `lisply--gendl-post' answering (STATUS . JSON) from SPEC,
+(CALLS STATUS JSON): each call's URL and decoded body is pushed on CALLS."
+  (declare (indent 1))
+  (let ((calls (nth 0 spec)) (status (nth 1 spec)) (json (nth 2 spec)))
+    `(let ((,calls nil))
+       (cl-letf (((symbol-function 'lisply--gendl-post)
+                  (lambda (url body)
+                    (push (list url (json-parse-string body :object-type 'alist)) ,calls)
+                    (cons ,status ,json))))
+         ,@body))))
+
+(ert-deftest lisply-file-tools-gendl-check-relays ()
+  (lisply-file-tools-test--with-file (f "(define-object m (base-object)\n  :computed-slots ((a (the widht))))\n")
+    (lisply-file-tools-test--with-room
+        (calls 200 '((content ((type . "text")
+                               (text . "line 2, column 26: info: widht is not a message of m")))))
+      (let ((out (lisply-gendl-check f "http://room.test:9080/" "MY-WORK")))
+        (should (string-match-p "checked in http://room.test:9080/:" out))
+        (should (string-match-p "line 2, column 26: info: widht" out)))
+      (pcase-let ((`(,url ,body) (car calls)))
+        (should (equal url "http://room.test:9080/lisply/tools/call"))
+        (should (equal (alist-get 'name body) "gendl_check"))
+        (should (string-match-p "(the widht)" (alist-get 'text (alist-get 'arguments body))))
+        (should (equal (alist-get 'package (alist-get 'arguments body)) "MY-WORK"))))))
+
+(ert-deftest lisply-file-tools-gendl-check-reads-the-live-buffer ()
+  (lisply-file-tools-test--with-file (f "(define-object m ())\n")
+    (lisply-file-tools-test--with-room (calls 200 '((content ((type . "text") (text . "No findings.")))))
+      (with-current-buffer (find-file-noselect f)
+        (goto-char (point-max))
+        (insert "(define-object n ())\n"))
+      (lisply-gendl-check f "http://room.test")
+      (should (string-match-p "define-object n"
+                              (alist-get 'text (alist-get 'arguments (cadr (car calls))))))
+      ;; nothing was written
+      (should-not (string-match-p "define-object n" (lisply-file-tools-test--text f))))))
+
+(ert-deftest lisply-file-tools-gendl-messages-relays ()
+  (lisply-file-tools-test--with-room
+      (calls 200 '((content ((type . "text") (text . "12 messages.")))))
+    (should (equal (lisply-gendl-messages "box" "wheel hub" "http://room.test") "12 messages."))
+    (let ((args (alist-get 'arguments (cadr (car calls)))))
+      (should (equal (alist-get 'type args) "box"))
+      (should (equal (alist-get 'chain args) "wheel hub"))
+      ;; an argument not given is not sent
+      (should-not (assq 'package args)))))
+
+(ert-deftest lisply-file-tools-gendl-errors ()
+  (lisply-file-tools-test--with-room
+      (calls 200 '((content ((type . "text") (text . "Unknown tool: \"gendl_messages\""))) (isError . t)))
+    (should (string-match-p "predates the tool"
+                            (cadr (should-error (lisply-gendl-messages "box" nil "http://room.test"))))))
+  (lisply-file-tools-test--with-room (calls 403 "Forbidden")
+    (should (string-match-p "secret"
+                            (cadr (should-error (lisply-gendl-messages "box" nil "http://room.test")))))))
+
+(ert-deftest lisply-file-tools-gendl-room-by-name ()
+  (cl-letf (((symbol-function 'skewed-get-lisply-backends)
+             (lambda () '((:name "ready-room" :type "emacs-lisp" :http-host "ready-room" :http-port 7080)
+                          (:name "bridge" :type "common-lisp" :http-host "bridge" :http-port 9080)))))
+    (should (equal (lisply--gendl-room-url "bridge") "http://bridge:9080"))
+    (should-error (lisply--gendl-room-url "ready-room"))
+    (should-error (lisply--gendl-room-url "no-such-room"))))
+
+(ert-deftest lisply-file-tools-gendl-secret-file ()
+  (let ((lisply-gendl-secret-file (make-temp-file "lisply-secret-" nil nil "  s3cret \nsecond line\n")))
+    (unwind-protect
+        (should (equal (lisply--gendl-secret) "s3cret"))
+      (delete-file lisply-gendl-secret-file)))
+  (let ((lisply-gendl-secret-file "/nonexistent/lisply-secret"))
+    (should-not (lisply--gendl-secret))))
 
 (provide 'lisply-file-tools-test)
 ;;; lisply-file-tools-test.el ends here

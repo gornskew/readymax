@@ -81,7 +81,9 @@ region is replaced wholesale, which moves markers inside it to its start.")
     ("Run a child process without wedging the daemon"
      lisply-shell-bounded lisply-shell-async lisply-shell-async-result)
     ("Search the indexed Gendl/GDL corpus (also the lisply_search tool)"
-     lisply-search))
+     lisply-search)
+    ("Ask a Gendl room what an object answers, and check references (Glime)"
+     lisply-gendl-messages lisply-gendl-check))
   "The toolkit as `lisply-help' lists it: (HEADING FUNCTION...) groups.")
 
 ;;; ---- lisply-help ----
@@ -512,6 +514,129 @@ balance.  Return (:file FILE :line LINE) for the line TEXT starts on."
          (insert (if (bobp) "" "\n\n") text "\n")
          (list :file file
                :line (- (line-number-at-pos) (cl-count ?\n text) 1))))))))
+
+;;; ---- asking a Gendl room: Glime's message lookup and reference check ----
+
+(defvar lisply-gendl-default-room "bridge"
+  "The Gendl room `lisply-gendl-check' and `lisply-gendl-messages' ask when
+none is named: a room's name among the ship's Lisply backends, or a URL.")
+
+(defvar lisply-gendl-timeout 15
+  "Seconds a Gendl room is given to answer.
+Kept well under the MCP transport's 30 s eval limit.")
+
+(defvar lisply-gendl-secret-file "/projects/.secrets/lisply-secret"
+  "File whose first line is the secret a Gendl room wants as X-Lisply-Secret.
+Sent only when the file is there, as the MCP transport sends it; never
+printed or logged.")
+
+(defun lisply--gendl-room-url (room)
+  "The base URL of ROOM: a URL as given, else the Gendl room of that name
+among the ship's Lisply backends."
+  (if (string-match-p "\\`https?://" room)
+      (string-trim-right room "/")
+    (let ((svc (and (fboundp 'skewed-get-lisply-backends)
+                    (cl-find room (skewed-get-lisply-backends)
+                             :key (lambda (s) (plist-get s :name)) :test #'equal))))
+      (unless (and svc (equal (plist-get svc :type) "common-lisp"))
+        (error "lisply: no Gendl room named %s" room))
+      (format "http://%s:%s" (plist-get svc :http-host) (plist-get svc :http-port)))))
+
+(defun lisply--gendl-secret ()
+  "The first line of `lisply-gendl-secret-file', or nil when there is none."
+  (when (file-readable-p lisply-gendl-secret-file)
+    (with-temp-buffer
+      (insert-file-contents lisply-gendl-secret-file)
+      (let ((line (string-trim (buffer-substring-no-properties (point-min) (line-end-position)))))
+        (and (> (length line) 0) line)))))
+
+(defun lisply--gendl-post (url body)
+  "POST BODY, a JSON string, to URL.  Return (STATUS . ANSWER), ANSWER the
+reply parsed as JSON (alists) or, when it is not JSON, its text.  Bounded
+by `lisply-gendl-timeout'; no buffer is left behind."
+  (require 'url)
+  (let* ((secret (lisply--gendl-secret))
+         (url-request-method "POST")
+         (url-request-extra-headers
+          (append '(("Content-Type" . "application/json"))
+                  (and secret (list (cons "X-Lisply-Secret" secret)))))
+         (url-request-data (encode-coding-string body 'utf-8))
+         (url-show-status nil)
+         (buffer (url-retrieve-synchronously url t t lisply-gendl-timeout)))
+    (unless buffer
+      (error "lisply: %s did not answer within %s s" url lisply-gendl-timeout))
+    (unwind-protect
+        (with-current-buffer buffer
+          (let ((status (bound-and-true-p url-http-response-status)))
+            (goto-char (point-min))
+            (re-search-forward "\r?\n\r?\n" nil 'move)
+            (let ((text (decode-coding-string
+                         (buffer-substring-no-properties (point) (point-max)) 'utf-8)))
+              (cons status
+                    (or (ignore-errors
+                          (json-parse-string text :object-type 'alist :array-type 'list
+                                             :null-object nil :false-object nil))
+                        text)))))
+      (let ((kill-buffer-query-functions nil)) (kill-buffer buffer)))))
+
+(defun lisply--gendl-tool (room tool arguments)
+  "Call the Lisply TOOL with ARGUMENTS, an alist, in Gendl ROOM; return its
+text.  An error the room reports is signalled in the room's own words."
+  (require 'json)
+  (let* ((url (concat (lisply--gendl-room-url room) "/lisply/tools/call"))
+         (answer (lisply--gendl-post
+                  url (json-encode `((name . ,tool)
+                                     (arguments . ,(cl-remove-if-not #'cdr arguments))))))
+         (status (car answer))
+         (json (cdr answer)))
+    (cond ((eql status 403)
+           (error "lisply: %s refused the call (403): the lisply secret is missing or wrong" room))
+          ((not (consp json))
+           (error "lisply: %s answered %s: %s" room status (lisply--abbrev (format "%s" json))))
+          (t
+           (let ((text (mapconcat (lambda (block) (or (alist-get 'text block) ""))
+                                  (alist-get 'content json) "\n")))
+             (when (alist-get 'isError json)
+               (error "lisply: %s: %s%s" room text
+                      (if (string-match-p "Unknown tool" text)
+                          " -- this room's Gendl image predates the tool; a newer image carries it"
+                        "")))
+             text)))))
+
+(defun lisply-gendl-check (file &optional room package)
+  "Check the Gendl references in FILE, in a Gendl room; return the findings.
+Glime's checker, run by the room's gendl_check tool against the classes
+that room's image knows: the first message of every (the ...) and
+(the-child ...) in FILE's define-objects that the object as written and
+its mixins (or the child's type) do not answer, each with line and
+column.  Findings are hints: a slot trickling down from a parent object
+is not seen from a definition.  FILE is read as Emacs holds it -- a
+buffer visiting it, unsaved edits included -- and nothing is written.
+ROOM is a room name or URL (default `lisply-gendl-default-room');
+PACKAGE reads names until an in-package in FILE says otherwise."
+  (let* ((file (expand-file-name file))
+         (live (find-buffer-visiting file))
+         (text (if live
+                   (with-current-buffer live
+                     (save-restriction
+                       (widen)
+                       (buffer-substring-no-properties (point-min) (point-max))))
+                 (unless (file-readable-p file)
+                   (error "lisply: cannot read %s" file))
+                 (with-temp-buffer (insert-file-contents file) (buffer-string))))
+         (room (or room lisply-gendl-default-room)))
+    (format "%s, checked in %s:\n%s" file room
+            (lisply--gendl-tool room "gendl_check"
+                                (list (cons 'text text) (cons 'package package))))))
+
+(defun lisply-gendl-messages (type &optional chain room package)
+  "Every message an object of Gendl TYPE answers, as text, from a Gendl room.
+Each with its category, the class that defines it and its documentation
+(the room's gendl_messages tool).  CHAIN, a string such as \"wheel hub\",
+is a reference chain followed from TYPE first.  ROOM and PACKAGE as for
+`lisply-gendl-check'."
+  (lisply--gendl-tool (or room lisply-gendl-default-room) "gendl_messages"
+                      (list (cons 'type type) (cons 'chain chain) (cons 'package package))))
 
 (provide 'lisply-file-tools)
 ;;; lisply-file-tools.el ends here

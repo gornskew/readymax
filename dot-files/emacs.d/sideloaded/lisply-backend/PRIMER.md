@@ -73,6 +73,16 @@ take a BUFFER: `lisply-insert-slot-spec`, `lisply-kill-named-slot`,
 author a whole new Lisp file from s-expression data, use
 `lisply-write-sexp-file`.
 
+To ask a Gendl room about Gendl source (Glime's knowledge, without
+SLIME): `(lisply-gendl-check FILE)` returns, by line and column, every
+`(the ...)` or `(the-child ...)` in FILE whose first message the object
+as written and its mixins do not answer, as that room's image knows
+them -- hints, since a slot trickling down from a parent is not seen
+from a definition; `(lisply-gendl-messages TYPE CHAIN)` lists what an
+object answers, with category, defining class and documentation.  Both
+ask the bridge unless given a ROOM (a room name or URL), and need a
+Gendl image that carries the `gendl_check` and `gendl_messages` tools.
+
 ## Rules that bite
 
 1. **One form per eval.** `lisp_eval` evaluates only the FIRST
