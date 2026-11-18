@@ -24,6 +24,13 @@
      (require 'gendl-definitions)
      (when (eq slime-find-definitions-function 'slime-find-definitions-rpc)
        (setq slime-find-definitions-function 'gendl-definitions-find))
+     ;; Glime: Gendl message completion (a completion-at-point function,
+     ;; so company reads it through its capf backend), message
+     ;; documentation, and the flycheck checker `glime'.
+     ;; sideloaded/glime/ is a copy of Gendl's emacs/glime.el and
+     ;; glime.lisp; see its README.
+     (add-to-list 'load-path (concat emacs-config-directory "sideloaded/glime/"))
+     (require 'glime)
      (add-hook 'slime-connected-hook 'set-slime-shortcuts)
      (add-hook 'slime-connected-hook 'customise-slime)
      ;;(add-hook 'slime-connected-hook 'load-and-or-start-gendl)
